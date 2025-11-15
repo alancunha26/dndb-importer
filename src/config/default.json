@@ -1,0 +1,56 @@
+{
+  "input": {
+    "directory": "./input",
+    "filePattern": "**/*.html",
+    "encoding": "utf-8"
+  },
+  "output": {
+    "directory": "./output",
+    "fileExtension": ".md",
+    "preserveStructure": true,
+    "createIndex": true,
+    "overwrite": true,
+    "idLength": 4,
+    "idCharacters": "abcdefghijklmnopqrstuvwxyz0123456789"
+  },
+  "conversion": {
+    "headingStyle": "atx",
+    "codeBlockStyle": "fenced",
+    "emDelimiter": "*",
+    "strongDelimiter": "**",
+    "bulletListMarker": "-",
+    "linkStyle": "inlined",
+    "frontMatter": true,
+    "navigationHeader": true
+  },
+  "dndbeyond": {
+    "removeNavigation": true,
+    "removeBreadcrumbs": true,
+    "removeAds": true,
+    "preserveStatBlocks": true,
+    "preserveTables": true,
+    "detectMultiColumn": true,
+    "cleanupSelectors": [
+      ".site-bar",
+      ".main-navigation",
+      ".page-footer",
+      ".advertisement"
+    ]
+  },
+  "media": {
+    "downloadImages": true,
+    "supportedFormats": ["png", "jpg", "jpeg", "webp", "gif"],
+    "maxImageSize": 10485760,
+    "timeout": 30000,
+    "retryAttempts": 3
+  },
+  "crossReferences": {
+    "convertToText": true,
+    "boldEntities": true,
+    "entityTypes": ["spell", "monster", "equipment", "feature", "condition"]
+  },
+  "logging": {
+    "level": "info",
+    "showProgress": true
+  }
+}

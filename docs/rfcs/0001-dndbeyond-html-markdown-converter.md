@@ -239,7 +239,8 @@ Each markdown file contains:
 - Ora - Progress spinners
 - Fast-glob - File pattern matching
 - short-unique-id - Unique ID generation
-- node-fetch or axios - Image downloading
+- axios - Image downloading
+- env-paths - Cross-platform config paths (XDG on Linux)
 
 **Development Dependencies:**
 
@@ -290,7 +291,21 @@ export interface ConversionResult {
 
 ### Configuration
 
-Configuration file (JSON) with sections for:
+**Layered Configuration System:**
+
+The tool uses a three-tier configuration priority:
+1. **Default config** - Built-in defaults from `src/config/default.json`
+2. **User config** - OS-specific user configuration (optional)
+3. **Custom config** - CLI `--config` flag (highest priority)
+
+**OS-Specific Config Paths (using env-paths):**
+
+- **Linux:** `$XDG_CONFIG_HOME/dndbeyond-importer/config.json` (defaults to `~/.config/dndbeyond-importer/config.json`)
+  - Follows XDG Base Directory specification
+- **macOS:** `~/Library/Preferences/dndbeyond-importer/config.json`
+- **Windows:** `%APPDATA%\dndbeyond-importer\config.json`
+
+**Configuration Sections:**
 
 - Input/output directories
 - Turndown conversion options
@@ -298,6 +313,8 @@ Configuration file (JSON) with sections for:
 - Media handling
 - Cross-reference conversion
 - Logging preferences
+
+Configs are deep-merged, allowing partial overrides while preserving defaults.
 
 ### Error Handling
 
@@ -342,6 +359,15 @@ Configuration file (JSON) with sections for:
 
 **Considered:** Using sequential numbers (001, 002, etc.) for file IDs.
 **Rejected:** Short unique IDs are more flexible, avoid renumbering when files are added/removed, and provide better collision resistance.
+
+### Alternative 6: Manual OS Detection for Config Paths
+
+**Considered:** Manually detecting OS and building config paths with custom logic.
+**Rejected:** Using `env-paths` library provides:
+- Automatic XDG Base Directory specification compliance on Linux
+- Platform-specific conventions (macOS Preferences, Windows AppData)
+- Tested and maintained cross-platform behavior
+- Environment variable support (e.g., `$XDG_CONFIG_HOME`)
 
 ## Open Questions
 
