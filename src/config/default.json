@@ -9,33 +9,42 @@
     "fileExtension": ".md",
     "preserveStructure": true,
     "createIndex": true,
-    "overwrite": true,
-    "idLength": 4,
-    "idCharacters": "abcdefghijklmnopqrstuvwxyz0123456789"
+    "overwrite": true
   },
-  "conversion": {
-    "headingStyle": "atx",
-    "codeBlockStyle": "fenced",
-    "emDelimiter": "*",
-    "strongDelimiter": "**",
-    "bulletListMarker": "-",
-    "linkStyle": "inlined",
-    "frontMatter": true,
-    "navigationHeader": true
-  },
-  "dndbeyond": {
-    "removeNavigation": true,
-    "removeBreadcrumbs": true,
-    "removeAds": true,
-    "preserveStatBlocks": true,
-    "preserveTables": true,
-    "detectMultiColumn": true,
-    "cleanupSelectors": [
-      ".site-bar",
-      ".main-navigation",
-      ".page-footer",
-      ".advertisement"
-    ]
+  "parser": {
+    "html": {
+      "contentSelector": ".p-article-content",
+      "removeSelectors": [],
+      "convertInternalLinks": true,
+      "urlMapping": {
+        "/sources/dnd/phb-2024/introduction": "players-handbook/01-introduction-welcome-to-adventure.html",
+        "/sources/dnd/phb-2024/playing-the-game": "players-handbook/02-chapter-1-playing-the-game.html",
+        "/sources/dnd/phb-2024/creating-a-character": "players-handbook/03-chapter-2-creating-a-character.html",
+        "/sources/dnd/phb-2024/character-classes": "players-handbook/04-chapter-3-character-classes.html",
+        "/sources/dnd/phb-2024/character-origins": "players-handbook/06-chapter-4-character-origins.html",
+        "/sources/dnd/phb-2024/feats": "players-handbook/07-chapter-5-feats.html",
+        "/sources/dnd/phb-2024/equipment": "players-handbook/08-chapter-6-equipment.html",
+        "/sources/dnd/phb-2024/spells": "players-handbook/09-chapter-7-spells.html",
+        "/spells": "players-handbook/10-chapter-7-spell-descriptions.html",
+        "/monsters": "players-handbook/12-appendix-b-creature-stat-blocks.html",
+        "/equipment": "players-handbook/08-chapter-6-equipment.html"
+      },
+      "fallbackToBold": true
+    },
+    "markdown": {
+      "headingStyle": "atx",
+      "codeBlockStyle": "fenced",
+      "emDelimiter": "*",
+      "strongDelimiter": "**",
+      "bulletListMarker": "-",
+      "linkStyle": "inlined",
+      "frontMatter": true,
+      "navigationHeader": true
+    },
+    "idGenerator": {
+      "length": 4,
+      "characters": "abcdefghijklmnopqrstuvwxyz0123456789"
+    }
   },
   "media": {
     "downloadImages": true,
@@ -43,11 +52,6 @@
     "maxImageSize": 10485760,
     "timeout": 30000,
     "retryAttempts": 3
-  },
-  "crossReferences": {
-    "convertToText": true,
-    "boldEntities": true,
-    "entityTypes": ["spell", "monster", "equipment", "feature", "condition"]
   },
   "logging": {
     "level": "info",

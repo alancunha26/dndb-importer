@@ -77,10 +77,25 @@ function mergeConfig(
     ...override,
     input: { ...base.input, ...override.input },
     output: { ...base.output, ...override.output },
-    conversion: { ...base.conversion, ...override.conversion },
-    dndbeyond: { ...base.dndbeyond, ...override.dndbeyond },
+    parser: {
+      ...base.parser,
+      ...override.parser,
+      html: {
+        ...base.parser.html,
+        ...override.parser?.html,
+        // Deep merge urlMapping separately to allow adding/overriding individual mappings
+        urlMapping: {
+          ...base.parser.html.urlMapping,
+          ...override.parser?.html?.urlMapping,
+        },
+      },
+      markdown: { ...base.parser.markdown, ...override.parser?.markdown },
+      idGenerator: {
+        ...base.parser.idGenerator,
+        ...override.parser?.idGenerator,
+      },
+    },
     media: { ...base.media, ...override.media },
-    crossReferences: { ...base.crossReferences, ...override.crossReferences },
     logging: { ...base.logging, ...override.logging },
   };
 }
