@@ -16,8 +16,8 @@ import type { ConversionContext } from "../types";
  * Writes to context:
  * - stats: ProcessingStats with all metrics
  */
-export async function build(ctx: ConversionContext): Promise<void> {
-  if (!ctx.files || !ctx.processedFiles || !ctx.writtenFiles) {
+export async function stats(ctx: ConversionContext): Promise<void> {
+  if (!ctx.files || !ctx.writtenFiles) {
     throw new Error("All pipeline stages must complete before building stats");
   }
 

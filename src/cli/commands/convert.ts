@@ -1,9 +1,10 @@
 /**
- * Convert command - Loads config and runs converter
+ * Convert command - Loads config and runs conversion pipeline
  */
 
 import { loadConfig } from "../../utils/config";
-import { Converter } from "../../converter";
+import * as modules from "../../modules";
+import type { ConversionContext } from "../../types";
 
 interface ConvertOptions {
   input?: string;
@@ -31,17 +32,29 @@ export async function convertCommand(options: ConvertOptions): Promise<void> {
 
     // TODO: Handle dry-run mode
 
+    // Initialize context
+    const ctx: ConversionContext = {
+      config,
+    };
+
     // Run conversion pipeline
-    const converter = new Converter(config);
-    const stats = await converter.run();
+    await modules.scan(ctx);
+    await modules.process(ctx);
+    await modules.resolve(ctx);
+    await modules.stats(ctx);
+
+    // Stats must be populated by stats module
+    if (!ctx.stats) {
+      throw new Error("Stats module failed to populate statistics");
+    }
 
     // Display summary
     console.log("\n✅ Conversion complete!");
-    console.log(`Files processed: ${stats.successful}/${stats.totalFiles}`);
-    console.log(`Images downloaded: ${stats.imagesDownloaded}`);
-    console.log(`Links resolved: ${stats.linksResolved}`);
-    if (stats.duration) {
-      console.log(`Duration: ${(stats.duration / 1000).toFixed(2)}s`);
+    console.log(`Files processed: ${ctx.stats.successful}/${ctx.stats.totalFiles}`);
+    console.log(`Images downloaded: ${ctx.stats.imagesDownloaded}`);
+    console.log(`Links resolved: ${ctx.stats.linksResolved}`);
+    if (ctx.stats.duration) {
+      console.log(`Duration: ${(ctx.stats.duration / 1000).toFixed(2)}s`);
     }
   } catch (error) {
     console.error("\n❌ Conversion failed:");

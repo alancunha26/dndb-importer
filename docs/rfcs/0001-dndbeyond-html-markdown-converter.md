@@ -40,31 +40,25 @@ A CLI tool that converts D&D Beyond sourcebook HTML pages into clean, structured
 The converter uses a pipeline architecture where a shared context object flows through sequential modules. Each module reads what it needs from context, performs its work, and writes results back to context.
 
 ```
-┌─────────────────┐
-│   CLI Entry     │
-│   Point         │
-└────────┬────────┘
-         │
-         ▼
-┌─────────────────┐
-│  Configuration  │
-│  Loader         │
-└────────┬────────┘
-         │
-         ▼
 ┌─────────────────────────────────────────────────────────────┐
-│                    CONVERTER PIPELINE                       │
+│                    CONVERT COMMAND                          │
 │                                                             │
 │  ┌──────────────────────────────────────────────────────┐   │
-│  │  ConversionContext (flows through all modules)       │   │
+│  │  Configuration Loader                                │   │
+│  │  - Load default.json                                 │   │
+│  │  - Merge user config                                 │   │
+│  │  - Apply CLI overrides                               │   │
+│  └────────────────────────┬─────────────────────────────┘   │
+│                           ▼                                 │
+│  ┌──────────────────────────────────────────────────────┐   │
+│  │  Initialize ConversionContext                        │   │
 │  │  - config: ConversionConfig                          │   │
 │  │  - files?: FileDescriptor[]                          │   │
 │  │  - sourcebooks?: SourcebookInfo[]                    │   │
 │  │  - mappings?: Map<string, string>                    │   │
-│  │  - processedFiles?: ProcessedFile[]                  │   │
 │  │  - writtenFiles?: WrittenFile[]                      │   │
 │  │  - stats?: ProcessingStats                           │   │
-│  └──────────────────────────────────────────────────────┘   │
+│  └────────────────────────┬─────────────────────────────┘   │
 │                              │                              │
 │                              ▼                              │
 │  ┌──────────────────────────────────────────────────────┐   │
@@ -77,28 +71,23 @@ The converter uses a pipeline architecture where a shared context object flows t
 │  └────────────────────────┬─────────────────────────────┘   │
 │                           ▼                                 │
 │  ┌──────────────────────────────────────────────────────┐   │
-│  │  2. Processor Module                                 │   │
-│  │  For each file:                                      │   │
+│  │  2. Processor Module (Memory-Efficient)              │   │
+│  │  For EACH file (one at a time):                      │   │
 │  │  - Parse HTML with Cheerio                           │   │
 │  │  - Extract content & metadata                        │   │
 │  │  - Build FileAnchors (valid + HTML ID mappings)      │   │
 │  │  - Convert HTML → Markdown (Turndown)                │   │
 │  │  - Download images with retry logic                  │   │
-│  │  → Writes: ctx.processedFiles                        │   │
-│  └────────────────────────┬─────────────────────────────┘   │
-│                           ▼                                 │
-│  ┌──────────────────────────────────────────────────────┐   │
-│  │  3. Writer Module                                    │   │
-│  │  For each file:                                      │   │
 │  │  - Build navigation (prev/index/next)                │   │
 │  │  - Assemble final markdown (frontmatter + content)   │   │
-│  │  - Write to disk                                     │   │
-│  │  Generate index files per sourcebook                 │   │
+│  │  - Write to disk IMMEDIATELY                         │   │
+│  │  - Store lightweight WrittenFile (path + anchors)    │   │
+│  │  - HTML/markdown garbage collected before next file  │   │
 │  │  → Writes: ctx.writtenFiles                          │   │
 │  └────────────────────────┬─────────────────────────────┘   │
 │                           ▼                                 │
 │  ┌──────────────────────────────────────────────────────┐   │
-│  │  4. Resolver Module                                  │   │
+│  │  3. Resolver Module                                  │   │
 │  │  - Build LinkResolutionIndex from all anchors        │   │
 │  │  - Resolve D&D Beyond links to local markdown        │   │
 │  │  - Validate anchors exist in target files            │   │
@@ -108,10 +97,18 @@ The converter uses a pipeline architecture where a shared context object flows t
 │  └────────────────────────┬─────────────────────────────┘   │
 │                           ▼                                 │
 │  ┌──────────────────────────────────────────────────────┐   │
-│  │  5. Stats Module                                     │   │
+│  │  4. Stats Module                                     │   │
 │  │  - Count files, images, links                        │   │
 │  │  - Calculate duration                                │   │
 │  │  → Writes: ctx.stats                                 │   │
+│  └────────────────────────┬─────────────────────────────┘   │
+│                           ▼                                 │
+│  ┌──────────────────────────────────────────────────────┐   │
+│  │  Display Summary                                     │   │
+│  │  - Files processed                                   │   │
+│  │  - Images downloaded                                 │   │
+│  │  - Links resolved                                    │   │
+│  │  - Duration                                          │   │
 │  └──────────────────────────────────────────────────────┘   │
 └─────────────────────────────────────────────────────────────┘
 ```
@@ -210,10 +207,9 @@ Each markdown file contains:
 The conversion follows a sequential pipeline where each module receives a shared context object:
 
 1. **Scanner**: Discover files and assign unique IDs
-2. **Processor**: Parse HTML, convert to Markdown, download images (per-file)
-3. **Writer**: Assemble final markdown with navigation and write to disk
-4. **Resolver**: Resolve all D&D Beyond links to local markdown links (optional)
-5. **Stats**: Build final processing statistics
+2. **Processor**: Process + write each file immediately (memory-efficient streaming)
+3. **Resolver**: Resolve all D&D Beyond links to local markdown links (optional)
+4. **Stats**: Build final processing statistics
 
 Each module:
 - Reads what it needs from the context
@@ -252,13 +248,15 @@ The converter is organized into pipeline modules located in `src/modules/`:
 
 #### 2. Processor Module (`src/modules/processor.ts`)
 
-**Responsibility**: HTML parsing, markdown conversion, and image downloading
+**Responsibility**: HTML parsing, markdown conversion, file writing (all in one)
 
-**Reads from context**: `config`, `files`
+**Memory-efficient streaming**: Processes files **one at a time**, writing immediately to avoid memory bloat from accumulating large HTML/markdown content.
 
-**Writes to context**: `processedFiles`
+**Reads from context**: `config`, `files`, `sourcebooks`
 
-**Key operations** (per file):
+**Writes to context**: `writtenFiles` (lightweight - only paths and anchors, no HTML/markdown)
+
+**Key operations** (per file, sequentially):
 1. **Parse HTML** with Cheerio
    - Extract main content using `.p-article-content` selector
    - Remove unwanted elements via `removeSelectors` config
@@ -271,28 +269,26 @@ The converter is organized into pipeline modules located in `src/modules/`:
 4. **Download images** with retry logic (3 attempts, exponential backoff)
    - Assign unique IDs to images
    - Track success/failure
-
-#### 3. Writer Module (`src/modules/writer.ts`)
-
-**Responsibility**: File assembly and disk writing
-
-**Reads from context**: `config`, `files`, `sourcebooks`, `processedFiles`
-
-**Writes to context**: `writtenFiles`
-
-**Key operations** (per file):
-1. Build navigation links (previous/index/next)
-2. Generate YAML front matter (title, date, tags)
-3. Assemble final markdown:
-   - Front matter
+5. **Build navigation links** (previous/index/next)
+6. **Assemble final markdown**:
+   - YAML front matter (title, date, tags)
    - Navigation header
    - Content (with image references using unique IDs)
-4. Write file to output directory
-5. Generate index files for each sourcebook
+7. **Write file to disk immediately**
+8. **Store lightweight WrittenFile**:
+   - File descriptor
+   - File path
+   - Anchors (for link resolution)
+9. **Garbage collection**: HTML and markdown are freed before processing next file
+10. **Generate index files** for each sourcebook
 
-#### 4. Resolver Module (`src/modules/resolver.ts`)
+**Note**: Writer module is deprecated and merged into Processor to avoid accumulating large content in memory.
+
+#### 3. Resolver Module (`src/modules/resolver.ts`)
 
 **Responsibility**: Link resolution (optional)
+
+**Memory-efficient**: Reads files **one at a time** from disk, processes, and overwrites.
 
 **Reads from context**: `config`, `mappings`, `writtenFiles`
 
@@ -300,13 +296,14 @@ The converter is organized into pipeline modules located in `src/modules/`:
 
 **Key operations**:
 1. Skip if `config.parser.html.convertInternalLinks` is false
-2. Build `LinkResolutionIndex` from all file anchors
-3. For each file:
-   - Read markdown content
+2. Build `LinkResolutionIndex` from all `writtenFiles` anchors
+3. For each file (one at a time):
+   - **Read markdown from disk**
    - Find D&D Beyond links and internal anchors
    - Resolve using URL mapping + ID mapping + anchor validation
    - Replace links or fallback to bold text
-   - Overwrite file
+   - **Overwrite file with resolved content**
+   - Markdown content freed before next file
 4. Track resolution stats (resolved/failed)
 
 **Link types handled**:
@@ -315,7 +312,7 @@ The converter is organized into pipeline modules located in `src/modules/`:
 - **External links**: Preserved as-is
 - **Header links** (no anchor): Removed entirely
 
-#### 5. Stats Module (`src/modules/stats.ts`)
+#### 4. Stats Module (`src/modules/stats.ts`)
 
 **Responsibility**: Build processing statistics
 
@@ -330,23 +327,26 @@ The converter is organized into pipeline modules located in `src/modules/`:
 - Count indexes created
 - Calculate duration
 
-### Converter Orchestration
+### Pipeline Orchestration
 
-The `Converter` class (`src/converter.ts`) is a pure pipeline orchestrator with no business logic:
+The conversion pipeline is orchestrated directly in the convert command (`src/cli/commands/convert.ts`):
 
 ```typescript
-export class Converter {
-  async run(): Promise<ProcessingStats> {
-    const ctx: ConversionContext = { config: this.config }
+export async function convertCommand(options: ConvertOptions) {
+  // Load and merge config
+  const config = await loadConfig(options.config)
 
-    await scanner.scan(ctx)
-    await processor.process(ctx)
-    await writer.write(ctx)
-    await resolver.resolve(ctx)
-    await stats.build(ctx)
+  // Initialize context
+  const ctx: ConversionContext = { config }
 
-    return ctx.stats!
-  }
+  // Run pipeline
+  await modules.scan(ctx)       // 1. File discovery
+  await modules.process(ctx)    // 2. Process + write (streaming)
+  await modules.resolve(ctx)    // 3. Resolve links
+  await modules.stats(ctx)      // 4. Build stats
+
+  // Display summary
+  console.log(`Files processed: ${ctx.stats.successful}/${ctx.stats.totalFiles}`)
 }
 ```
 
@@ -603,11 +603,8 @@ export interface ConversionContext {
   sourcebooks?: SourcebookInfo[];
   mappings?: Map<string, string>;
 
-  // Processor writes:
-  processedFiles?: ProcessedFile[];
-
-  // Writer writes:
-  writtenFiles?: WrittenFile[];
+  // Processor writes (processes + writes immediately):
+  writtenFiles?: WrittenFile[];  // Lightweight - no HTML/markdown
 
   // Stats writes:
   stats?: ProcessingStats;

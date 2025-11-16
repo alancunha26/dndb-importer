@@ -38,19 +38,19 @@ npm run format
 
 The converter uses a **pipeline architecture** where a shared `ConversionContext` object flows through sequential modules. Each module reads what it needs, performs its work, and writes results back to the context.
 
-**Converter Pipeline** (`src/converter.ts`):
+**Conversion Pipeline** (`src/cli/commands/convert.ts`):
 ```typescript
-async run(): Promise<ProcessingStats> {
-  const ctx: ConversionContext = { config: this.config }
+// Initialize context
+const ctx: ConversionContext = { config }
 
-  await scanner.scan(ctx)       // 1. File discovery
-  await processor.process(ctx)  // 2. HTML → Markdown + images
-  await writer.write(ctx)       // 3. Assemble & write files
-  await resolver.resolve(ctx)   // 4. Resolve links (optional)
-  await stats.build(ctx)        // 5. Build statistics
+// Run pipeline
+await modules.scan(ctx)       // 1. File discovery
+await modules.process(ctx)    // 2. Process + write (memory-efficient)
+await modules.resolve(ctx)    // 3. Resolve links (optional)
+await modules.stats(ctx)      // 4. Build statistics
 
-  return ctx.stats!
-}
+// Display results
+console.log(`Files processed: ${ctx.stats.successful}/${ctx.stats.totalFiles}`)
 ```
 
 **Pipeline Modules** (`src/modules/`):
@@ -60,32 +60,37 @@ async run(): Promise<ProcessingStats> {
    - Assigns unique 4-char IDs using `short-unique-id`
    - Builds filename→ID mapping
    - Groups files by sourcebook
-   - Writes: `ctx.scanResult`
+   - Writes: `ctx.files`, `ctx.sourcebooks`, `ctx.mappings`
 
-2. **Processor** (`processor.ts`)
-   - Parses HTML with Cheerio
-   - Extracts content using `.p-article-content` selector
-   - Builds `FileAnchors` (valid anchors + HTML ID mappings)
-   - Converts HTML → Markdown using Turndown with custom D&D rules
-   - Downloads images with retry logic
-   - Writes: `ctx.processedFiles`
-
-3. **Writer** (`writer.ts`)
-   - Builds navigation links (prev/index/next)
-   - Assembles final markdown (frontmatter + navigation + content)
-   - Writes files to disk
+2. **Processor** (`processor.ts`) - **Memory-efficient streaming**
+   - Processes files **one at a time** to avoid memory bloat
+   - For each file:
+     - Parses HTML with Cheerio
+     - Extracts content using `.p-article-content` selector
+     - Builds `FileAnchors` (valid anchors + HTML ID mappings)
+     - Converts HTML → Markdown using Turndown with custom D&D rules
+     - Downloads images with retry logic
+     - Builds navigation links (prev/index/next)
+     - Assembles final markdown (frontmatter + navigation + content)
+     - **Writes to disk immediately**
+     - Stores lightweight `WrittenFile` (path + anchors only)
+     - HTML and markdown are garbage collected before next file
    - Generates index files per sourcebook
-   - Writes: `ctx.writtenFiles`
+   - Writes: `ctx.writtenFiles` (lightweight - no HTML/markdown content)
 
-4. **Resolver** (`resolver.ts`)
-   - Builds `LinkResolutionIndex` from all file anchors
-   - Resolves D&D Beyond links to local markdown links
-   - Validates anchors exist in target files
-   - Falls back to bold text for unresolved links
-   - Overwrites files with resolved links
+3. **Resolver** (`resolver.ts`)
+   - Runs **after all files are written to disk**
+   - Builds `LinkResolutionIndex` from `writtenFiles` anchors
+   - For each file:
+     - Reads markdown from disk (one file at a time)
+     - Resolves D&D Beyond links to local markdown links
+     - Validates anchors exist in target files
+     - Falls back to bold text for unresolved links
+     - Overwrites file with resolved links
+   - Memory-efficient: Only one file's content in memory at a time
    - Skipped if `convertInternalLinks: false`
 
-5. **Stats** (`stats.ts`)
+4. **Stats** (`stats.ts`)
    - Counts files, images, links
    - Calculates duration
    - Writes: `ctx.stats`
@@ -168,8 +173,7 @@ Key types:
   - `files`: FileDescriptor[] (from scanner)
   - `sourcebooks`: SourcebookInfo[] (from scanner)
   - `mappings`: Map<string, string> (from scanner)
-  - `processedFiles`: ProcessedFile[] (from processor)
-  - `writtenFiles`: WrittenFile[] (from writer)
+  - `writtenFiles`: WrittenFile[] (from processor - lightweight, no HTML/markdown)
   - `stats`: ProcessingStats (from stats)
 - `FileDescriptor` - File metadata with unique ID
 - `FileAnchors` - Anchor data for a single file (valid anchors + HTML ID mappings)
@@ -186,17 +190,16 @@ Key types:
 src/
 ├── cli/
 │   ├── commands/
-│   │   ├── convert.ts       # Loads config, runs converter
+│   │   ├── convert.ts       # Pipeline orchestration + CLI handling
 │   │   └── config.ts        # Shows config location
 │   └── index.ts
 ├── modules/
 │   ├── scanner.ts           # File discovery & ID assignment
-│   ├── processor.ts         # HTML → Markdown + images
-│   ├── writer.ts            # Assemble & write files
+│   ├── processor.ts         # Process + write (memory-efficient)
+│   ├── writer.ts            # (deprecated - merged into processor)
 │   ├── resolver.ts          # Link resolution
 │   ├── stats.ts             # Build statistics
 │   └── index.ts
-├── converter.ts             # Pipeline orchestrator (pure)
 ├── turndown/
 │   ├── rules/index.ts
 │   └── config.ts
@@ -216,7 +219,7 @@ src/
 
 **Key principles:**
 - **Modules**: Simple functions with context-based signature `async fn(ctx: ConversionContext): Promise<void>`
-- **Converter**: Pure pipeline orchestrator with zero business logic
+- **Pipeline**: Orchestrated directly in convert command (no separate orchestrator class)
 - **Context**: Shared object flows through all modules
 - **Types**: Organized by domain (config, files, pipeline, context)
 

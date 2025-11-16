@@ -1,6 +1,9 @@
 /**
  * Resolver Module
  * Resolves D&D Beyond links to local markdown links
+ *
+ * This module runs AFTER processor has written all files to disk.
+ * It reads the files, resolves links, and overwrites them.
  */
 
 import type { ConversionContext } from "../types";
@@ -9,16 +12,23 @@ import type { ConversionContext } from "../types";
  * Resolves cross-references in all written files
  *
  * Reads from context:
- * - writtenFiles
- * - mappings
- * - config.parser.html (urlMapping, convertInternalLinks, fallbackToBold)
+ * - writtenFiles: Contains paths and anchors for all files
+ * - mappings: URL → file ID mapping from scanner
+ * - config.parser.html: urlMapping, convertInternalLinks, fallbackToBold
  *
- * Modifies:
- * - Overwrites markdown files with resolved links
+ * Process:
+ * 1. Build LinkResolutionIndex from writtenFiles (has all anchors)
+ * 2. For each file, read markdown from disk
+ * 3. Resolve D&D Beyond links using URL mapping + anchor validation
+ * 4. Overwrite files with resolved links
+ *
+ * Memory efficient:
+ * - Only one file's content in memory at a time
+ * - writtenFiles contains only lightweight metadata + anchors
  */
 export async function resolve(ctx: ConversionContext): Promise<void> {
   if (!ctx.writtenFiles || !ctx.mappings) {
-    throw new Error("Writer and scanner must run before resolver");
+    throw new Error("Processor and scanner must run before resolver");
   }
 
   // Skip if link resolution is disabled
@@ -31,14 +41,29 @@ export async function resolve(ctx: ConversionContext): Promise<void> {
 
   // TODO: Implement link resolution logic
   // 1. Build LinkResolutionIndex from all writtenFiles anchors
+  //    const index: LinkResolutionIndex = {}
+  //    for (const file of ctx.writtenFiles) {
+  //      index[file.descriptor.uniqueId] = file.anchors
+  //    }
+  //
   // 2. For each written file:
-  //    a. Read markdown content
-  //    b. Find all links (D&D Beyond URLs and internal anchors)
-  //    c. Resolve using:
-  //       - URL mapping (config.parser.html.urlMapping)
-  //       - ID mapping (ctx.mappings)
-  //       - Anchor validation (LinkResolutionIndex)
-  //    d. Replace links or fallback to bold text
-  //    e. Overwrite file with resolved content
+  //    for (const file of ctx.writtenFiles) {
+  //      a. Read markdown content from disk
+  //         const content = await readFile(file.path, 'utf-8')
+  //
+  //      b. Find all links (D&D Beyond URLs and internal anchors)
+  //
+  //      c. Resolve using:
+  //         - URL mapping (config.parser.html.urlMapping)
+  //         - ID mapping (ctx.mappings)
+  //         - Anchor validation (index built above)
+  //
+  //      d. Replace links or fallback to bold text
+  //
+  //      e. Overwrite file with resolved content
+  //         await writeFile(file.path, resolvedContent, 'utf-8')
+  //    }
+  //
   // 3. Track resolution stats (resolved/failed)
+  //    Update ctx.stats if needed or return stats
 }

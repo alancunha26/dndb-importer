@@ -1,39 +1,20 @@
 /**
  * Writer Module
- * Assembles final markdown files with navigation and writes to disk
+ *
+ * NOTE: This module is now merged into the Processor module to avoid memory bloat.
+ * Writing happens immediately after processing each file, so we don't accumulate
+ * large HTML/markdown content in memory.
+ *
+ * This file is kept for reference but is no longer used in the pipeline.
+ * See src/modules/processor.ts for the merged implementation.
  */
 
 import type { ConversionContext } from "../types";
 
 /**
- * Writes processed files to disk with navigation and front matter
- *
- * Reads from context:
- * - processedFiles
- * - sourcebooks (for navigation)
- * - files (for navigation ordering)
- *
- * Writes to context:
- * - writtenFiles: Array of WrittenFile with paths and anchors
+ * @deprecated - Merged into processor.ts
  */
-export async function write(ctx: ConversionContext): Promise<void> {
-  if (!ctx.processedFiles || !ctx.sourcebooks || !ctx.files) {
-    throw new Error("Processor and scanner must run before writer");
-  }
-
-  console.log(`Writing ${ctx.processedFiles.length} files...`);
-
-  // TODO: Implement writing logic
-  // For each processed file:
-  // 1. Build navigation links (prev/index/next)
-  // 2. Generate YAML front matter
-  // 3. Assemble final markdown (frontmatter + navigation + content)
-  // 4. Update image references to use unique IDs
-  // 5. Write file to output directory
-  // 6. Return WrittenFile
-  //
-  // Also:
-  // 7. Generate index files for each sourcebook
-
-  ctx.writtenFiles = [];
+export async function write(_ctx: ConversionContext): Promise<void> {
+  console.log("Writer module is deprecated - functionality merged into processor");
+  // No-op - processor handles writing now
 }

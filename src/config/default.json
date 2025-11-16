@@ -15,6 +15,7 @@
     "html": {
       "contentSelector": ".p-article-content",
       "removeSelectors": [],
+      "fallbackToBold": true,
       "convertInternalLinks": true,
       "urlMapping": {
         "/sources/dnd/phb-2024/introduction": "players-handbook/01-introduction-welcome-to-adventure.html",
@@ -28,8 +29,7 @@
         "/spells": "players-handbook/10-chapter-7-spell-descriptions.html",
         "/monsters": "players-handbook/12-appendix-b-creature-stat-blocks.html",
         "/equipment": "players-handbook/08-chapter-6-equipment.html"
-      },
-      "fallbackToBold": true
+      }
     },
     "markdown": {
       "headingStyle": "atx",
