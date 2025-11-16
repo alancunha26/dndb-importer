@@ -36,18 +36,59 @@ npm run format
 
 ### Core Processing Pipeline
 
-The conversion follows a two-phase approach:
+The converter uses a **pipeline architecture** where a shared `ConversionContext` object flows through sequential modules. Each module reads what it needs, performs its work, and writes results back to the context.
 
-**Phase 1: Generation (Create markdown files)**
-1. **Configuration Loader** (`src/utils/config.ts`) - Three-tier config system: default → user → custom
-2. **File Scanner** (`src/scanner.ts`) - Discovers HTML files, assigns unique 4-char IDs, builds filename→ID mapping
-3. **HTML Processor** (`src/html-processor.ts`) - Parses HTML with Cheerio, extracts content (links preserved)
-4. **Turndown Converter** (`src/turndown/config.ts`) - Converts HTML to Markdown with custom D&D rules
-5. **Image Handler** (`src/image-handler.ts`) - Downloads images, assigns unique IDs
-6. **Markdown Writer** (`src/markdown-writer.ts`) - Writes files with navigation, front matter (links unresolved)
+**Converter Pipeline** (`src/converter.ts`):
+```typescript
+async run(): Promise<ProcessingStats> {
+  const ctx: ConversionContext = { config: this.config }
 
-**Phase 2: Link Resolution (Post-process all files)**
-7. **Link Resolver** (`src/link-resolver.ts`) - Reads all markdown files, builds anchor index (file → valid anchors), resolves D&D Beyond links to local markdown links using URL mapping + ID mapping, validates anchors exist in target files, falls back to bold text for missing links or anchors
+  await scanner.scan(ctx)       // 1. File discovery
+  await processor.process(ctx)  // 2. HTML → Markdown + images
+  await writer.write(ctx)       // 3. Assemble & write files
+  await resolver.resolve(ctx)   // 4. Resolve links (optional)
+  await stats.build(ctx)        // 5. Build statistics
+
+  return ctx.stats!
+}
+```
+
+**Pipeline Modules** (`src/modules/`):
+
+1. **Scanner** (`scanner.ts`)
+   - Discovers HTML files using fast-glob
+   - Assigns unique 4-char IDs using `short-unique-id`
+   - Builds filename→ID mapping
+   - Groups files by sourcebook
+   - Writes: `ctx.scanResult`
+
+2. **Processor** (`processor.ts`)
+   - Parses HTML with Cheerio
+   - Extracts content using `.p-article-content` selector
+   - Builds `FileAnchors` (valid anchors + HTML ID mappings)
+   - Converts HTML → Markdown using Turndown with custom D&D rules
+   - Downloads images with retry logic
+   - Writes: `ctx.processedFiles`
+
+3. **Writer** (`writer.ts`)
+   - Builds navigation links (prev/index/next)
+   - Assembles final markdown (frontmatter + navigation + content)
+   - Writes files to disk
+   - Generates index files per sourcebook
+   - Writes: `ctx.writtenFiles`
+
+4. **Resolver** (`resolver.ts`)
+   - Builds `LinkResolutionIndex` from all file anchors
+   - Resolves D&D Beyond links to local markdown links
+   - Validates anchors exist in target files
+   - Falls back to bold text for unresolved links
+   - Overwrites files with resolved links
+   - Skipped if `convertInternalLinks: false`
+
+5. **Stats** (`stats.ts`)
+   - Counts files, images, links
+   - Calculates duration
+   - Writes: `ctx.stats`
 
 ### Key Design Decisions
 
@@ -71,21 +112,19 @@ The conversion follows a two-phase approach:
 - Output: One directory per sourcebook, all files (markdown + images) in same directory
 - Navigation: Each file has prev/index/next links, index file per sourcebook
 
-**Cross-References (Two-Phase Approach):**
-- **Phase 1**: Files generated with HTML links intact (from Turndown conversion)
-- **Phase 2**: Post-processor handles D&D Beyond links based on config
+**Cross-References (Resolver Module):**
 - **Link resolution is optional** (`parser.html.convertInternalLinks`):
-  - If `true`: Resolve links with full validation (default)
-  - If `false`: Convert all D&D Beyond links to bold text
+  - If `true`: Resolver module resolves links with full validation (default)
+  - If `false`: Resolver module skipped
 - User configures URL mapping in `parser.html.urlMapping`:
   - Source paths: `/sources/dnd/phb-2024/equipment` → `players-handbook/08-chapter-6-equipment.html`
   - Entity paths: `/spells` → `players-handbook/10-spell-descriptions.html`
 - Supports both source book links and entity links (e.g., `https://www.dndbeyond.com/spells/2619022-magic-missile`)
 - Scanner builds runtime mapping: `players-handbook/08-chapter-6-equipment.html` → unique ID `yw3w`
-- **Phase 1 builds `FileAnchors`** for each file during HTML processing:
+- **Processor builds `FileAnchors`** for each file during HTML processing:
   - `valid: string[]` - All markdown anchors with plural/singular variants
   - `htmlIdToAnchor: Record<string, string>` - HTML element IDs → markdown anchors
-- **Phase 2 builds `LinkResolutionIndex`** by collecting all `FileAnchors`:
+- **Resolver builds `LinkResolutionIndex`** by collecting all `FileAnchors`:
   - Single unified index: file ID → anchor data
   - Used for both same-page link resolution and cross-file validation
 - Link resolver combines mappings: URL → HTML path → unique ID
@@ -95,9 +134,9 @@ The conversion follows a two-phase approach:
   3. Uses shortest match if multiple prefix matches
 - **Header links** (no anchor): Links without specific anchors (e.g., `[Equipment](/sources/.../equipment)`) are **removed entirely**
 - **Internal links** (same-page): Resolved using `LinkResolutionIndex`
-  - Phase 1: HTML Parser builds `htmlIdToAnchor` mapping using Cheerio
+  - Processor builds `htmlIdToAnchor` mapping using Cheerio
     - Example: `<h2 id="Bell1GP">Bell (1 GP)</h2>` → stores `{ "Bell1GP": "bell-1-gp" }`
-  - Phase 2: Uses `index[fileId].htmlIdToAnchor` to resolve links
+  - Resolver uses `index[fileId].htmlIdToAnchor` to resolve links
     - Example: `[Bell](#Bell1GP)` → looks up `"Bell1GP"` → `[Bell](#bell-1-gp)`
   - Always resolved, regardless of `convertInternalLinks` setting
 - Example 1: `[Bell](#Bell1GP)` → `[Bell](#bell-1-gp)` (internal link via HTML ID index)
@@ -116,27 +155,70 @@ The conversion follows a two-phase approach:
 
 ### Type System
 
-All types are centralized in `src/types.ts`:
+Types are organized in `src/types/` by domain:
+- **`types/config.ts`** - Configuration types (`ConversionConfig`, `HtmlParserConfig`, etc.)
+- **`types/files.ts`** - File-related types (`FileDescriptor`, `ImageDescriptor`, `FileAnchors`, etc.)
+- **`types/pipeline.ts`** - Pipeline data types (`ScanResult`, `ProcessedFile`, `WrittenFile`, `LinkResolutionIndex`, etc.)
+- **`types/context.ts`** - `ConversionContext` (flows through all modules)
+- **`types/index.ts`** - Re-exports all types
+
+Key types:
+- `ConversionContext` - Context object that flows through pipeline modules (flattened structure):
+  - `config`: Configuration
+  - `files`: FileDescriptor[] (from scanner)
+  - `sourcebooks`: SourcebookInfo[] (from scanner)
+  - `mappings`: Map<string, string> (from scanner)
+  - `processedFiles`: ProcessedFile[] (from processor)
+  - `writtenFiles`: WrittenFile[] (from writer)
+  - `stats`: ProcessingStats (from stats)
 - `FileDescriptor` - File metadata with unique ID
-- `ConversionConfig` - Complete configuration structure
-- `HtmlParserConfig` - Includes `urlMapping` (Record<string, string>) for URL → HTML filename mapping
-- `ImageDescriptor` - Image download tracking
-- `NavigationLinks` - Previous/index/next navigation
-- `ConversionResult` - Conversion output with metadata, includes `FileAnchors` for Phase 2
 - `FileAnchors` - Anchor data for a single file (valid anchors + HTML ID mappings)
   - `valid: string[]` - All markdown anchors with plural/singular variants
   - `htmlIdToAnchor: Record<string, string>` - HTML element IDs → markdown anchors
-- `LinkResolutionIndex` - Maps file IDs to `FileAnchors` (unified index for Phase 2)
-- `LinkResolutionResult` - Link resolution outcome with failure reason
-- `ProcessingStats` - Includes `linksResolved` and `linksFailed` counters
+- `ProcessedFile` - Output of processor module (HTML, markdown, images, anchors)
+- `WrittenFile` - Output of writer module (descriptor, path, anchors)
+- `LinkResolutionIndex` - Maps file IDs to `FileAnchors` (for resolver module)
+- `ProcessingStats` - Final statistics (files, images, links)
 
-### CLI Structure
+### Project Structure
 
-Commands are in `src/cli/commands/`:
-- `convert.ts` - Main conversion command (default action)
-- `config.ts` - Shows OS-specific config file location
+```
+src/
+├── cli/
+│   ├── commands/
+│   │   ├── convert.ts       # Loads config, runs converter
+│   │   └── config.ts        # Shows config location
+│   └── index.ts
+├── modules/
+│   ├── scanner.ts           # File discovery & ID assignment
+│   ├── processor.ts         # HTML → Markdown + images
+│   ├── writer.ts            # Assemble & write files
+│   ├── resolver.ts          # Link resolution
+│   ├── stats.ts             # Build statistics
+│   └── index.ts
+├── converter.ts             # Pipeline orchestrator (pure)
+├── turndown/
+│   ├── rules/index.ts
+│   └── config.ts
+├── utils/
+│   ├── config.ts
+│   ├── id-generator.ts
+│   └── logger.ts
+├── types/
+│   ├── config.ts            # Configuration types
+│   ├── files.ts             # File-related types
+│   ├── pipeline.ts          # Pipeline data types
+│   ├── context.ts           # ConversionContext
+│   └── index.ts
+└── config/
+    └── default.json
+```
 
-Add new commands by creating files in `src/cli/commands/` and registering in `src/cli/index.ts`.
+**Key principles:**
+- **Modules**: Simple functions with context-based signature `async fn(ctx: ConversionContext): Promise<void>`
+- **Converter**: Pure pipeline orchestrator with zero business logic
+- **Context**: Shared object flows through all modules
+- **Types**: Organized by domain (config, files, pipeline, context)
 
 ### Build System
 

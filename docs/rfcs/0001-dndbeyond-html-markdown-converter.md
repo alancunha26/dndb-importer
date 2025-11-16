@@ -35,10 +35,9 @@ A CLI tool that converts D&D Beyond sourcebook HTML pages into clean, structured
 
 ### High-Level Architecture
 
-**Two-Phase Processing:**
+**Pipeline Architecture with Context:**
 
-Phase 1 (Generation): Scan → Parse → Convert → Write files with intact HTML links
-Phase 2 (Post-Processing): Read all files → Resolve links → Replace with markdown links or bold text
+The converter uses a pipeline architecture where a shared context object flows through sequential modules. Each module reads what it needs from context, performs its work, and writes results back to context.
 
 ```
 ┌─────────────────┐
@@ -53,61 +52,68 @@ Phase 2 (Post-Processing): Read all files → Resolve links → Replace with mar
 └────────┬────────┘
          │
          ▼
-┌───────────────────────────────────────────────────────────┐
-│                    PHASE 1: GENERATION                    │
-│                                                           │
-│  ┌─────────────────┐      ┌──────────────────┐            │
-│  │  File Scanner   │─────▶│  ID Generator    │            │
-│  │  & Validator    │      │  (short-uuid)    │            │
-│  └────────┬────────┘      └──────────────────┘            │
-│           │                                               │
-│           │  Builds: filename → unique ID mapping         │
-│           ▼                                               │
-│  ┌─────────────────┐      ┌──────────────────┐            │
-│  │  HTML Parser    │─────▶│  Turndown Core   │            │
-│  │  & Processor    │      │  + Custom Rules  │            │
-│  └────────┬────────┘      └──────────────────┘            │
-│           │                                               │
-│           │  (Links preserved as-is from HTML)            │
-│           │                                               │
-│           ├────────────────────────┐                      │
-│           ▼                        ▼                      │
-│  ┌─────────────────┐      ┌──────────────────┐            │
-│  │  Image          │      │  Markdown        │            │
-│  │  Downloader     │─────▶│  Post-Processor  │            │
-│  └─────────────────┘      └────────┬─────────┘            │
-│                                    │                      │
-│                                    ▼                      │
-│                           ┌──────────────────┐            │
-│                           │  Navigation      │            │
-│                           │  Builder         │            │
-│                           └────────┬─────────┘            │
-│                                    │                      │
-│                                    ▼                      │
-│  ┌─────────────────┐      ┌──────────────────┐            │
-│  │  File Writer    │─────▶│  Index           │            │
-│  │  & Organizer    │      │  Generator       │            │
-│  └─────────────────┘      └──────────────────┘            │
-└───────────────────────────────────────────────────────────┘
-         │
-         │  All files written with HTML links intact
-         │
-         ▼
-┌───────────────────────────────────────────────────────────┐
-│                 PHASE 2: LINK RESOLUTION                  │
-│                                                           │
-│  ┌─────────────────────────────────────────┐              │
-│  │  Link Resolver & Post-Processor         │              │
-│  │                                         │              │
-│  │  1. Read all generated markdown files   │              │
-│  │  2. Use URL mapping + ID mapping        │              │
-│  │  3. Find D&D Beyond links in content    │              │
-│  │  4. Resolve to unique IDs               │              │
-│  │  5. Replace with markdown links         │              │
-│  │  6. Fallback to bold if link not found  │              │
-│  │  7. Overwrite files with resolved links │              │
-│  └─────────────────────────────────────────┘              │
-└───────────────────────────────────────────────────────────┘
+┌─────────────────────────────────────────────────────────────┐
+│                    CONVERTER PIPELINE                       │
+│                                                             │
+│  ┌──────────────────────────────────────────────────────┐   │
+│  │  ConversionContext (flows through all modules)       │   │
+│  │  - config: ConversionConfig                          │   │
+│  │  - files?: FileDescriptor[]                          │   │
+│  │  - sourcebooks?: SourcebookInfo[]                    │   │
+│  │  - mappings?: Map<string, string>                    │   │
+│  │  - processedFiles?: ProcessedFile[]                  │   │
+│  │  - writtenFiles?: WrittenFile[]                      │   │
+│  │  - stats?: ProcessingStats                           │   │
+│  └──────────────────────────────────────────────────────┘   │
+│                              │                              │
+│                              ▼                              │
+│  ┌──────────────────────────────────────────────────────┐   │
+│  │  1. Scanner Module                                   │   │
+│  │  - Discover HTML files                               │   │
+│  │  - Assign unique IDs (short-uuid)                    │   │
+│  │  - Build filename → ID mappings                      │   │
+│  │  - Group by sourcebook                               │   │
+│  │  → Writes: ctx.files, ctx.sourcebooks, ctx.mappings  │   │
+│  └────────────────────────┬─────────────────────────────┘   │
+│                           ▼                                 │
+│  ┌──────────────────────────────────────────────────────┐   │
+│  │  2. Processor Module                                 │   │
+│  │  For each file:                                      │   │
+│  │  - Parse HTML with Cheerio                           │   │
+│  │  - Extract content & metadata                        │   │
+│  │  - Build FileAnchors (valid + HTML ID mappings)      │   │
+│  │  - Convert HTML → Markdown (Turndown)                │   │
+│  │  - Download images with retry logic                  │   │
+│  │  → Writes: ctx.processedFiles                        │   │
+│  └────────────────────────┬─────────────────────────────┘   │
+│                           ▼                                 │
+│  ┌──────────────────────────────────────────────────────┐   │
+│  │  3. Writer Module                                    │   │
+│  │  For each file:                                      │   │
+│  │  - Build navigation (prev/index/next)                │   │
+│  │  - Assemble final markdown (frontmatter + content)   │   │
+│  │  - Write to disk                                     │   │
+│  │  Generate index files per sourcebook                 │   │
+│  │  → Writes: ctx.writtenFiles                          │   │
+│  └────────────────────────┬─────────────────────────────┘   │
+│                           ▼                                 │
+│  ┌──────────────────────────────────────────────────────┐   │
+│  │  4. Resolver Module                                  │   │
+│  │  - Build LinkResolutionIndex from all anchors        │   │
+│  │  - Resolve D&D Beyond links to local markdown        │   │
+│  │  - Validate anchors exist in target files            │   │
+│  │  - Fallback to bold for unresolved links             │   │
+│  │  - Overwrite files with resolved links               │   │
+│  │  (Skipped if convertInternalLinks: false)            │   │
+│  └────────────────────────┬─────────────────────────────┘   │
+│                           ▼                                 │
+│  ┌──────────────────────────────────────────────────────┐   │
+│  │  5. Stats Module                                     │   │
+│  │  - Count files, images, links                        │   │
+│  │  - Calculate duration                                │   │
+│  │  → Writes: ctx.stats                                 │   │
+│  └──────────────────────────────────────────────────────┘   │
+└─────────────────────────────────────────────────────────────┘
 ```
 
 ### User Experience
@@ -199,97 +205,152 @@ Each markdown file contains:
 - Use numeric prefix in filenames (e.g., `01-introduction.html`, `02-chapter-1.html`)
 - Scanner sorts by numeric prefix, falls back to alphabetical
 
-**Two-Phase Processing:**
+**Pipeline Processing:**
 
-1. **Phase 1 (Generation)**: Scan files, assign IDs, convert HTML to Markdown, download images, write files
-   - Links preserved as-is from HTML
-   - All files and IDs known after this phase
-2. **Phase 2 (Link Resolution)**: Post-process all files to resolve D&D Beyond links
-   - Build anchor index from all files
-   - Validate and convert links to local markdown format
-   - Fallback to bold text for unresolvable links
+The conversion follows a sequential pipeline where each module receives a shared context object:
 
-This separation provides complete knowledge of all files/IDs before resolving links, enabling proper validation.
+1. **Scanner**: Discover files and assign unique IDs
+2. **Processor**: Parse HTML, convert to Markdown, download images (per-file)
+3. **Writer**: Assemble final markdown with navigation and write to disk
+4. **Resolver**: Resolve all D&D Beyond links to local markdown links (optional)
+5. **Stats**: Build final processing statistics
+
+Each module:
+- Reads what it needs from the context
+- Performs its work
+- Writes results back to context
+- Passes context to the next module
+
+This architecture provides:
+- Clear separation of concerns
+- Simple data flow (context threading)
+- Complete knowledge of all files before link resolution
+- Easy testing and maintenance
 
 ### Core Components
 
-#### 1. File Scanner (`src/scanner.ts`) - Phase 1
+The converter is organized into pipeline modules located in `src/modules/`:
 
-- Discovers HTML files in input directory
-- Generates unique 4-character IDs for each file using `short-unique-id`
-- Groups files by sourcebook
-- Creates file processing queue ordered by numeric prefix
-- Generates unique ID for sourcebook index files
-- Builds runtime mapping: relative HTML path → unique ID
-  - Example: `players-handbook/08-chapter-6-equipment.html` → `yw3w`
-- Passes mapping to Phase 2 for link resolution
+#### 1. Scanner Module (`src/modules/scanner.ts`)
 
-#### 2. HTML Parser & Preprocessor (`src/html-processor.ts`) - Phase 1
+**Responsibility**: File discovery and ID assignment
 
-- Loads HTML files
-- Extracts main content using `.p-article-content` selector
-- Optionally removes unwanted elements via `removeSelectors` config
-- Identifies D&D-specific structures
-- Extracts metadata (title, chapter, page references)
-- **Builds anchor data** (`FileAnchors`) using Cheerio:
-  1. **HTML ID mappings**: Finds all elements with `id` attribute
-     - Example: `<h2 id="Bell1GP">Bell (1 GP)</h2>`
-     - Extracts element text, generates GitHub-style anchor: `"bell-1-gp"`
-     - Stores: `htmlIdToAnchor: { "Bell1GP": "bell-1-gp" }`
-  2. **Valid anchors**: Extracts all headings
-     - Generates GitHub-style anchors with plural/singular variants
-     - Example: `## Fireball` → `valid: ["fireball", "fireballs"]`
-  3. Stores both in `ConversionResult.anchors` for Phase 2
-- **Does NOT convert links in Phase 1** - links preserved as-is from HTML
+**Reads from context**: `config`
 
-#### 3. Turndown Converter with Custom Rules (`src/turndown/`) - Phase 1
+**Writes to context**:
+- `files`: Array of `FileDescriptor` with unique IDs
+- `sourcebooks`: Grouped files by sourcebook directory
+- `mappings`: Map of relative HTML path → unique ID
 
-- Converts HTML to Markdown
-- Applies D&D-specific formatting rules:
-  - **Stat Blocks**: Monster/NPC stat blocks with proper formatting
-  - **Spell Blocks**: Spell descriptions with standard format
-  - **Tables**: Equipment tables, spell lists, encounter tables
-  - **Sidebars/Callouts**: Block quotes for variant rules
-  - **Links**: Converted to basic markdown links from HTML (will be resolved in Phase 2)
+**Key operations**:
+- Discovers HTML files in input directory using fast-glob
+- Generates unique 4-character IDs using `short-unique-id`
+- Sorts files by numeric prefix (01-, 02-, etc.)
+- Groups files by sourcebook (directory name)
+- Builds runtime mapping for link resolution
+  - Example: `players-handbook/08-equipment.html` → `yw3w`
 
-#### 4. Markdown Writer (`src/markdown-writer.ts`) - Phase 1
+#### 2. Processor Module (`src/modules/processor.ts`)
 
-- Cleans up Turndown output
-- Generates navigation headers (previous/index/next)
-- Adds YAML front matter with title, date, and tags
-- Updates image paths to use unique ID filenames
-- Writes markdown files to output directory (with unresolved links)
+**Responsibility**: HTML parsing, markdown conversion, and image downloading
 
-#### 5. Image Downloader & Processor (`src/image-handler.ts`) - Phase 1
+**Reads from context**: `config`, `files`
 
-- Detects images in HTML content
-- Downloads images from URLs
-- Generates unique IDs for image filenames
-- Saves images to sourcebook directory
-- Tracks image mappings (original URL → unique ID)
+**Writes to context**: `processedFiles`
 
-#### 6. Link Resolver & Post-Processor (`src/link-resolver.ts`) - Phase 2
+**Key operations** (per file):
+1. **Parse HTML** with Cheerio
+   - Extract main content using `.p-article-content` selector
+   - Remove unwanted elements via `removeSelectors` config
+   - Extract metadata (title, date, tags)
+2. **Build FileAnchors**:
+   - **HTML ID mappings**: `<h2 id="Bell1GP">` → `{ "Bell1GP": "bell-1-gp" }`
+   - **Valid anchors**: All headings with plural/singular variants
+3. **Convert to Markdown** using Turndown with custom D&D rules
+   - Stat blocks, spell descriptions, tables, sidebars
+4. **Download images** with retry logic (3 attempts, exponential backoff)
+   - Assign unique IDs to images
+   - Track success/failure
 
-- Runs after all markdown files are generated (Phase 1 complete)
-- **Builds LinkResolutionIndex** by collecting `FileAnchors` from all Phase 1 results
-  - Maps file ID → anchor data (valid anchors + HTML ID mappings)
-  - Example: `{ "a3f9": { valid: [...], htmlIdToAnchor: {...} } }`
-- Processes three types of links:
-  1. **Internal links** (same-page): Uses `htmlIdToAnchor` from index
-     - Example: `[Bell](#Bell1GP)` looks up `index["a3f9"].htmlIdToAnchor["Bell1GP"]` → `"bell-1-gp"`
-     - Result: `[Bell](#bell-1-gp)`
-  2. **D&D Beyond links** (cross-file): Uses `valid` anchors for validation
-  3. **External links**: Preserved as-is
-- **If `convertInternalLinks: true`**:
-  - Resolves D&D Beyond links using URL mapping + anchor validation
-  - Replaces valid links with local markdown links: `[LinkText](fileId.md#anchor)`
-  - Converts unresolvable links per `fallbackToBold` setting
-  - Removes header links (links without anchors)
-- **If `convertInternalLinks: false`**:
-  - Simply converts all D&D Beyond links to bold text
-- Internal link resolution always occurs regardless of `convertInternalLinks` setting
-- Overwrites markdown files with processed links
-- See "Link Resolution Strategy" for complete details
+#### 3. Writer Module (`src/modules/writer.ts`)
+
+**Responsibility**: File assembly and disk writing
+
+**Reads from context**: `config`, `files`, `sourcebooks`, `processedFiles`
+
+**Writes to context**: `writtenFiles`
+
+**Key operations** (per file):
+1. Build navigation links (previous/index/next)
+2. Generate YAML front matter (title, date, tags)
+3. Assemble final markdown:
+   - Front matter
+   - Navigation header
+   - Content (with image references using unique IDs)
+4. Write file to output directory
+5. Generate index files for each sourcebook
+
+#### 4. Resolver Module (`src/modules/resolver.ts`)
+
+**Responsibility**: Link resolution (optional)
+
+**Reads from context**: `config`, `mappings`, `writtenFiles`
+
+**Modifies**: Overwrites markdown files with resolved links
+
+**Key operations**:
+1. Skip if `config.parser.html.convertInternalLinks` is false
+2. Build `LinkResolutionIndex` from all file anchors
+3. For each file:
+   - Read markdown content
+   - Find D&D Beyond links and internal anchors
+   - Resolve using URL mapping + ID mapping + anchor validation
+   - Replace links or fallback to bold text
+   - Overwrite file
+4. Track resolution stats (resolved/failed)
+
+**Link types handled**:
+- **Internal links** (same-page): `[Bell](#Bell1GP)` → `[Bell](#bell-1-gp)`
+- **D&D Beyond links** (cross-file): URL → local markdown link
+- **External links**: Preserved as-is
+- **Header links** (no anchor): Removed entirely
+
+#### 5. Stats Module (`src/modules/stats.ts`)
+
+**Responsibility**: Build processing statistics
+
+**Reads from context**: `files`, `processedFiles`, `writtenFiles`
+
+**Writes to context**: `stats`
+
+**Key operations**:
+- Count files (total, successful, failed, skipped)
+- Count images (downloaded, failed)
+- Count links (resolved, failed)
+- Count indexes created
+- Calculate duration
+
+### Converter Orchestration
+
+The `Converter` class (`src/converter.ts`) is a pure pipeline orchestrator with no business logic:
+
+```typescript
+export class Converter {
+  async run(): Promise<ProcessingStats> {
+    const ctx: ConversionContext = { config: this.config }
+
+    await scanner.scan(ctx)
+    await processor.process(ctx)
+    await writer.write(ctx)
+    await resolver.resolve(ctx)
+    await stats.build(ctx)
+
+    return ctx.stats!
+  }
+}
+```
+
+Each module receives the context, reads what it needs, performs its work, and writes results back to context.
 
 ### Technology Stack
 
@@ -480,8 +541,20 @@ When validating anchors, both forms are checked automatically.
 
 ### Type Definitions
 
-All types consolidated in `src/types.ts`:
+Types are organized in `src/types/` with logical groupings:
 
+**`src/types/config.ts`** - Configuration types
+```typescript
+export interface ConversionConfig {
+  input: InputConfig;
+  output: OutputConfig;
+  parser: ParserConfig;
+  media: MediaConfig;
+  logging: LoggingConfig;
+}
+```
+
+**`src/types/files.ts`** - File-related types
 ```typescript
 export interface FileDescriptor {
   sourcePath: string;
@@ -492,43 +565,56 @@ export interface FileDescriptor {
   uniqueId: string; // 4-character unique ID
 }
 
-export interface ImageDescriptor {
-  originalUrl: string;
-  uniqueId: string;
-  extension: string;
-  localPath: string;
-  sourcebook: string;
-  downloadStatus: "pending" | "success" | "failed";
-  error?: Error;
-}
-
-export interface NavigationLinks {
-  previous?: { title: string; id: string };
-  index: { title: string; id: string };
-  next?: { title: string; id: string };
-}
-
-export interface ConversionResult {
-  markdown: string;
-  metadata: DocumentMetadata;
-  navigation: NavigationLinks;
-  images: ImageDescriptor[];
-  warnings: string[];
-}
-
-// Phase 2: Link Resolution
-export interface AnchorIndex {
-  // Maps file unique ID to list of valid anchors in that file
-  [fileId: string]: string[];
-}
-
-export interface LinkResolutionResult {
-  resolved: boolean;
-  reason?: "url-not-mapped" | "file-not-found" | "anchor-not-found";
-  targetFileId?: string;
-  targetAnchor?: string;
+export interface FileAnchors {
+  valid: string[]; // All valid markdown anchors
+  htmlIdToAnchor: Record<string, string>; // HTML IDs → markdown anchors
 }
 ```
+
+**`src/types/pipeline.ts`** - Pipeline module data types
+```typescript
+export interface ProcessedFile {
+  descriptor: FileDescriptor;
+  html: CheerioAPI;
+  markdown: string;
+  metadata: DocumentMetadata;
+  images: ImageDescriptor[];
+  anchors: FileAnchors;
+}
+
+export interface WrittenFile {
+  descriptor: FileDescriptor;
+  path: string;
+  anchors: FileAnchors;
+}
+
+export interface LinkResolutionIndex {
+  [fileId: string]: FileAnchors;
+}
+```
+
+**`src/types/context.ts`** - Conversion context
+```typescript
+export interface ConversionContext {
+  config: ConversionConfig;
+
+  // Scanner writes:
+  files?: FileDescriptor[];
+  sourcebooks?: SourcebookInfo[];
+  mappings?: Map<string, string>;
+
+  // Processor writes:
+  processedFiles?: ProcessedFile[];
+
+  // Writer writes:
+  writtenFiles?: WrittenFile[];
+
+  // Stats writes:
+  stats?: ProcessingStats;
+}
+```
+
+All types are re-exported from `src/types/index.ts` for convenient imports.
 
 ### Configuration
 
