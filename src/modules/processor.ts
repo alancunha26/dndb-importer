@@ -14,7 +14,7 @@
 import { readFile, writeFile, mkdir } from "fs/promises";
 import { dirname, join, extname } from "node:path";
 import { load } from "cheerio";
-import { createTurndownService } from "../turndown/config";
+import { createTurndownService } from "../turndown";
 import { IdGenerator } from "../utils/id-generator";
 import type {
   ConversionContext,
@@ -107,44 +107,7 @@ async function processHtml(
     }
   });
 
-  // 6. Remove <a> tags that wrap images and set alt text
-  // First pass: Remove wrapping links
-  content.find("a:has(img)").each((_index, element) => {
-    const $link = $(element);
-    const $img = $link.find("img");
-
-    // Replace the link with just the image
-    $link.replaceWith($img);
-  });
-
-  // Second pass: Set alt text on all images
-  content.find("img").each((_index, element) => {
-    const $img = $(element);
-    const src = $img.attr("src");
-
-    if (src) {
-      // Extract original filename from URL for alt text
-      try {
-        const url = new URL(src, "https://www.dndbeyond.com");
-        const pathname = url.pathname;
-        const filename = pathname.split("/").pop() || "image";
-
-        // Set alt text to original filename (empty alt becomes filename)
-        const currentAlt = $img.attr("alt");
-        if (!currentAlt || currentAlt.trim() === "") {
-          $img.attr("alt", filename);
-        }
-      } catch (error) {
-        // If URL parsing fails, use generic alt
-        const currentAlt = $img.attr("alt");
-        if (!currentAlt || currentAlt.trim() === "") {
-          $img.attr("alt", "image");
-        }
-      }
-    }
-  });
-
-  // 7. Extract image URLs from <img> tags (after processing)
+  // 6. Extract image URLs from <img> tags
   const imageUrls: string[] = [];
   content.find("img").each((_index, element) => {
     const src = $(element).attr("src");
@@ -153,7 +116,7 @@ async function processHtml(
     }
   });
 
-  // 8. Return extracted data
+  // 7. Return extracted data
   return {
     htmlContent: content.html() || "",
     anchors: { valid, htmlIdToAnchor },
@@ -166,44 +129,45 @@ async function processHtml(
  * No Cheerio needed - just pure HTML to Markdown conversion
  *
  * @param htmlContent - Extracted HTML content as string
+ * @param imageMapping - Map of original image URLs to local paths
  * @param config - Conversion configuration
  * @returns Markdown string
  */
 async function processMarkdown(
   htmlContent: string,
+  imageMapping: Map<string, string>,
   config: ConversionConfig,
 ): Promise<string> {
   if (!htmlContent) {
     return "";
   }
 
-  // Convert HTML to Markdown using Turndown
-  const turndown = createTurndownService(config.markdown);
+  // Convert HTML to Markdown using Turndown with image URL mapping
+  const turndown = createTurndownService(config.markdown, imageMapping);
   return turndown.turndown(htmlContent);
 }
 
 /**
- * Download images from URL list and replace URLs in markdown with local paths
+ * Download images from URL list and build URL mapping
  *
- * @param markdown - Markdown content string
  * @param imageUrls - List of image URLs extracted from HTML
  * @param file - File descriptor
  * @param config - Conversion configuration
- * @returns Object with updated markdown and image descriptors
+ * @returns Object with URL mapping (original URL -> local path) and image descriptors
  */
 async function processImages(
-  markdown: string,
   imageUrls: string[],
   file: FileDescriptor,
   config: ConversionConfig,
-): Promise<{ markdown: string; images: ImageDescriptor[] }> {
+): Promise<{ mapping: Map<string, string>; images: ImageDescriptor[] }> {
+  const mapping = new Map<string, string>();
+
   if (!config.images.download || imageUrls.length === 0) {
-    return { markdown, images: [] }; // Skip if disabled or no images
+    return { mapping, images: [] }; // Skip if disabled or no images
   }
 
   const images: ImageDescriptor[] = [];
   const idGenerator = new IdGenerator();
-  let updatedMarkdown = markdown;
 
   for (const src of imageUrls) {
     // 1. Generate unique ID for this image
@@ -240,21 +204,20 @@ async function processImages(
       );
       imageDescriptor.downloadStatus = "success";
 
-      // 3. Replace URL with local path in markdown (global replace)
-      // This handles all occurrences of this image URL
-      updatedMarkdown = updatedMarkdown.replaceAll(src, localPath);
+      // 3. Add to URL mapping (original URL -> local path)
+      mapping.set(src, localPath);
     } catch (error) {
       imageDescriptor.downloadStatus = "failed";
       imageDescriptor.error = error as Error;
       console.error(`Failed to download image ${src}:`, error);
 
-      // Keep original URL if download failed
+      // Don't add to mapping if download failed - keep original URL
     }
 
     images.push(imageDescriptor);
   }
 
-  return { markdown: updatedMarkdown, images };
+  return { mapping, images };
 }
 
 /**
@@ -559,14 +522,17 @@ export async function process(ctx: ConversionContext): Promise<void> {
       ctx.config,
     );
 
-    // 2. Convert HTML to Markdown (no Cheerio needed)
-    const markdown = await processMarkdown(htmlContent, ctx.config);
-
-    // 3. Download images and replace URLs with local paths
-    const { markdown: finalMarkdown } = await processImages(
-      markdown,
+    // 2. Download images and build URL mapping (original URL -> local path)
+    const { mapping: imageMapping } = await processImages(
       imageUrls,
       file,
+      ctx.config,
+    );
+
+    // 3. Convert HTML to Markdown using Turndown with image URL mapping
+    const markdown = await processMarkdown(
+      htmlContent,
+      imageMapping,
       ctx.config,
     );
 
@@ -581,7 +547,7 @@ export async function process(ctx: ConversionContext): Promise<void> {
       file,
       frontmatter,
       navigation,
-      finalMarkdown,
+      markdown,
       anchors,
       ctx,
     );

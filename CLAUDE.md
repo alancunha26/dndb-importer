@@ -39,18 +39,19 @@ npm run format
 The converter uses a **pipeline architecture** where a shared `ConversionContext` object flows through sequential modules. Each module reads what it needs, performs its work, and writes results back to the context.
 
 **Conversion Pipeline** (`src/cli/commands/convert.ts`):
+
 ```typescript
 // Initialize context
-const ctx: ConversionContext = { config }
+const ctx: ConversionContext = { config };
 
 // Run pipeline
-await modules.scan(ctx)       // 1. File discovery
-await modules.process(ctx)    // 2. Process + write (memory-efficient)
-await modules.resolve(ctx)    // 3. Resolve links (optional)
-await modules.stats(ctx)      // 4. Build statistics
+await modules.scan(ctx); // 1. File discovery
+await modules.process(ctx); // 2. Process + write (memory-efficient)
+await modules.resolve(ctx); // 3. Resolve links (optional)
+await modules.stats(ctx); // 4. Build statistics
 
 // Display results
-console.log(`Files processed: ${ctx.stats.successful}/${ctx.stats.totalFiles}`)
+console.log(`Files processed: ${ctx.stats.successful}/${ctx.stats.totalFiles}`);
 ```
 
 **Pipeline Modules** (`src/modules/`):
@@ -98,11 +99,13 @@ console.log(`Files processed: ${ctx.stats.successful}/${ctx.stats.totalFiles}`)
 ### Key Design Decisions
 
 **Unique ID System:**
+
 - All files and images get 4-character lowercase alphanumeric IDs (e.g., `a3f9.md`, `m3x7.png`)
 - Generated using `short-unique-id` library with collision detection
 - Prevents filename conflicts and special character issues
 
 **Configuration System:**
+
 - Uses `env-paths` library for OS-specific config paths
 - Linux: Follows XDG Base Directory specification (`$XDG_CONFIG_HOME`)
 - Configs are deep-merged: default.json → user config → CLI --config flag
@@ -121,11 +124,13 @@ console.log(`Files processed: ${ctx.stats.successful}/${ctx.stats.totalFiles}`)
 - Fallback: `links.fallbackToBold` converts unresolvable links to bold text (default: true)
 
 **File Organization:**
+
 - Input: User manually downloads HTML files, names with numeric prefixes (01-, 02-, etc.)
 - Output: One directory per sourcebook, all files (markdown + images) in same directory
 - Navigation: Each file has prev/index/next links, index file per sourcebook
 
 **Cross-References (Resolver Module):**
+
 - **Link resolution is optional** (`links.resolveInternal`):
   - If `true`: Resolver module resolves links with full validation (default)
   - If `false`: Resolver module skipped
@@ -169,6 +174,7 @@ console.log(`Files processed: ${ctx.stats.successful}/${ctx.stats.totalFiles}`)
 ### Type System
 
 Types are organized in `src/types/` by domain:
+
 - **`types/config.ts`** - Configuration types (`ConversionConfig`, `HtmlParserConfig`, etc.)
 - **`types/files.ts`** - File-related types (`FileDescriptor`, `ImageDescriptor`, `FileAnchors`, etc.)
 - **`types/pipeline.ts`** - Pipeline data types (`ScanResult`, `ProcessedFile`, `WrittenFile`, `LinkResolutionIndex`, etc.)
@@ -176,6 +182,7 @@ Types are organized in `src/types/` by domain:
 - **`types/index.ts`** - Re-exports all types
 
 Key types:
+
 - `ConversionContext` - Context object that flows through pipeline modules (flattened structure):
   - `config`: Configuration
   - `files`: FileDescriptor[] (from scanner)
@@ -210,7 +217,7 @@ src/
 │   └── index.ts
 ├── turndown/
 │   ├── rules/index.ts
-│   └── config.ts
+│   └── index.ts
 ├── utils/
 │   ├── config.ts
 │   ├── id-generator.ts
@@ -226,6 +233,7 @@ src/
 ```
 
 **Key principles:**
+
 - **Modules**: Simple functions with context-based signature `async fn(ctx: ConversionContext): Promise<void>`
 - **Pipeline**: Orchestrated directly in convert command (no separate orchestrator class)
 - **Context**: Shared object flows through all modules
@@ -234,6 +242,7 @@ src/
 ### Build System
 
 **esbuild configuration** (`build.js`):
+
 - Entry point: `src/cli/index.ts`
 - Bundles to `dist/cli.js` with ESM format
 - `packages: "external"` - doesn't bundle node_modules
@@ -241,6 +250,7 @@ src/
 - Builds utils separately for potential library usage
 
 **Module System:**
+
 - Uses ES modules (`"type": "module"` in package.json)
 - TypeScript with `moduleResolution: "bundler"`
 - Import paths without `.js` extensions (esbuild handles resolution)
@@ -248,7 +258,9 @@ src/
 ## Important Conventions
 
 ### Import Paths
+
 Do NOT include `.js` extensions in imports - esbuild handles module resolution:
+
 ```typescript
 // Correct
 import { loadConfig } from "./utils/config";
@@ -258,7 +270,9 @@ import { loadConfig } from "./utils/config.js";
 ```
 
 ### Unused Parameters
+
 Prefix with underscore for parameters that will be used later:
+
 ```typescript
 // Stub method that will be implemented
 async function process(htmlPath: string): Promise<string> {
@@ -269,12 +283,15 @@ async function process(htmlPath: string): Promise<string> {
 ```
 
 ### Configuration Loading
+
 The config loader (`src/utils/config.ts`) uses:
+
 - `fileURLToPath(import.meta.url)` to get `__dirname` in ESM
 - `env-paths` for cross-platform directory paths
 - Deep merge strategy preserving nested defaults
 
 ### ID Generation
+
 `src/utils/id-generator.ts` maintains a Set of used IDs to prevent collisions within a conversion run. Reset between runs.
 
 ## Example Files
@@ -284,6 +301,7 @@ The repository includes real D&D Beyond HTML files for testing and development p
 **Location:** `examples/input/players-handbook/`
 
 **Contents:** 14 HTML files from the Player's Handbook 2024, covering:
+
 - Introduction and core rules (chapters 1-2)
 - Character classes (chapters 3-5, split across multiple files)
 - Equipment, spells, and spell descriptions (chapters 6-7)
@@ -293,12 +311,14 @@ The repository includes real D&D Beyond HTML files for testing and development p
 **File sizes:** Range from 118KB to 1.1MB (spell descriptions being the largest)
 
 **Naming convention:** Files follow the expected input format with numeric prefixes:
+
 - `01-introduction-welcome-to-adventure.html`
 - `08-chapter-6-equipment.html`
 - `10-chapter-7-spell-descriptions.html`
 - etc.
 
 **Usage:**
+
 - Use these files to test the converter during development
 - Example command: `npm run dndb-convert -- examples/input examples/output`
 - These files contain real D&D Beyond HTML structure including:
@@ -313,6 +333,7 @@ The repository includes real D&D Beyond HTML files for testing and development p
 ## Testing Strategy
 
 (From RFC - not yet implemented)
+
 - Unit tests for custom Turndown rules
 - Integration tests for full pipeline
 - Test fixtures in `tests/fixtures/` for sample HTML
@@ -321,6 +342,7 @@ The repository includes real D&D Beyond HTML files for testing and development p
 ## Phase 1 MVP Scope
 
 Sequential file processing (no parallelization):
+
 - Basic HTML to Markdown with custom rules
 - CLI with Commander.js + Chalk styling
 - Unique ID generation for files and images
