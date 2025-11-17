@@ -30,6 +30,7 @@ export interface ProcessedFile {
 export interface WrittenFile {
   descriptor: FileDescriptor;
   path: string;
+  title: string; // Extracted from first H1 in document
   anchors: FileAnchors;
 }
 

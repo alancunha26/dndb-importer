@@ -54,6 +54,7 @@ async function processHtml(
   config: ConversionConfig,
 ): Promise<{
   htmlContent: string;
+  title: string;
   anchors: FileAnchors;
   imageUrls: string[];
 }> {
@@ -72,6 +73,7 @@ async function processHtml(
     );
     return {
       htmlContent: "",
+      title: "",
       anchors: { valid: [], htmlIdToAnchor: {} },
       imageUrls: [],
     };
@@ -84,7 +86,8 @@ async function processHtml(
     });
   }
 
-  // 5. Extract anchors from headings
+  // 5. Extract title from first H1 and anchors from all headings
+  let title = "";
   const valid: string[] = [];
   const htmlIdToAnchor: Record<string, string> = {};
 
@@ -92,6 +95,11 @@ async function processHtml(
     const $heading = $(element);
     const text = $heading.text().trim();
     const htmlId = $heading.attr("id");
+
+    // Extract title from first H1
+    if (!title && $heading.is("h1")) {
+      title = text;
+    }
 
     // Generate GitHub-style anchor from heading text
     const anchor = text
@@ -131,6 +139,7 @@ async function processHtml(
   // 7. Return extracted data
   return {
     htmlContent: content.html() || "",
+    title,
     anchors: { valid, htmlIdToAnchor },
     imageUrls,
   };
@@ -392,6 +401,7 @@ function processNavigation(
  */
 async function processDocument(
   file: FileDescriptor,
+  title: string,
   markdown: string,
   anchors: FileAnchors,
   sourcebook: SourcebookInfo,
@@ -403,10 +413,7 @@ async function processDocument(
     ctx.globalTemplates?.file ?? null,
   );
 
-  // 2. Extract title from filename
-  const title = filenameToTitle(file.filename);
-
-  // 3. Build template context
+  // 2. Build template context
   const context: FileTemplateContext = {
     title,
     date: new Date().toISOString().split("T")[0],
@@ -434,6 +441,7 @@ async function processDocument(
   return {
     descriptor: file,
     path: file.outputPath,
+    title,
     anchors,
   };
 }
@@ -519,11 +527,18 @@ async function processCoverImage(
  */
 async function processIndexes(
   ctx: ConversionContext,
+  writtenFiles: WrittenFile[],
   imageMapping: ImageMapping,
   idGenerator: IdGenerator,
 ): Promise<void> {
   if (!ctx.sourcebooks || !ctx.config.output.createIndex) {
     return; // Skip if no sourcebooks or index creation disabled
+  }
+
+  // Build map of file uniqueId -> title from writtenFiles
+  const titleMap = new Map<string, string>();
+  for (const writtenFile of writtenFiles) {
+    titleMap.set(writtenFile.descriptor.uniqueId, writtenFile.title);
   }
 
   for (const sourcebook of ctx.sourcebooks) {
@@ -550,7 +565,7 @@ async function processIndexes(
       coverImage: processedCoverImage, // Use processed filename with unique ID
       metadata: sourcebook.metadata,
       files: sourcebook.files.map((file) => ({
-        title: filenameToTitle(file.filename),
+        title: titleMap.get(file.uniqueId) || "",
         filename: `${file.uniqueId}${ctx.config.output.extension}`,
         uniqueId: file.uniqueId,
       })),
@@ -622,8 +637,8 @@ export async function process(ctx: ConversionContext): Promise<void> {
       continue;
     }
 
-    // 2. Parse HTML and extract content, anchors, and image URLs (ONLY place Cheerio is used)
-    const { htmlContent, anchors, imageUrls } = await processHtml(
+    // 2. Parse HTML and extract content, title, anchors, and image URLs (ONLY place Cheerio is used)
+    const { htmlContent, title, anchors, imageUrls } = await processHtml(
       file,
       ctx.config,
     );
@@ -645,6 +660,7 @@ export async function process(ctx: ConversionContext): Promise<void> {
     // 5. Assemble and write document using template
     const writtenFile = await processDocument(
       file,
+      title,
       markdown,
       anchors,
       sourcebook,
@@ -657,7 +673,7 @@ export async function process(ctx: ConversionContext): Promise<void> {
   }
 
   // 7. Generate index files (may add cover images to imageMapping)
-  await processIndexes(ctx, imageMapping, idGenerator);
+  await processIndexes(ctx, writtenFiles, imageMapping, idGenerator);
 
   // 8. Save updated image mapping to images.json (includes cover images)
   await saveMapping(ctx.config.output.directory, "images.json", imageMapping);
