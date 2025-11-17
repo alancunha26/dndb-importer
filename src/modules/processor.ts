@@ -397,18 +397,18 @@ async function processDocument(
   navigation: string,
   markdown: string,
   anchors: FileAnchors,
-  ctx: ConversionContext,
+  config: ConversionConfig,
 ): Promise<WrittenFile> {
   // 1. Assemble final markdown document
   const parts: string[] = [];
 
   // Add frontmatter if enabled
-  if (ctx.config.markdown.frontmatter) {
+  if (config.markdown.frontmatter) {
     parts.push(frontmatter);
   }
 
   // Add navigation if enabled
-  if (ctx.config.markdown.navigation) {
+  if (config.markdown.navigation) {
     parts.push(navigation);
   }
 
@@ -549,7 +549,7 @@ export async function process(ctx: ConversionContext): Promise<void> {
       navigation,
       markdown,
       anchors,
-      ctx,
+      ctx.config,
     );
 
     writtenFiles.push(writtenFile);
