@@ -88,7 +88,7 @@ console.log(`Files processed: ${ctx.stats.successful}/${ctx.stats.totalFiles}`)
      - Falls back to bold text for unresolved links
      - Overwrites file with resolved links
    - Memory-efficient: Only one file's content in memory at a time
-   - Skipped if `convertInternalLinks: false`
+   - Skipped if `links.resolveInternal: false`
 
 4. **Stats** (`stats.ts`)
    - Counts files, images, links
@@ -107,10 +107,18 @@ console.log(`Files processed: ${ctx.stats.successful}/${ctx.stats.totalFiles}`)
 - Linux: Follows XDG Base Directory specification (`$XDG_CONFIG_HOME`)
 - Configs are deep-merged: default.json → user config → CLI --config flag
 - Location: `src/config/default.json` (copied to `dist/config/` during build)
-- Structure: `input`, `output`, `parser` (html/markdown/idGenerator), `media`, `logging`
+- Structure: User-centric organization with 8 top-level sections:
+  - `input` - Source HTML files location and pattern
+  - `output` - Output directory and file settings
+  - `ids` - Unique ID generation (used for files and images)
+  - `markdown` - Markdown formatting preferences
+  - `html` - HTML parsing settings (content selector, etc.)
+  - `images` - Image download settings
+  - `links` - Link resolution configuration
+  - `logging` - Logging level and progress display
 - HTML Parser: Uses `.p-article-content` selector to extract main content from D&D Beyond HTML
-- URL Mapping: `parser.html.urlMapping` maps D&D Beyond URLs to HTML file paths (relative to input directory)
-- Fallback: `parser.html.fallbackToBold` converts unresolvable links to bold text (default: true)
+- URL Mapping: `links.urlMapping` maps D&D Beyond URLs to HTML file paths (relative to input directory)
+- Fallback: `links.fallbackToBold` converts unresolvable links to bold text (default: true)
 
 **File Organization:**
 - Input: User manually downloads HTML files, names with numeric prefixes (01-, 02-, etc.)
@@ -118,10 +126,10 @@ console.log(`Files processed: ${ctx.stats.successful}/${ctx.stats.totalFiles}`)
 - Navigation: Each file has prev/index/next links, index file per sourcebook
 
 **Cross-References (Resolver Module):**
-- **Link resolution is optional** (`parser.html.convertInternalLinks`):
+- **Link resolution is optional** (`links.resolveInternal`):
   - If `true`: Resolver module resolves links with full validation (default)
   - If `false`: Resolver module skipped
-- User configures URL mapping in `parser.html.urlMapping`:
+- User configures URL mapping in `links.urlMapping`:
   - Source paths: `/sources/dnd/phb-2024/equipment` → `players-handbook/08-chapter-6-equipment.html`
   - Entity paths: `/spells` → `players-handbook/10-spell-descriptions.html`
 - Supports both source book links and entity links (e.g., `https://www.dndbeyond.com/spells/2619022-magic-missile`)
@@ -143,7 +151,7 @@ console.log(`Files processed: ${ctx.stats.successful}/${ctx.stats.totalFiles}`)
     - Example: `<h2 id="Bell1GP">Bell (1 GP)</h2>` → stores `{ "Bell1GP": "bell-1-gp" }`
   - Resolver uses `index[fileId].htmlIdToAnchor` to resolve links
     - Example: `[Bell](#Bell1GP)` → looks up `"Bell1GP"` → `[Bell](#bell-1-gp)`
-  - Always resolved, regardless of `convertInternalLinks` setting
+  - Always resolved, regardless of `resolveInternal` setting
 - Example 1: `[Bell](#Bell1GP)` → `[Bell](#bell-1-gp)` (internal link via HTML ID index)
 - Example 2: `[Fireball](/sources/dnd/phb-2024/spells#fireball)` → `[Fireball](a3f9.md#fireball)` (cross-file)
 - Example 3: `[Magic Missile](https://www.dndbeyond.com/spells/2619022-magic-missile)` → `[Magic Missile](b4x8.md#magic-missile)` (entity)
@@ -151,7 +159,7 @@ console.log(`Files processed: ${ctx.stats.successful}/${ctx.stats.totalFiles}`)
 - Example 5: `[Alchemist's Fire](/.../equipment#alchemists-fire)` → matches "Alchemist's Fire (50 GP)" (prefix matching)
 - Example 6: `[Equipment](/.../equipment)` → removed entirely (no anchor)
 - Anchors generated from link text using GitHub markdown format (lowercase, hyphens)
-- **Fallback**: When `convertInternalLinks: true` and `fallbackToBold: true`, converts to bold text (`**Fireball**`) if:
+- **Fallback**: When `links.resolveInternal: true` and `links.fallbackToBold: true`, converts to bold text (`**Fireball**`) if:
   - URL not in mapping
   - File not found
   - Anchor doesn't exist in target file (after checking exact, plural/singular, and prefix matches)
@@ -268,6 +276,39 @@ The config loader (`src/utils/config.ts`) uses:
 
 ### ID Generation
 `src/utils/id-generator.ts` maintains a Set of used IDs to prevent collisions within a conversion run. Reset between runs.
+
+## Example Files
+
+The repository includes real D&D Beyond HTML files for testing and development purposes:
+
+**Location:** `examples/input/players-handbook/`
+
+**Contents:** 14 HTML files from the Player's Handbook 2024, covering:
+- Introduction and core rules (chapters 1-2)
+- Character classes (chapters 3-5, split across multiple files)
+- Equipment, spells, and spell descriptions (chapters 6-7)
+- Appendices (multiverse, creature stat blocks)
+- Rules glossary and credits
+
+**File sizes:** Range from 118KB to 1.1MB (spell descriptions being the largest)
+
+**Naming convention:** Files follow the expected input format with numeric prefixes:
+- `01-introduction-welcome-to-adventure.html`
+- `08-chapter-6-equipment.html`
+- `10-chapter-7-spell-descriptions.html`
+- etc.
+
+**Usage:**
+- Use these files to test the converter during development
+- Example command: `npm run dndb-convert -- examples/input examples/output`
+- These files contain real D&D Beyond HTML structure including:
+  - Stat blocks (in creature appendix)
+  - Spell descriptions with structured formatting
+  - Equipment tables
+  - Internal D&D Beyond links (for testing link resolution)
+  - Images hosted on D&D Beyond CDN
+
+**Note:** These are downloaded HTML files saved from D&D Beyond's web interface. They include the full page structure with scripts, styles, and navigation that the converter needs to parse.
 
 ## Testing Strategy
 

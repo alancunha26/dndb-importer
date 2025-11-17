@@ -100,13 +100,28 @@ Create a `config.json` in your OS-specific directory to customize settings. See 
 
 The configuration system follows the XDG Base Directory specification on Linux and platform conventions on other operating systems.
 
+### Configuration Structure
+
+The config file uses a user-centric structure with 8 top-level sections:
+
+- **`input`** - Source HTML files location and pattern
+- **`output`** - Output directory and file settings
+- **`ids`** - Unique ID generation (used for files and images)
+- **`markdown`** - Markdown formatting preferences
+- **`html`** - HTML parsing settings (content selector, etc.)
+- **`images`** - Image download settings
+- **`links`** - Link resolution configuration
+- **`logging`** - Logging level and progress display
+
 ### Key Configuration Options
 
-- **`parser.html.urlMapping`**: Maps D&D Beyond URLs to local HTML files for cross-reference resolution
-- **`parser.html.convertInternalLinks`**: Enable/disable link resolution (default: true)
-- **`parser.html.fallbackToBold`**: Convert unresolvable links to bold text (default: true)
-- **`media.downloadImages`**: Enable/disable image downloading
-- **`media.retryAttempts`**: Number of retry attempts for failed downloads (default: 3)
+- **`links.urlMapping`**: Maps D&D Beyond URLs to local HTML files for cross-reference resolution
+- **`links.resolveInternal`**: Enable/disable link resolution (default: true)
+- **`links.fallbackToBold`**: Convert unresolvable links to bold text (default: true)
+- **`images.download`**: Enable/disable image downloading
+- **`images.retries`**: Number of retry attempts for failed downloads (default: 3)
+- **`ids.length`**: Length of unique IDs (default: 4)
+- **`html.contentSelector`**: CSS selector for main content extraction (default: `.p-article-content`)
 
 See `src/config/default.json` for all available options.
 

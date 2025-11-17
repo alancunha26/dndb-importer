@@ -7,11 +7,11 @@ export type {
   ConversionConfig,
   InputConfig,
   OutputConfig,
-  ParserConfig,
-  HtmlParserConfig,
-  MarkdownParserConfig,
-  IdGeneratorConfig,
-  MediaConfig,
+  IdConfig,
+  MarkdownConfig,
+  HtmlConfig,
+  ImagesConfig,
+  LinksConfig,
   LoggingConfig,
 } from "./config";
 

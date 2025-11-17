@@ -14,7 +14,7 @@ import type { ConversionContext } from "../types";
  * Reads from context:
  * - writtenFiles: Contains paths and anchors for all files
  * - mappings: URL → file ID mapping from scanner
- * - config.parser.html: urlMapping, convertInternalLinks, fallbackToBold
+ * - config.links: urlMapping, resolveInternal, fallbackToBold
  *
  * Process:
  * 1. Build LinkResolutionIndex from writtenFiles (has all anchors)
@@ -32,7 +32,7 @@ export async function resolve(ctx: ConversionContext): Promise<void> {
   }
 
   // Skip if link resolution is disabled
-  if (!ctx.config.parser.html.convertInternalLinks) {
+  if (!ctx.config.links.resolveInternal) {
     console.log("Link resolution disabled, skipping...");
     return;
   }
@@ -54,7 +54,7 @@ export async function resolve(ctx: ConversionContext): Promise<void> {
   //      b. Find all links (D&D Beyond URLs and internal anchors)
   //
   //      c. Resolve using:
-  //         - URL mapping (config.parser.html.urlMapping)
+  //         - URL mapping (config.links.urlMapping)
   //         - ID mapping (ctx.mappings)
   //         - Anchor validation (index built above)
   //

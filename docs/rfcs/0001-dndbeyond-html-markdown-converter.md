@@ -295,7 +295,7 @@ The converter is organized into pipeline modules located in `src/modules/`:
 **Modifies**: Overwrites markdown files with resolved links
 
 **Key operations**:
-1. Skip if `config.parser.html.convertInternalLinks` is false
+1. Skip if `config.links.resolveInternal` is false
 2. Build `LinkResolutionIndex` from all `writtenFiles` anchors
 3. For each file (one at a time):
    - **Read markdown from disk**
@@ -382,7 +382,7 @@ This section provides comprehensive details on how D&D Beyond links are converte
 
 **Overview:**
 
-Link resolution is **optional** and controlled by `parser.html.convertInternalLinks`:
+Link resolution is **optional** and controlled by `links.resolveInternal`:
 - **If true**: Run Phase 2 to resolve links (default behavior)
 - **If false**: Skip Phase 2, convert all D&D Beyond links to bold text
 
@@ -391,11 +391,11 @@ Link resolution is **optional** and controlled by `parser.html.convertInternalLi
 - All files written with their unique IDs
 - Runtime mapping built: HTML path → unique ID
 
-**Phase 2: Link Resolution** (only if `convertInternalLinks: true`)
+**Phase 2: Link Resolution** (only if `links.resolveInternal: true`)
 
 **Step 1: User Configuration**
 
-Users configure URL-to-HTML-path mapping in `parser.html.urlMapping`:
+Users configure URL-to-HTML-path mapping in `links.urlMapping`:
 ```json
 {
   "/sources/dnd/phb-2024/equipment": "players-handbook/08-chapter-6-equipment.html",
@@ -632,17 +632,20 @@ The tool uses a three-tier configuration priority:
 
 **Configuration Sections:**
 
-- **Input/Output**: Directory paths, file patterns, file extensions
-- **Parser**:
-  - `html`: Content selector, URL mapping, link conversion settings
-  - `markdown`: Turndown options, front matter, navigation headers
-  - `idGenerator`: Unique ID length and character set
-- **Media**: Image download settings, formats, timeout, retries
-- **Logging**: Log level, progress display
+User-centric configuration structure with 8 top-level sections:
+
+- **`input`**: Source HTML files location and pattern
+- **`output`**: Output directory and file settings
+- **`ids`**: Unique ID generation (used for files and images)
+- **`markdown`**: Markdown formatting preferences (Turndown options, front matter, navigation)
+- **`html`**: HTML parsing settings (content selector, etc.)
+- **`images`**: Image download settings (formats, timeout, retries)
+- **`links`**: Link resolution configuration (URL mapping, fallback behavior)
+- **`logging`**: Log level and progress display
 
 Configs are deep-merged (default → user → custom), allowing partial overrides while preserving defaults.
 
-See "Link Resolution Strategy" section for details on `parser.html.urlMapping`.
+See "Link Resolution Strategy" section for details on `links.urlMapping`.
 
 ### Error Handling
 
