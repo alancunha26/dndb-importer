@@ -11,7 +11,525 @@
  * - HTML/markdown garbage collected before next file
  */
 
-import type { ConversionContext } from "../types";
+import { readFile, writeFile, mkdir } from "fs/promises";
+import { dirname, join, extname } from "node:path";
+import { load } from "cheerio";
+import { createTurndownService } from "../turndown/config";
+import { IdGenerator } from "../utils/id-generator";
+import type {
+  ConversionContext,
+  ConversionConfig,
+  FileDescriptor,
+  FileAnchors,
+  ImageDescriptor,
+  WrittenFile,
+} from "../types";
+
+// ============================================================================
+// Sub-process Functions
+// ============================================================================
+
+/**
+ * Parse HTML file and extract content, anchors, and images using Cheerio
+ * This is the ONLY place Cheerio is used - all extraction happens here
+ *
+ * @param file - File descriptor with source path
+ * @param config - Conversion configuration
+ * @returns Extracted HTML content, anchors, and image URLs
+ */
+async function processHtml(
+  file: FileDescriptor,
+  config: ConversionConfig,
+): Promise<{
+  htmlContent: string;
+  anchors: FileAnchors;
+  imageUrls: string[];
+}> {
+  // 1. Read HTML file from disk
+  const html = await readFile(file.sourcePath, config.input.encoding);
+
+  // 2. Parse with Cheerio (ONLY place we use Cheerio)
+  const $ = load(html);
+
+  // 3. Extract main content using configured selector
+  const content = $(config.html.contentSelector);
+
+  if (content.length === 0) {
+    console.warn(
+      `Warning: No content found with selector "${config.html.contentSelector}" in ${file.relativePath}`,
+    );
+    return {
+      htmlContent: "",
+      anchors: { valid: [], htmlIdToAnchor: {} },
+      imageUrls: [],
+    };
+  }
+
+  // 4. Remove unwanted elements if configured
+  if (config.html.removeSelectors.length > 0) {
+    config.html.removeSelectors.forEach((selector) => {
+      content.find(selector).remove();
+    });
+  }
+
+  // 5. Extract anchors from headings
+  const valid: string[] = [];
+  const htmlIdToAnchor: Record<string, string> = {};
+
+  content.find("h1, h2, h3, h4, h5, h6").each((_index, element) => {
+    const $heading = $(element);
+    const text = $heading.text().trim();
+    const htmlId = $heading.attr("id");
+
+    // Generate GitHub-style anchor from heading text
+    const anchor = text
+      .toLowerCase()
+      .replace(/[^\w\s-]/g, "") // Remove special chars except spaces and hyphens
+      .replace(/\s+/g, "-") // Replace spaces with hyphens
+      .replace(/-+/g, "-") // Replace multiple hyphens with single
+      .replace(/^-|-$/g, ""); // Remove leading/trailing hyphens
+
+    if (anchor) {
+      // Add base anchor
+      valid.push(anchor);
+
+      // Add plural/singular variants
+      if (anchor.endsWith("s")) {
+        valid.push(anchor.slice(0, -1)); // singular
+      } else {
+        valid.push(anchor + "s"); // plural
+      }
+
+      // Map HTML ID to markdown anchor
+      if (htmlId) {
+        htmlIdToAnchor[htmlId] = anchor;
+      }
+    }
+  });
+
+  // 6. Remove <a> tags that wrap images and set alt text
+  // First pass: Remove wrapping links
+  content.find("a:has(img)").each((_index, element) => {
+    const $link = $(element);
+    const $img = $link.find("img");
+
+    // Replace the link with just the image
+    $link.replaceWith($img);
+  });
+
+  // Second pass: Set alt text on all images
+  content.find("img").each((_index, element) => {
+    const $img = $(element);
+    const src = $img.attr("src");
+
+    if (src) {
+      // Extract original filename from URL for alt text
+      try {
+        const url = new URL(src, "https://www.dndbeyond.com");
+        const pathname = url.pathname;
+        const filename = pathname.split("/").pop() || "image";
+
+        // Set alt text to original filename (empty alt becomes filename)
+        const currentAlt = $img.attr("alt");
+        if (!currentAlt || currentAlt.trim() === "") {
+          $img.attr("alt", filename);
+        }
+      } catch (error) {
+        // If URL parsing fails, use generic alt
+        const currentAlt = $img.attr("alt");
+        if (!currentAlt || currentAlt.trim() === "") {
+          $img.attr("alt", "image");
+        }
+      }
+    }
+  });
+
+  // 7. Extract image URLs from <img> tags (after processing)
+  const imageUrls: string[] = [];
+  content.find("img").each((_index, element) => {
+    const src = $(element).attr("src");
+    if (src) {
+      imageUrls.push(src);
+    }
+  });
+
+  // 8. Return extracted data
+  return {
+    htmlContent: content.html() || "",
+    anchors: { valid, htmlIdToAnchor },
+    imageUrls,
+  };
+}
+
+/**
+ * Convert HTML to Markdown using Turndown
+ * No Cheerio needed - just pure HTML to Markdown conversion
+ *
+ * @param htmlContent - Extracted HTML content as string
+ * @param config - Conversion configuration
+ * @returns Markdown string
+ */
+async function processMarkdown(
+  htmlContent: string,
+  config: ConversionConfig,
+): Promise<string> {
+  if (!htmlContent) {
+    return "";
+  }
+
+  // Convert HTML to Markdown using Turndown
+  const turndown = createTurndownService(config.markdown);
+  return turndown.turndown(htmlContent);
+}
+
+/**
+ * Download images from URL list and replace URLs in markdown with local paths
+ *
+ * @param markdown - Markdown content string
+ * @param imageUrls - List of image URLs extracted from HTML
+ * @param file - File descriptor
+ * @param config - Conversion configuration
+ * @returns Object with updated markdown and image descriptors
+ */
+async function processImages(
+  markdown: string,
+  imageUrls: string[],
+  file: FileDescriptor,
+  config: ConversionConfig,
+): Promise<{ markdown: string; images: ImageDescriptor[] }> {
+  if (!config.images.download || imageUrls.length === 0) {
+    return { markdown, images: [] }; // Skip if disabled or no images
+  }
+
+  const images: ImageDescriptor[] = [];
+  const idGenerator = new IdGenerator();
+  let updatedMarkdown = markdown;
+
+  for (const src of imageUrls) {
+    // 1. Generate unique ID for this image
+    const uniqueId = idGenerator.generate();
+    const extension =
+      extname(new URL(src, "https://www.dndbeyond.com").pathname) || ".png";
+
+    // Check if format is supported
+    const format = extension.slice(1); // Remove the dot
+    if (!config.images.formats.includes(format)) {
+      console.warn(`Skipping unsupported image format: ${format} (${src})`);
+      continue;
+    }
+
+    const localPath = `${uniqueId}${extension}`;
+    const outputPath = join(dirname(file.outputPath), localPath);
+
+    const imageDescriptor: ImageDescriptor = {
+      originalUrl: src,
+      uniqueId,
+      extension,
+      localPath,
+      sourcebook: file.sourcebook,
+      downloadStatus: "pending",
+    };
+
+    // 2. Download image with retry logic
+    try {
+      await downloadImageWithRetry(
+        src,
+        outputPath,
+        config.images.retries,
+        config.images.timeout,
+      );
+      imageDescriptor.downloadStatus = "success";
+
+      // 3. Replace URL with local path in markdown (global replace)
+      // This handles all occurrences of this image URL
+      updatedMarkdown = updatedMarkdown.replaceAll(src, localPath);
+    } catch (error) {
+      imageDescriptor.downloadStatus = "failed";
+      imageDescriptor.error = error as Error;
+      console.error(`Failed to download image ${src}:`, error);
+
+      // Keep original URL if download failed
+    }
+
+    images.push(imageDescriptor);
+  }
+
+  return { markdown: updatedMarkdown, images };
+}
+
+/**
+ * Download image with retry logic
+ */
+async function downloadImageWithRetry(
+  url: string,
+  outputPath: string,
+  retries: number,
+  timeout: number,
+): Promise<void> {
+  let lastError: Error | null = null;
+
+  for (let attempt = 0; attempt <= retries; attempt++) {
+    try {
+      // Download image
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), timeout);
+
+      const response = await fetch(url, { signal: controller.signal });
+      clearTimeout(timeoutId);
+
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+      }
+
+      const buffer = Buffer.from(await response.arrayBuffer());
+
+      // Ensure output directory exists
+      await mkdir(dirname(outputPath), { recursive: true });
+
+      // Write file
+      await writeFile(outputPath, buffer);
+
+      return; // Success!
+    } catch (error) {
+      lastError = error as Error;
+
+      if (attempt < retries) {
+        // Exponential backoff: wait 1s, 2s, 4s, etc.
+        const delay = Math.pow(2, attempt) * 1000;
+        await new Promise((resolve) => setTimeout(resolve, delay));
+      }
+    }
+  }
+
+  throw lastError || new Error("Download failed");
+}
+
+/**
+ * Build YAML frontmatter for markdown file
+ *
+ * @param file - File descriptor
+ * @param ctx - Conversion context
+ * @returns YAML frontmatter as string (includes --- delimiters)
+ */
+function processFrontmatter(
+  file: FileDescriptor,
+  ctx: ConversionContext,
+): string {
+  // 1. Extract title from filename (remove numeric prefix and convert to title case)
+  const title = file.filename
+    .replace(/^\d+-/, "") // Remove numeric prefix
+    .split("-")
+    .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+    .join(" ");
+
+  // 2. Generate current date in ISO format
+  const date = new Date().toISOString().split("T")[0]; // YYYY-MM-DD
+
+  // 3. Find sourcebook for this file
+  const sourcebook = ctx.sourcebooks?.find(
+    (sb) => sb.sourcebook === file.sourcebook,
+  );
+
+  // 4. Generate tags
+  const tags = [
+    "dnd5e/source",
+    `dnd5e/${file.sourcebook}`,
+    sourcebook
+      ? `dnd5e/${sourcebook.title.toLowerCase().replace(/\s+/g, "-")}`
+      : null,
+  ].filter(Boolean); // Remove null values
+
+  // 5. Build YAML frontmatter
+  const frontmatter = [
+    "---",
+    `title: "${title}"`,
+    `date: ${date}`,
+    `tags:`,
+    ...tags.map((tag) => `  - ${tag}`),
+    "---",
+    "",
+  ].join("\n");
+
+  return frontmatter;
+}
+
+/**
+ * Build navigation links (prev/index/next)
+ *
+ * @param file - Current file descriptor
+ * @param ctx - Conversion context (has sourcebooks with file ordering)
+ * @returns Navigation markdown string
+ */
+function processNavigation(
+  file: FileDescriptor,
+  ctx: ConversionContext,
+): string {
+  // 1. Find the sourcebook for this file
+  const sourcebook = ctx.sourcebooks?.find(
+    (sb) => sb.sourcebook === file.sourcebook,
+  );
+
+  if (!sourcebook) {
+    return ""; // No navigation if sourcebook not found
+  }
+
+  // 2. Find current file's index in the sourcebook
+  const currentIndex = sourcebook.files.findIndex(
+    (f) => f.uniqueId === file.uniqueId,
+  );
+
+  if (currentIndex === -1) {
+    return ""; // File not found in sourcebook
+  }
+
+  // 3. Get previous, index, and next files
+  const prevFile = currentIndex > 0 ? sourcebook.files[currentIndex - 1] : null;
+  const nextFile =
+    currentIndex < sourcebook.files.length - 1
+      ? sourcebook.files[currentIndex + 1]
+      : null;
+
+  // 4. Build navigation links
+  const links: string[] = [];
+
+  if (prevFile) {
+    const prevTitle = prevFile.filename
+      .replace(/^\d+-/, "")
+      .split("-")
+      .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
+      .join(" ");
+    links.push(`← [${prevTitle}](${prevFile.uniqueId}.md)`);
+  }
+
+  // Index link
+  links.push(`[Index](${sourcebook.id}.md)`);
+
+  if (nextFile) {
+    const nextTitle = nextFile.filename
+      .replace(/^\d+-/, "")
+      .split("-")
+      .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
+      .join(" ");
+    links.push(`[${nextTitle}](${nextFile.uniqueId}.md) →`);
+  }
+
+  // 5. Return navigation as markdown
+  return `${links.join(" | ")}\n\n---\n\n`;
+}
+
+/**
+ * Assemble final document and write to disk
+ *
+ * @param file - File descriptor
+ * @param frontmatter - YAML frontmatter string
+ * @param navigation - Navigation links string
+ * @param markdown - Main markdown content
+ * @param anchors - FileAnchors for link resolution
+ * @param ctx - Conversion context
+ * @returns WrittenFile with path and anchors
+ */
+async function processDocument(
+  file: FileDescriptor,
+  frontmatter: string,
+  navigation: string,
+  markdown: string,
+  anchors: FileAnchors,
+  ctx: ConversionContext,
+): Promise<WrittenFile> {
+  // 1. Assemble final markdown document
+  const parts: string[] = [];
+
+  // Add frontmatter if enabled
+  if (ctx.config.markdown.frontmatter) {
+    parts.push(frontmatter);
+  }
+
+  // Add navigation if enabled
+  if (ctx.config.markdown.navigation) {
+    parts.push(navigation);
+  }
+
+  // Add main content
+  parts.push(markdown);
+
+  const finalMarkdown = parts.join("\n");
+
+  // 2. Ensure output directory exists
+  await mkdir(dirname(file.outputPath), { recursive: true });
+
+  // 3. Write to disk
+  await writeFile(file.outputPath, finalMarkdown, "utf-8");
+
+  // 4. Return WrittenFile with lightweight metadata
+  return {
+    descriptor: file,
+    path: file.outputPath,
+    anchors,
+  };
+}
+
+/**
+ * Generate index files for all sourcebooks
+ *
+ * @param ctx - Conversion context (has sourcebooks with files)
+ */
+async function processIndexes(ctx: ConversionContext): Promise<void> {
+  if (!ctx.sourcebooks || !ctx.config.output.createIndex) {
+    return; // Skip if no sourcebooks or index creation disabled
+  }
+
+  for (const sourcebook of ctx.sourcebooks) {
+    // 1. Build frontmatter for index
+    const frontmatter = [
+      "---",
+      `title: "${sourcebook.title}"`,
+      `date: ${new Date().toISOString().split("T")[0]}`,
+      `tags:`,
+      `  - dnd5e/index`,
+      `  - dnd5e/${sourcebook.sourcebook}`,
+      "---",
+      "",
+    ].join("\n");
+
+    // 2. Build file list
+    const fileList = [
+      `# ${sourcebook.title}`,
+      "",
+      "## Contents",
+      "",
+      ...sourcebook.files.map((file, index) => {
+        const title = file.filename
+          .replace(/^\d+-/, "")
+          .split("-")
+          .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
+          .join(" ");
+        return `${index + 1}. [${title}](${file.uniqueId}.md)`;
+      }),
+      "",
+    ].join("\n");
+
+    // 3. Assemble index markdown
+    const parts: string[] = [];
+
+    if (ctx.config.markdown.frontmatter) {
+      parts.push(frontmatter);
+    }
+
+    parts.push(fileList);
+
+    const indexMarkdown = parts.join("\n");
+
+    // 4. Ensure output directory exists and write index
+    await mkdir(dirname(sourcebook.outputPath), { recursive: true });
+    await writeFile(sourcebook.outputPath, indexMarkdown, "utf-8");
+
+    console.log(`Created index for ${sourcebook.title}`);
+  }
+}
+
+// ============================================================================
+// Main Orchestrator
+// ============================================================================
 
 /**
  * Processes all scanned files and writes them to disk
@@ -31,31 +549,51 @@ export async function process(ctx: ConversionContext): Promise<void> {
 
   console.log(`Processing ${ctx.files.length} files...`);
 
-  ctx.writtenFiles = [];
+  const writtenFiles: WrittenFile[] = [];
 
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  for (const _file of ctx.files) {
-    // Process one file at a time to minimize memory usage
+  // Process each file one at a time (memory-efficient)
+  for (const file of ctx.files) {
+    // 1. Parse HTML and extract content, anchors, and image URLs (ONLY place Cheerio is used)
+    const { htmlContent, anchors, imageUrls } = await processHtml(
+      file,
+      ctx.config,
+    );
 
-    // TODO: Implement per-file processing logic
-    // 1. Parse HTML with Cheerio
-    //    const { html, metadata, anchors } = await parseHtml(file, ctx.config)
-    // 2. Extract main content using contentSelector
-    // 3. Extract metadata (title, date)
-    // 4. Build FileAnchors (valid anchors + HTML ID mappings)
-    // 5. Convert HTML to Markdown using Turndown
-    //    const markdown = await convertToMarkdown(html, ctx.config)
-    // 6. Download images with retry logic
-    //    const images = await downloadImages(html, file.sourcebook, ctx.config)
-    // 7. Build navigation links (prev/index/next)
-    //    const navigation = buildNavigation(file, ctx)
-    // 8. Assemble final markdown (frontmatter + navigation + content)
-    // 9. Write file to disk immediately
-    //    const path = await writeMarkdownFile({ file, markdown, metadata, images, anchors, navigation }, ctx.config)
-    // 10. Store lightweight WrittenFile (just path + anchors for link resolution)
-    //     ctx.writtenFiles.push({ descriptor: file, path, anchors })
-    // 11. HTML and markdown are garbage collected here before next iteration
+    // 2. Convert HTML to Markdown (no Cheerio needed)
+    const markdown = await processMarkdown(htmlContent, ctx.config);
+
+    // 3. Download images and replace URLs with local paths
+    const { markdown: finalMarkdown } = await processImages(
+      markdown,
+      imageUrls,
+      file,
+      ctx.config,
+    );
+
+    // 4. Build frontmatter
+    const frontmatter = processFrontmatter(file, ctx);
+
+    // 5. Build navigation links
+    const navigation = processNavigation(file, ctx);
+
+    // 6. Assemble and write document
+    const writtenFile = await processDocument(
+      file,
+      frontmatter,
+      navigation,
+      finalMarkdown,
+      anchors,
+      ctx,
+    );
+
+    writtenFiles.push(writtenFile);
+
+    // All strings are garbage collected here before next iteration
   }
 
-  // TODO: Generate index files for each sourcebook
+  // 7. Generate index files
+  await processIndexes(ctx);
+
+  // Write to context
+  ctx.writtenFiles = writtenFiles;
 }
