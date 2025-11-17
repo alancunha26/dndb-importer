@@ -6,6 +6,7 @@
 export { removeHeadingLinks } from "./remove-heading-links";
 export { unwrapLinkedImages } from "./unwrap-linked-images";
 export { imageAltText } from "./image-alt-text";
+export { figureCaptionRule } from "./figure-caption";
 
 // TODO: Add more custom rules for D&D Beyond content
 // - Stat blocks

@@ -6,7 +6,7 @@
 import TurndownService from "turndown";
 import { gfm } from "@truto/turndown-plugin-gfm";
 import type { MarkdownConfig } from "../types";
-import { removeHeadingLinks, unwrapLinkedImages, imageAltText } from "./rules";
+import { removeHeadingLinks, unwrapLinkedImages, imageAltText, figureCaptionRule } from "./rules";
 
 export function createTurndownService(
   config: MarkdownConfig,
@@ -28,6 +28,7 @@ export function createTurndownService(
   turndownService.use(removeHeadingLinks);
   turndownService.use(unwrapLinkedImages(imageMapping));
   turndownService.use(imageAltText(imageMapping));
+  turndownService.use(figureCaptionRule);
 
   return turndownService;
 }
