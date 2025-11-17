@@ -11,13 +11,15 @@
  * - HTML/markdown garbage collected before next file
  */
 
-import { readFile, writeFile, mkdir, access } from "fs/promises";
+import { readFile, writeFile, mkdir, copyFile } from "fs/promises";
 import { dirname, join, extname } from "node:path";
-import { constants } from "node:fs";
 import { load } from "cheerio";
 import { createTurndownService } from "../turndown";
+import { loadIndexTemplate, loadFileTemplate } from "../templates";
 import { IdGenerator } from "../utils/id-generator";
 import { loadMapping, saveMapping } from "../utils/mapping";
+import { fileExists } from "../utils/fs";
+import { filenameToTitle } from "../utils/string";
 import type {
   ConversionContext,
   ConversionConfig,
@@ -25,24 +27,15 @@ import type {
   FileAnchors,
   ImageDescriptor,
   ImageMapping,
+  IndexTemplateContext,
+  FileTemplateContext,
+  SourcebookInfo,
   WrittenFile,
 } from "../types";
 
 // ============================================================================
 // Helper Functions
 // ============================================================================
-
-/**
- * Check if a file exists
- */
-async function fileExists(path: string): Promise<boolean> {
-  try {
-    await access(path, constants.F_OK);
-    return true;
-  } catch {
-    return false;
-  }
-}
 
 // ============================================================================
 // Sub-process Functions
@@ -270,8 +263,6 @@ async function processImages(
         imageDescriptor.downloadStatus = "failed";
         imageDescriptor.error = error as Error;
         console.error(`Failed to download image ${src}:`, error);
-
-        // Don't add to mapping if download failed - keep original URL
       }
     }
 
@@ -336,55 +327,23 @@ async function downloadImageWithRetry(
 }
 
 /**
- * Build YAML frontmatter for markdown file
- *
- * @param file - File descriptor
- * @param ctx - Conversion context
- * @returns YAML frontmatter as string (includes --- delimiters)
- */
-function processFrontmatter(file: FileDescriptor): string {
-  // 1. Extract title from filename (remove numeric prefix and convert to title case)
-  const title = file.filename
-    .replace(/^\d+-/, "") // Remove numeric prefix
-    .split("-")
-    .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
-    .join(" ");
-
-  // 2. Generate current date in ISO format
-  const date = new Date().toISOString().split("T")[0]; // YYYY-MM-DD
-
-  // 3. Build YAML frontmatter
-  const frontmatter = [
-    "---",
-    `title: "${title}"`,
-    `date: ${date}`,
-    "tags:",
-    `  - dnd5e/chapter`,
-    "---",
-    "",
-  ].join("\n");
-
-  return frontmatter;
-}
-
-/**
  * Build navigation links (prev/index/next)
  *
  * @param file - Current file descriptor
  * @param ctx - Conversion context (has sourcebooks with file ordering)
- * @returns Navigation markdown string
+ * @returns Navigation links object for template
  */
 function processNavigation(
   file: FileDescriptor,
   ctx: ConversionContext,
-): string {
+): { prev?: string; index: string; next?: string } {
   // 1. Find the sourcebook for this file
   const sourcebook = ctx.sourcebooks?.find(
     (sb) => sb.sourcebook === file.sourcebook,
   );
 
   if (!sourcebook) {
-    return ""; // No navigation if sourcebook not found
+    return { index: "[Index](index.md)" }; // Fallback if sourcebook not found
   }
 
   // 2. Find current file's index in the sourcebook
@@ -393,7 +352,7 @@ function processNavigation(
   );
 
   if (currentIndex === -1) {
-    return ""; // File not found in sourcebook
+    return { index: `[Index](${sourcebook.id}${ctx.config.output.extension})` };
   }
 
   // 3. Get previous, index, and next files
@@ -403,78 +362,75 @@ function processNavigation(
       ? sourcebook.files[currentIndex + 1]
       : null;
 
-  // 4. Build navigation links
-  const links: string[] = [];
+  // 4. Build navigation links object
+  const navigation: { prev?: string; index: string; next?: string } = {
+    index: `[Index](${sourcebook.id}${ctx.config.output.extension})`,
+  };
 
   if (prevFile) {
-    const prevTitle = prevFile.filename
-      .replace(/^\d+-/, "")
-      .split("-")
-      .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
-      .join(" ");
-    links.push(`← [${prevTitle}](${prevFile.uniqueId}.md)`);
+    const prevTitle = filenameToTitle(prevFile.filename);
+    navigation.prev = `← [${prevTitle}](${prevFile.uniqueId}${ctx.config.output.extension})`;
   }
-
-  // Index link
-  links.push(`[Index](${sourcebook.id}.md)`);
 
   if (nextFile) {
-    const nextTitle = nextFile.filename
-      .replace(/^\d+-/, "")
-      .split("-")
-      .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
-      .join(" ");
-    links.push(`[${nextTitle}](${nextFile.uniqueId}.md) →`);
+    const nextTitle = filenameToTitle(nextFile.filename);
+    navigation.next = `[${nextTitle}](${nextFile.uniqueId}${ctx.config.output.extension}) →`;
   }
 
-  // 5. Return navigation as markdown
-  return `${links.join(" | ")}\n\n---\n\n`;
+  return navigation;
 }
 
 /**
- * Assemble final document and write to disk
+ * Assemble final document using template and write to disk
  *
  * @param file - File descriptor
- * @param frontmatter - YAML frontmatter string
- * @param navigation - Navigation links string
  * @param markdown - Main markdown content
  * @param anchors - FileAnchors for link resolution
+ * @param sourcebook - Sourcebook info
  * @param ctx - Conversion context
  * @returns WrittenFile with path and anchors
  */
 async function processDocument(
   file: FileDescriptor,
-  frontmatter: string,
-  navigation: string,
   markdown: string,
   anchors: FileAnchors,
-  config: ConversionConfig,
+  sourcebook: SourcebookInfo,
+  ctx: ConversionContext,
 ): Promise<WrittenFile> {
-  // 1. Assemble final markdown document
-  const parts: string[] = [];
+  // 1. Load template (sourcebook-specific > global > default)
+  const template = await loadFileTemplate(
+    sourcebook.templates.file,
+    ctx.globalTemplates?.file ?? null,
+  );
 
-  // Add frontmatter if enabled
-  if (config.markdown.frontmatter) {
-    parts.push(frontmatter);
-  }
+  // 2. Extract title from filename
+  const title = filenameToTitle(file.filename);
 
-  // Add navigation if enabled
-  if (config.markdown.navigation) {
-    parts.push(navigation);
-  }
+  // 3. Build template context
+  const context: FileTemplateContext = {
+    title,
+    date: new Date().toISOString().split("T")[0],
+    tags: ["dnd5e/chapter"],
+    sourcebook: {
+      title: sourcebook.title,
+      edition: sourcebook.metadata.edition,
+      author: sourcebook.metadata.author,
+      metadata: sourcebook.metadata,
+    },
+    navigation: processNavigation(file, ctx),
+    content: markdown,
+  };
 
-  // Add main content
-  parts.push(markdown);
+  // 4. Render template
+  const finalMarkdown = template(context);
 
-  const finalMarkdown = parts.join("\n");
-
-  // 2. Ensure output directory exists
+  // 5. Ensure output directory exists
   await mkdir(dirname(file.outputPath), { recursive: true });
 
-  // 3. Write to disk
+  // 6. Write to disk
   await writeFile(file.outputPath, finalMarkdown, "utf-8");
 
-  // 4. Return WrittenFile with lightweight metadata
+  // 7. Return WrittenFile with lightweight metadata
   return {
     descriptor: file,
     path: file.outputPath,
@@ -483,56 +439,133 @@ async function processDocument(
 }
 
 /**
+ * Process a cover image for a sourcebook
+ *
+ * @param sourcebook - Sourcebook info with metadata
+ * @param imageMapping - Current image mapping
+ * @param idGenerator - ID generator for new images
+ * @param ctx - Conversion context
+ * @returns Updated cover image filename (with unique ID) or undefined
+ */
+async function processCoverImage(
+  sourcebook: SourcebookInfo,
+  imageMapping: ImageMapping,
+  idGenerator: IdGenerator,
+  ctx: ConversionContext,
+): Promise<string | undefined> {
+  const { coverImage } = sourcebook.metadata;
+
+  if (!coverImage) {
+    return undefined;
+  }
+
+  // Build path to cover image in input directory
+  const inputPath = join(
+    ctx.config.input.directory,
+    sourcebook.sourcebook,
+    coverImage,
+  );
+
+  // Check if cover image exists
+  if (!(await fileExists(inputPath))) {
+    console.warn(`Cover image not found: ${inputPath}`);
+    return undefined;
+  }
+
+  // Use input path as key for mapping (similar to how we handle regular images)
+  const mappingKey = `cover:${sourcebook.sourcebook}/${coverImage}`;
+
+  // Check if we already have an ID for this cover image
+  let uniqueId: string;
+  if (imageMapping[mappingKey]) {
+    uniqueId = imageMapping[mappingKey].split(".")[0]; // Extract ID from filename
+  } else {
+    // Generate new unique ID
+    uniqueId = idGenerator.generate();
+  }
+
+  // Get file extension
+  const extension = extname(coverImage);
+  const localFilename = `${uniqueId}${extension}`;
+
+  // Build output path
+  const outputPath = join(
+    ctx.config.output.directory,
+    sourcebook.sourcebook,
+    localFilename,
+  );
+
+  // Copy cover image to output directory
+  try {
+    await mkdir(dirname(outputPath), { recursive: true });
+    await copyFile(inputPath, outputPath);
+
+    // Update mapping
+    imageMapping[mappingKey] = localFilename;
+
+    return localFilename;
+  } catch (error) {
+    console.error(`Failed to copy cover image ${inputPath}:`, error);
+    return undefined;
+  }
+}
+
+/**
  * Generate index files for all sourcebooks
  *
  * @param ctx - Conversion context (has sourcebooks with files)
+ * @param imageMapping - Current image mapping (will be updated with cover images)
+ * @param idGenerator - ID generator for cover images
  */
-async function processIndexes(ctx: ConversionContext): Promise<void> {
+async function processIndexes(
+  ctx: ConversionContext,
+  imageMapping: ImageMapping,
+  idGenerator: IdGenerator,
+): Promise<void> {
   if (!ctx.sourcebooks || !ctx.config.output.createIndex) {
     return; // Skip if no sourcebooks or index creation disabled
   }
 
   for (const sourcebook of ctx.sourcebooks) {
-    // 1. Build frontmatter for index
-    const frontmatter = [
-      "---",
-      `title: "${sourcebook.title}"`,
-      `date: ${new Date().toISOString().split("T")[0]}`,
-      `tags:`,
-      `  - dnd5e/source`,
-      "---",
-      "",
-    ].join("\n");
+    // 1. Process cover image if present
+    const processedCoverImage = await processCoverImage(
+      sourcebook,
+      imageMapping,
+      idGenerator,
+      ctx,
+    );
 
-    // 2. Build file list
-    const fileList = [
-      `# ${sourcebook.title}`,
-      "",
-      "## Contents",
-      "",
-      ...sourcebook.files.map((file) => {
-        const title = file.filename
-          .replace(/^\d+-/, "")
-          .split("-")
-          .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
-          .join(" ");
-        return `- [${title}](${file.uniqueId}.md)`;
-      }),
-      "",
-    ].join("\n");
+    // 2. Load template (sourcebook-specific > global > default)
+    const template = await loadIndexTemplate(
+      sourcebook.templates.index,
+      ctx.globalTemplates?.index ?? null,
+    );
 
-    // 3. Assemble index markdown
-    const parts: string[] = [];
+    // 3. Build template context
+    const context: IndexTemplateContext = {
+      title: sourcebook.title,
+      edition: sourcebook.metadata.edition,
+      description: sourcebook.metadata.description,
+      author: sourcebook.metadata.author,
+      coverImage: processedCoverImage, // Use processed filename with unique ID
+      metadata: sourcebook.metadata,
+      files: sourcebook.files.map((file) => ({
+        title: filenameToTitle(file.filename),
+        filename: `${file.uniqueId}${ctx.config.output.extension}`,
+        uniqueId: file.uniqueId,
+      })),
+    };
 
-    if (ctx.config.markdown.frontmatter) {
-      parts.push(frontmatter);
-    }
+    // 4. Add date to context for template
+    const templateContext = {
+      ...context,
+      date: new Date().toISOString().split("T")[0],
+    };
 
-    parts.push(fileList);
+    // 5. Render template
+    const indexMarkdown = template(templateContext);
 
-    const indexMarkdown = parts.join("\n");
-
-    // 4. Ensure output directory exists and write index
+    // 6. Ensure output directory exists and write index
     await mkdir(dirname(sourcebook.outputPath), { recursive: true });
     await writeFile(sourcebook.outputPath, indexMarkdown, "utf-8");
 
@@ -570,15 +603,32 @@ export async function process(ctx: ConversionContext): Promise<void> {
     "images.json",
   );
 
+  // Create ID generator and register existing IDs from mapping
+  const idGenerator = new IdGenerator();
+  for (const filename of Object.values(imageMapping)) {
+    const id = filename.split(".")[0]; // Extract ID from filename
+    idGenerator.register(id);
+  }
+
   // Process each file one at a time (memory-efficient)
   for (const file of ctx.files) {
-    // 1. Parse HTML and extract content, anchors, and image URLs (ONLY place Cheerio is used)
+    // 1. Find sourcebook for this file
+    const sourcebook = ctx.sourcebooks?.find(
+      (sb) => sb.sourcebook === file.sourcebook,
+    );
+
+    if (!sourcebook) {
+      console.warn(`Skipping file ${file.relativePath}: sourcebook not found`);
+      continue;
+    }
+
+    // 2. Parse HTML and extract content, anchors, and image URLs (ONLY place Cheerio is used)
     const { htmlContent, anchors, imageUrls } = await processHtml(
       file,
       ctx.config,
     );
 
-    // 2. Download images and build URL mapping (original URL -> local path)
+    // 3. Download images and build URL mapping (original URL -> local path)
     const { mapping: urlMapping, updatedMapping } = await processImages(
       imageUrls,
       file,
@@ -589,23 +639,16 @@ export async function process(ctx: ConversionContext): Promise<void> {
     // Update persistent mapping for next file
     imageMapping = updatedMapping;
 
-    // 3. Convert HTML to Markdown using Turndown with image URL mapping
+    // 4. Convert HTML to Markdown using Turndown with image URL mapping
     const markdown = await processMarkdown(htmlContent, urlMapping, ctx.config);
 
-    // 4. Build frontmatter
-    const frontmatter = processFrontmatter(file);
-
-    // 5. Build navigation links
-    const navigation = processNavigation(file, ctx);
-
-    // 6. Assemble and write document
+    // 5. Assemble and write document using template
     const writtenFile = await processDocument(
       file,
-      frontmatter,
-      navigation,
       markdown,
       anchors,
-      ctx.config,
+      sourcebook,
+      ctx,
     );
 
     writtenFiles.push(writtenFile);
@@ -613,11 +656,11 @@ export async function process(ctx: ConversionContext): Promise<void> {
     // All strings are garbage collected here before next iteration
   }
 
-  // 7. Save updated image mapping to images.json
-  await saveMapping(ctx.config.output.directory, "images.json", imageMapping);
+  // 7. Generate index files (may add cover images to imageMapping)
+  await processIndexes(ctx, imageMapping, idGenerator);
 
-  // 8. Generate index files
-  await processIndexes(ctx);
+  // 8. Save updated image mapping to images.json (includes cover images)
+  await saveMapping(ctx.config.output.directory, "images.json", imageMapping);
 
   // Write to context
   ctx.writtenFiles = writtenFiles;

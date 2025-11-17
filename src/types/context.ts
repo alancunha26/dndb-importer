@@ -7,6 +7,7 @@ import type { ConversionConfig } from "./config";
 import type {
   FileDescriptor,
   SourcebookInfo,
+  TemplateSet,
 } from "./files";
 import type {
   WrittenFile,
@@ -23,6 +24,7 @@ export interface ConversionContext {
   files?: FileDescriptor[];
   sourcebooks?: SourcebookInfo[];
   mappings?: Map<string, string>; // HTML relative path → unique ID
+  globalTemplates?: TemplateSet; // Global templates from input root
 
   // Processor module writes (processes AND writes files immediately):
   // Note: processedFiles removed to avoid memory bloat

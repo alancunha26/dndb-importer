@@ -11,12 +11,36 @@ export interface FileDescriptor {
   uniqueId: string; // 4-character unique ID (e.g., "a3f9")
 }
 
+/**
+ * Sourcebook metadata from sourcebook.json
+ * Optional file that users can provide to customize sourcebook output
+ */
+export interface SourcebookMetadata {
+  title?: string; // Display title (overrides directory name)
+  edition?: string; // e.g., "5th Edition (2024)"
+  coverImage?: string; // Filename of cover image in sourcebook directory
+  description?: string; // Brief description for index page
+  author?: string; // e.g., "Wizards of the Coast"
+  [key: string]: unknown; // Allow custom fields for user templates
+}
+
+/**
+ * Template file paths
+ * Null means use built-in default template
+ */
+export interface TemplateSet {
+  index: string | null; // Path to index.md.hbs
+  file: string | null; // Path to file.md.hbs
+}
+
 export interface SourcebookInfo {
   id: string; // Unique ID for the index file
-  title: string; // Sourcebook title
+  title: string; // Sourcebook title (from metadata or directory name)
   sourcebook: string; // Sourcebook directory name
   files: FileDescriptor[]; // Ordered list of content files
   outputPath: string; // Path to index markdown file
+  metadata: SourcebookMetadata; // Metadata from sourcebook.json (or empty)
+  templates: TemplateSet; // Sourcebook-specific templates (or null for global/default)
 }
 
 export interface ImageDescriptor {
@@ -76,3 +100,57 @@ export type ImageMapping = Record<string, string>;
  * Saved to files.json in the output directory root
  */
 export type FileMapping = Record<string, string>;
+
+// ============================================================================
+// Template Context Types
+// ============================================================================
+
+/**
+ * Context passed to index templates
+ * Available variables in index.md.hbs
+ */
+export interface IndexTemplateContext {
+  // Sourcebook metadata
+  title: string;
+  edition?: string;
+  description?: string;
+  author?: string;
+  coverImage?: string;
+  metadata: SourcebookMetadata; // Full metadata object for custom fields
+
+  // File list for navigation
+  files: Array<{
+    title: string;
+    filename: string; // e.g., "a3f9.md"
+    uniqueId: string;
+  }>;
+}
+
+/**
+ * Context passed to file templates
+ * Available variables in file.md.hbs
+ */
+export interface FileTemplateContext {
+  // Document metadata
+  title: string;
+  date: string;
+  tags: string[];
+
+  // Sourcebook info
+  sourcebook: {
+    title: string;
+    edition?: string;
+    author?: string;
+    metadata: SourcebookMetadata; // Full metadata for custom fields
+  };
+
+  // Navigation links
+  navigation: {
+    prev?: string; // Markdown link: "[Previous Title](prev-id.md)"
+    index: string; // Markdown link: "[Index](index-id.md)"
+    next?: string; // Markdown link: "[Next Title](next-id.md)"
+  };
+
+  // Main content
+  content: string; // Converted markdown content
+}

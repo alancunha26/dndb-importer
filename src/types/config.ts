@@ -38,8 +38,6 @@ export interface MarkdownConfig {
   strong: "__" | "**";
   bulletMarker: "-" | "+" | "*";
   linkStyle: "inlined" | "referenced";
-  frontmatter: boolean;
-  navigation: boolean;
 }
 
 export interface HtmlConfig {

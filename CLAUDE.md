@@ -57,11 +57,14 @@ console.log(`Files processed: ${ctx.stats.successful}/${ctx.stats.totalFiles}`);
 **Pipeline Modules** (`src/modules/`):
 
 1. **Scanner** (`scanner.ts`)
-   - Discovers HTML files using fast-glob
+   - Discovers HTML files using fast-glob (excludes `*.hbs` template files)
+   - Detects global templates (`input/index.md.hbs`, `input/file.md.hbs`)
+   - Detects per-sourcebook templates (`input/players-handbook/index.md.hbs`, etc.)
+   - Loads sourcebook metadata from `sourcebook.json` files
    - Assigns unique 4-char IDs using `short-unique-id`
-   - Builds filename→ID mapping
+   - Builds filename→ID mapping (with persistent storage)
    - Groups files by sourcebook
-   - Writes: `ctx.files`, `ctx.sourcebooks`, `ctx.mappings`
+   - Writes: `ctx.files`, `ctx.sourcebooks`, `ctx.mappings`, `ctx.globalTemplates`
 
 2. **Processor** (`processor.ts`) - **Memory-efficient streaming**
    - Processes files **one at a time** to avoid memory bloat
@@ -70,13 +73,17 @@ console.log(`Files processed: ${ctx.stats.successful}/${ctx.stats.totalFiles}`);
      - Extracts content using `.p-article-content` selector
      - Builds `FileAnchors` (valid anchors + HTML ID mappings)
      - Converts HTML → Markdown using Turndown with custom D&D rules
-     - Downloads images with retry logic
-     - Builds navigation links (prev/index/next)
-     - Assembles final markdown (frontmatter + navigation + content)
+     - Downloads images with retry logic (with persistent mapping)
+     - Loads appropriate file template (sourcebook > global > default)
+     - Builds `FileTemplateContext` with navigation links and metadata
+     - Renders template with Handlebars
      - **Writes to disk immediately**
      - Stores lightweight `WrittenFile` (path + anchors only)
      - HTML and markdown are garbage collected before next file
-   - Generates index files per sourcebook
+   - Generates index files per sourcebook:
+     - Loads appropriate index template (sourcebook > global > default)
+     - Builds `IndexTemplateContext` with sourcebook metadata and file list
+     - Renders template with Handlebars
    - Writes: `ctx.writtenFiles` (lightweight - no HTML/markdown content)
 
 3. **Resolver** (`resolver.ts`)
@@ -139,6 +146,35 @@ console.log(`Files processed: ${ctx.stats.successful}/${ctx.stats.totalFiles}`);
 - Output: One directory per sourcebook, all files (markdown + images) in same directory
 - Navigation: Each file has prev/index/next links, index file per sourcebook
 
+**Template System:**
+
+- **Handlebars template engine** - Full templating support for index and file pages
+- **Template precedence**:
+  1. Sourcebook-specific: `input/players-handbook/index.md.hbs` or `file.md.hbs`
+  2. Global: `input/index.md.hbs` or `file.md.hbs`
+  3. Built-in defaults: Hardcoded templates in `src/templates/defaults.ts`
+- **Scanner detects templates** during file discovery
+  - Global templates detected in input root
+  - Per-sourcebook templates detected in each sourcebook directory
+  - Template paths stored in `SourcebookInfo.templates` and `ConversionContext.globalTemplates`
+- **Processor renders templates** during output generation
+  - `loadIndexTemplate()` and `loadFileTemplate()` handle precedence
+  - Templates receive rich context objects (`IndexTemplateContext`, `FileTemplateContext`)
+  - Built-in defaults ensure converter always works without user templates
+- **Template variables**:
+  - Index: `title`, `edition`, `description`, `author`, `coverImage`, `date`, `files`, `metadata`
+  - File: `title`, `date`, `tags`, `sourcebook`, `navigation`, `content`
+- **HTML escaping**: Use `{{{variable}}}` (triple braces) for unescaped output to preserve markdown
+
+**Sourcebook Metadata:**
+
+- **Optional `sourcebook.json`** in each sourcebook directory
+- Scanner loads metadata using `loadSourcebookMetadata()` helper
+- Fields: `title`, `edition`, `description`, `author`, `coverImage`, plus any custom fields
+- Stored in `SourcebookInfo.metadata` and passed to templates
+- Title from metadata overrides directory-name-based title generation
+- All metadata accessible in templates via `metadata` object
+
 **Cross-References (Resolver Module):**
 
 - **Link resolution is optional** (`links.resolveInternal`):
@@ -186,7 +222,7 @@ console.log(`Files processed: ${ctx.stats.successful}/${ctx.stats.totalFiles}`);
 Types are organized in `src/types/` by domain:
 
 - **`types/config.ts`** - Configuration types (`ConversionConfig`, `HtmlParserConfig`, etc.)
-- **`types/files.ts`** - File-related types (`FileDescriptor`, `ImageDescriptor`, `FileAnchors`, etc.)
+- **`types/files.ts`** - File-related types (`FileDescriptor`, `ImageDescriptor`, `FileAnchors`, template types, etc.)
 - **`types/pipeline.ts`** - Pipeline data types (`ScanResult`, `ProcessedFile`, `WrittenFile`, `LinkResolutionIndex`, etc.)
 - **`types/context.ts`** - `ConversionContext` (flows through all modules)
 - **`types/index.ts`** - Re-exports all types
@@ -198,9 +234,23 @@ Key types:
   - `files`: FileDescriptor[] (from scanner)
   - `sourcebooks`: SourcebookInfo[] (from scanner)
   - `mappings`: Map<string, string> (from scanner)
+  - `globalTemplates`: TemplateSet (from scanner - global template paths)
   - `writtenFiles`: WrittenFile[] (from processor - lightweight, no HTML/markdown)
   - `stats`: ProcessingStats (from stats)
 - `FileDescriptor` - File metadata with unique ID
+- `SourcebookInfo` - Sourcebook metadata with templates and files:
+  - `metadata`: SourcebookMetadata (from sourcebook.json)
+  - `templates`: TemplateSet (sourcebook-specific template paths)
+  - `files`: FileDescriptor[] (content files)
+  - `id`, `title`, `sourcebook`, `outputPath`
+- `SourcebookMetadata` - Optional metadata from sourcebook.json:
+  - `title?`, `edition?`, `description?`, `author?`, `coverImage?`
+  - `[key: string]: unknown` - Allows custom fields
+- `TemplateSet` - Template file paths:
+  - `index: string | null` - Path to index.md.hbs (null = use default)
+  - `file: string | null` - Path to file.md.hbs (null = use default)
+- `IndexTemplateContext` - Variables available in index templates
+- `FileTemplateContext` - Variables available in file templates
 - `FileAnchors` - Anchor data for a single file (valid anchors + HTML ID mappings)
   - `valid: string[]` - All markdown anchors with plural/singular variants
   - `htmlIdToAnchor: Record<string, string>` - HTML element IDs → markdown anchors
@@ -225,16 +275,22 @@ src/
 │   ├── resolver.ts          # Link resolution
 │   ├── stats.ts             # Build statistics
 │   └── index.ts
+├── templates/
+│   ├── defaults.ts          # Built-in default templates
+│   └── index.ts             # Template loading utilities
 ├── turndown/
 │   ├── rules/index.ts
 │   └── index.ts
 ├── utils/
-│   ├── config.ts
-│   ├── id-generator.ts
-│   └── logger.ts
+│   ├── config.ts            # Configuration loading
+│   ├── id-generator.ts      # Unique ID generation
+│   ├── logger.ts            # Logging utilities
+│   ├── mapping.ts           # JSON mapping persistence
+│   ├── fs.ts                # Filesystem utilities (fileExists)
+│   └── string.ts            # String utilities (filenameToTitle)
 ├── types/
 │   ├── config.ts            # Configuration types
-│   ├── files.ts             # File-related types
+│   ├── files.ts             # File-related types (includes template types)
 │   ├── pipeline.ts          # Pipeline data types
 │   ├── context.ts           # ConversionContext
 │   └── index.ts
@@ -302,7 +358,27 @@ The config loader (`src/utils/config.ts`) uses:
 
 ### ID Generation
 
-`src/utils/id-generator.ts` maintains a Set of used IDs to prevent collisions within a conversion run. Reset between runs.
+`src/utils/id-generator.ts` maintains a Set of used IDs to prevent collisions within a conversion run. Has a `register()` method to load existing IDs from persistent mappings. Reset between runs.
+
+### Shared Utilities
+
+**`src/utils/fs.ts`** - Filesystem helpers:
+- `fileExists(path: string)` - Check if file/directory exists
+- Used by scanner (template detection), processor (image checking), and mapping utilities
+- Eliminates duplicate code across modules
+
+**`src/utils/string.ts`** - String manipulation:
+- `filenameToTitle(filename: string)` - Convert filenames to readable titles
+  - Removes numeric prefix (e.g., "01-", "02-")
+  - Splits by hyphens/underscores
+  - Capitalizes each word
+- Used by scanner (sourcebook titles) and processor (navigation links, file titles)
+- Eliminates duplicate title formatting code across modules
+
+**`src/utils/mapping.ts`** - JSON mapping persistence:
+- `loadMapping(dir, filename)` - Load JSON mapping from output directory
+- `saveMapping(dir, filename, mapping)` - Save JSON mapping with pretty formatting
+- Used for `files.json` (HTML→MD mapping) and `images.json` (URL→filename mapping)
 
 ## Example Files
 

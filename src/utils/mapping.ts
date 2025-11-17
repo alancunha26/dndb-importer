@@ -3,21 +3,9 @@
  * Shared functions for loading/saving JSON mapping files
  */
 
-import { readFile, writeFile, mkdir, access } from "fs/promises";
+import { readFile, writeFile, mkdir } from "fs/promises";
 import { dirname, join } from "node:path";
-import { constants } from "node:fs";
-
-/**
- * Check if a file exists
- */
-async function fileExists(path: string): Promise<boolean> {
-  try {
-    await access(path, constants.F_OK);
-    return true;
-  } catch {
-    return false;
-  }
-}
+import { fileExists } from "./fs";
 
 /**
  * Load mapping from JSON file in output directory

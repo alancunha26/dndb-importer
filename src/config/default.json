@@ -20,9 +20,7 @@
     "emphasis": "*",
     "strong": "**",
     "bulletMarker": "-",
-    "linkStyle": "inlined",
-    "frontmatter": true,
-    "navigation": true
+    "linkStyle": "inlined"
   },
   "html": {
     "contentSelector": ".p-article-content",

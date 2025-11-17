@@ -19,12 +19,16 @@ export type {
 export type {
   FileDescriptor,
   SourcebookInfo,
+  SourcebookMetadata,
+  TemplateSet,
   ImageDescriptor,
   DocumentMetadata,
   NavigationLinks,
   FileAnchors,
   ImageMapping,
   FileMapping,
+  IndexTemplateContext,
+  FileTemplateContext,
 } from "./files";
 
 // Pipeline
