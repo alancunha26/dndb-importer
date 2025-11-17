@@ -6,7 +6,8 @@
 import glob from "fast-glob";
 import path from "node:path";
 import { IdGenerator } from "../utils/id-generator";
-import type { ConversionContext, FileDescriptor, SourcebookInfo } from "../types";
+import { loadMapping, saveMapping } from "../utils/mapping";
+import type { ConversionContext, FileDescriptor, FileMapping, SourcebookInfo } from "../types";
 
 /**
  * Scans input directory for HTML files and populates context
@@ -54,16 +55,37 @@ export async function scan(ctx: ConversionContext): Promise<void> {
     return nameA.localeCompare(nameB);
   });
 
-  // 3. Generate unique IDs and create FileDescriptors
+  // 3. Load persistent file mapping (HTML path -> markdown filename)
+  const fileMapping = await loadMapping(ctx.config.output.directory, "files.json");
   const idGenerator = new IdGenerator();
+
+  // Register existing IDs to avoid collisions
+  for (const mdFilename of Object.values(fileMapping)) {
+    const id = path.basename(mdFilename, ctx.config.output.extension);
+    idGenerator.register(id);
+  }
+
+  // 4. Generate unique IDs and create FileDescriptors
   const files: FileDescriptor[] = [];
   const mappings = new Map<string, string>();
+  const updatedFileMapping: FileMapping = { ...fileMapping };
 
   for (const sourcePath of sortedFiles) {
     const relativePath = path.relative(inputDir, sourcePath);
     const sourcebook = path.dirname(relativePath);
     const filename = path.basename(sourcePath, path.extname(sourcePath));
-    const uniqueId = idGenerator.generate();
+
+    // Check if this HTML file already has a mapping
+    let uniqueId: string;
+    if (fileMapping[relativePath]) {
+      // Reuse existing ID from mapping
+      uniqueId = path.basename(fileMapping[relativePath], ctx.config.output.extension);
+    } else {
+      // Generate new ID
+      uniqueId = idGenerator.generate();
+      // Add to updated mapping
+      updatedFileMapping[relativePath] = `${uniqueId}${ctx.config.output.extension}`;
+    }
 
     const outputPath = path.join(
       ctx.config.output.directory,
@@ -98,7 +120,20 @@ export async function scan(ctx: ConversionContext): Promise<void> {
   const sourcebooks: SourcebookInfo[] = [];
 
   for (const [sourcebookName, sourcebookFiles] of sourcebookMap) {
-    const indexId = idGenerator.generate();
+    // Check if index file already has a mapping
+    const indexKey = `${sourcebookName}/index`;
+    let indexId: string;
+
+    if (fileMapping[indexKey]) {
+      // Reuse existing index ID
+      indexId = path.basename(fileMapping[indexKey], ctx.config.output.extension);
+    } else {
+      // Generate new index ID
+      indexId = idGenerator.generate();
+      // Add to updated mapping
+      updatedFileMapping[indexKey] = `${indexId}${ctx.config.output.extension}`;
+    }
+
     const title = sourcebookName
       .split(/[-_]/)
       .map(word => word.charAt(0).toUpperCase() + word.slice(1))
@@ -118,6 +153,9 @@ export async function scan(ctx: ConversionContext): Promise<void> {
       outputPath,
     });
   }
+
+  // 6. Save updated file mapping
+  await saveMapping(ctx.config.output.directory, "files.json", updatedFileMapping);
 
   // Write to context
   ctx.files = files;

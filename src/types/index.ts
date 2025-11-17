@@ -23,6 +23,8 @@ export type {
   DocumentMetadata,
   NavigationLinks,
   FileAnchors,
+  ImageMapping,
+  FileMapping,
 } from "./files";
 
 // Pipeline

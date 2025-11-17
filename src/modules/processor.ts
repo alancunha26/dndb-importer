@@ -11,19 +11,38 @@
  * - HTML/markdown garbage collected before next file
  */
 
-import { readFile, writeFile, mkdir } from "fs/promises";
+import { readFile, writeFile, mkdir, access } from "fs/promises";
 import { dirname, join, extname } from "node:path";
+import { constants } from "node:fs";
 import { load } from "cheerio";
 import { createTurndownService } from "../turndown";
 import { IdGenerator } from "../utils/id-generator";
+import { loadMapping, saveMapping } from "../utils/mapping";
 import type {
   ConversionContext,
   ConversionConfig,
   FileDescriptor,
   FileAnchors,
   ImageDescriptor,
+  ImageMapping,
   WrittenFile,
 } from "../types";
+
+// ============================================================================
+// Helper Functions
+// ============================================================================
+
+/**
+ * Check if a file exists
+ */
+async function fileExists(path: string): Promise<boolean> {
+  try {
+    await access(path, constants.F_OK);
+    return true;
+  } catch {
+    return false;
+  }
+}
 
 // ============================================================================
 // Sub-process Functions
@@ -153,25 +172,40 @@ async function processMarkdown(
  * @param imageUrls - List of image URLs extracted from HTML
  * @param file - File descriptor
  * @param config - Conversion configuration
- * @returns Object with URL mapping (original URL -> local path) and image descriptors
+ * @param persistentMapping - Existing image mapping (URL -> filename)
+ * @returns Object with URL mapping, image descriptors, and updated persistent mapping
  */
 async function processImages(
   imageUrls: string[],
   file: FileDescriptor,
   config: ConversionConfig,
-): Promise<{ mapping: Map<string, string>; images: ImageDescriptor[] }> {
+  persistentMapping: ImageMapping,
+): Promise<{
+  mapping: Map<string, string>;
+  images: ImageDescriptor[];
+  updatedMapping: ImageMapping;
+}> {
   const mapping = new Map<string, string>();
+  const updatedMapping = { ...persistentMapping };
 
   if (!config.images.download || imageUrls.length === 0) {
-    return { mapping, images: [] }; // Skip if disabled or no images
+    return { mapping, images: [], updatedMapping }; // Skip if disabled or no images
   }
 
   const images: ImageDescriptor[] = [];
   const idGenerator = new IdGenerator();
 
+  // Register all existing IDs from persistent mapping to avoid collisions
+  for (const filename of Object.values(persistentMapping)) {
+    // Extract ID from filename (e.g., "a3f9.png" -> "a3f9")
+    const id = filename.split(".")[0];
+    idGenerator.register(id);
+  }
+
+  let cachedCount = 0;
+  let downloadedCount = 0;
+
   for (const src of imageUrls) {
-    // 1. Generate unique ID for this image
-    const uniqueId = idGenerator.generate();
     const extension =
       extname(new URL(src, "https://www.dndbeyond.com").pathname) || ".png";
 
@@ -182,7 +216,23 @@ async function processImages(
       continue;
     }
 
-    const localPath = `${uniqueId}${extension}`;
+    // 1. Check if this URL already exists in persistent mapping
+    let uniqueId: string;
+    let localPath: string;
+
+    if (persistentMapping[src]) {
+      // Reuse existing filename from mapping
+      localPath = persistentMapping[src];
+      uniqueId = localPath.split(".")[0]; // Extract ID from filename
+    } else {
+      // Generate new ID and filename
+      uniqueId = idGenerator.generate();
+      localPath = `${uniqueId}${extension}`;
+
+      // Add to updated mapping
+      updatedMapping[src] = localPath;
+    }
+
     const outputPath = join(dirname(file.outputPath), localPath);
 
     const imageDescriptor: ImageDescriptor = {
@@ -194,30 +244,48 @@ async function processImages(
       downloadStatus: "pending",
     };
 
-    // 2. Download image with retry logic
-    try {
-      await downloadImageWithRetry(
-        src,
-        outputPath,
-        config.images.retries,
-        config.images.timeout,
-      );
+    // 2. Check if image file already exists (caching)
+    const exists = await fileExists(outputPath);
+
+    if (exists) {
+      // Image already downloaded - skip download
       imageDescriptor.downloadStatus = "success";
-
-      // 3. Add to URL mapping (original URL -> local path)
       mapping.set(src, localPath);
-    } catch (error) {
-      imageDescriptor.downloadStatus = "failed";
-      imageDescriptor.error = error as Error;
-      console.error(`Failed to download image ${src}:`, error);
+      cachedCount++;
+    } else {
+      // 3. Download image with retry logic
+      try {
+        await downloadImageWithRetry(
+          src,
+          outputPath,
+          config.images.retries,
+          config.images.timeout,
+        );
+        imageDescriptor.downloadStatus = "success";
 
-      // Don't add to mapping if download failed - keep original URL
+        // 4. Add to URL mapping (original URL -> local path)
+        mapping.set(src, localPath);
+        downloadedCount++;
+      } catch (error) {
+        imageDescriptor.downloadStatus = "failed";
+        imageDescriptor.error = error as Error;
+        console.error(`Failed to download image ${src}:`, error);
+
+        // Don't add to mapping if download failed - keep original URL
+      }
     }
 
     images.push(imageDescriptor);
   }
 
-  return { mapping, images };
+  // Log summary if in debug mode
+  if (config.logging.level === "debug" && imageUrls.length > 0) {
+    console.log(
+      `  Images: ${downloadedCount} downloaded, ${cachedCount} cached`,
+    );
+  }
+
+  return { mapping, images, updatedMapping };
 }
 
 /**
@@ -274,10 +342,7 @@ async function downloadImageWithRetry(
  * @param ctx - Conversion context
  * @returns YAML frontmatter as string (includes --- delimiters)
  */
-function processFrontmatter(
-  file: FileDescriptor,
-  ctx: ConversionContext,
-): string {
+function processFrontmatter(file: FileDescriptor): string {
   // 1. Extract title from filename (remove numeric prefix and convert to title case)
   const title = file.filename
     .replace(/^\d+-/, "") // Remove numeric prefix
@@ -288,27 +353,13 @@ function processFrontmatter(
   // 2. Generate current date in ISO format
   const date = new Date().toISOString().split("T")[0]; // YYYY-MM-DD
 
-  // 3. Find sourcebook for this file
-  const sourcebook = ctx.sourcebooks?.find(
-    (sb) => sb.sourcebook === file.sourcebook,
-  );
-
-  // 4. Generate tags
-  const tags = [
-    "dnd5e/source",
-    `dnd5e/${file.sourcebook}`,
-    sourcebook
-      ? `dnd5e/${sourcebook.title.toLowerCase().replace(/\s+/g, "-")}`
-      : null,
-  ].filter(Boolean); // Remove null values
-
-  // 5. Build YAML frontmatter
+  // 3. Build YAML frontmatter
   const frontmatter = [
     "---",
     `title: "${title}"`,
     `date: ${date}`,
-    `tags:`,
-    ...tags.map((tag) => `  - ${tag}`),
+    "tags:",
+    `  - dnd5e/chapter`,
     "---",
     "",
   ].join("\n");
@@ -448,8 +499,7 @@ async function processIndexes(ctx: ConversionContext): Promise<void> {
       `title: "${sourcebook.title}"`,
       `date: ${new Date().toISOString().split("T")[0]}`,
       `tags:`,
-      `  - dnd5e/index`,
-      `  - dnd5e/${sourcebook.sourcebook}`,
+      `  - dnd5e/source`,
       "---",
       "",
     ].join("\n");
@@ -460,13 +510,13 @@ async function processIndexes(ctx: ConversionContext): Promise<void> {
       "",
       "## Contents",
       "",
-      ...sourcebook.files.map((file, index) => {
+      ...sourcebook.files.map((file) => {
         const title = file.filename
           .replace(/^\d+-/, "")
           .split("-")
           .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
           .join(" ");
-        return `${index + 1}. [${title}](${file.uniqueId}.md)`;
+        return `- [${title}](${file.uniqueId}.md)`;
       }),
       "",
     ].join("\n");
@@ -514,6 +564,12 @@ export async function process(ctx: ConversionContext): Promise<void> {
 
   const writtenFiles: WrittenFile[] = [];
 
+  // Load persistent image mapping from images.json (if exists)
+  let imageMapping = await loadMapping(
+    ctx.config.output.directory,
+    "images.json",
+  );
+
   // Process each file one at a time (memory-efficient)
   for (const file of ctx.files) {
     // 1. Parse HTML and extract content, anchors, and image URLs (ONLY place Cheerio is used)
@@ -523,21 +579,21 @@ export async function process(ctx: ConversionContext): Promise<void> {
     );
 
     // 2. Download images and build URL mapping (original URL -> local path)
-    const { mapping: imageMapping } = await processImages(
+    const { mapping: urlMapping, updatedMapping } = await processImages(
       imageUrls,
       file,
       ctx.config,
+      imageMapping,
     );
+
+    // Update persistent mapping for next file
+    imageMapping = updatedMapping;
 
     // 3. Convert HTML to Markdown using Turndown with image URL mapping
-    const markdown = await processMarkdown(
-      htmlContent,
-      imageMapping,
-      ctx.config,
-    );
+    const markdown = await processMarkdown(htmlContent, urlMapping, ctx.config);
 
     // 4. Build frontmatter
-    const frontmatter = processFrontmatter(file, ctx);
+    const frontmatter = processFrontmatter(file);
 
     // 5. Build navigation links
     const navigation = processNavigation(file, ctx);
@@ -557,7 +613,10 @@ export async function process(ctx: ConversionContext): Promise<void> {
     // All strings are garbage collected here before next iteration
   }
 
-  // 7. Generate index files
+  // 7. Save updated image mapping to images.json
+  await saveMapping(ctx.config.output.directory, "images.json", imageMapping);
+
+  // 8. Generate index files
   await processIndexes(ctx);
 
   // Write to context

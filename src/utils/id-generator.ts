@@ -30,6 +30,14 @@ export class IdGenerator {
   }
 
   /**
+   * Register an existing ID to prevent collisions
+   * Used when loading IDs from persistent storage
+   */
+  register(id: string): void {
+    this.usedIds.add(id);
+  }
+
+  /**
    * Reset the used IDs set (useful for testing or new conversion runs)
    */
   reset(): void {

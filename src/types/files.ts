@@ -60,3 +60,19 @@ export interface FileAnchors {
   // Built during HTML processing using Cheerio to find elements with id attributes
   htmlIdToAnchor: Record<string, string>;
 }
+
+/**
+ * Image mapping for persistence
+ * Maps URL -> local filename
+ * Example: { "https://media.dndbeyond.com/.../image.png": "a3f9.png" }
+ * Saved to images.json in the output directory root
+ */
+export type ImageMapping = Record<string, string>;
+
+/**
+ * File mapping for persistence
+ * Maps input HTML path -> output markdown filename
+ * Example: { "players-handbook/01-intro.html": "a3f9.md" }
+ * Saved to files.json in the output directory root
+ */
+export type FileMapping = Record<string, string>;
