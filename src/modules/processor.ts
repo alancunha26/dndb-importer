@@ -1,3 +1,5 @@
+/* eslint-disable @typescript-eslint/no-unused-vars */
+
 /**
  * Processor Module
  * Processes files one at a time and writes immediately to avoid memory bloat
@@ -144,9 +146,6 @@ export async function process(ctx: ConversionContext): Promise<void> {
     const content = $(config.html.contentSelector);
 
     if (content.length === 0) {
-      console.warn(
-        `Warning: No content found with selector "${config.html.contentSelector}" in ${file.relativePath}`,
-      );
       return {
         content: "",
         title: "",
@@ -283,7 +282,6 @@ export async function process(ctx: ConversionContext): Promise<void> {
 
       const format = extension.slice(1);
       if (!config.images.formats.includes(format)) {
-        console.warn(`Skipping unsupported image format: ${format} (${src})`);
         continue;
       }
 
@@ -300,7 +298,7 @@ export async function process(ctx: ConversionContext): Promise<void> {
             config.images.timeout,
           );
         } catch (error) {
-          console.error(`Failed to download image ${src}:`, error);
+          // Silently continue - image download failures don't stop processing
         }
       }
 
@@ -426,7 +424,6 @@ export async function process(ctx: ConversionContext): Promise<void> {
 
     // Check if cover image exists
     if (!(await fileExists(inputPath))) {
-      console.warn(`Cover image not found: ${inputPath}`);
       return undefined;
     }
 
@@ -459,7 +456,7 @@ export async function process(ctx: ConversionContext): Promise<void> {
 
       return localFilename;
     } catch (error) {
-      console.error(`Failed to copy cover image ${inputPath}:`, error);
+      // Silently continue - cover image copy failures don't stop processing
       return undefined;
     }
   }
@@ -510,16 +507,12 @@ export async function process(ctx: ConversionContext): Promise<void> {
       // 6. Ensure output directory exists and write index
       await mkdir(dirname(sourcebook.outputPath), { recursive: true });
       await writeFile(sourcebook.outputPath, indexMarkdown, "utf-8");
-
-      console.log(`Created index for ${sourcebook.title}`);
     }
   }
 
   // ============================================================================
   // Main Processing Logic
   // ============================================================================
-
-  console.log(`Processing ${files.length} files...`);
 
   // Process each file one at a time (memory-efficient)
   for (const file of files) {

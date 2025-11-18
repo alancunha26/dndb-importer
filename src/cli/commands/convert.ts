@@ -2,6 +2,7 @@
  * Convert command - Loads config and runs conversion pipeline
  */
 
+import ora from "ora";
 import { loadConfig } from "../../utils/config";
 import * as modules from "../../modules";
 import type { ConversionContext } from "../../types";
@@ -15,6 +16,8 @@ interface ConvertOptions {
 }
 
 export async function convertCommand(options: ConvertOptions): Promise<void> {
+  const spinner = ora("Initializing...").start();
+
   try {
     // Load configuration (default → user → custom)
     const config = await loadConfig(options.config);
@@ -37,10 +40,17 @@ export async function convertCommand(options: ConvertOptions): Promise<void> {
       config,
     };
 
-    // Run conversion pipeline
+    // Run conversion pipeline with spinner updates
+    spinner.text = "Scanning files...";
     await modules.scan(ctx);
+
+    spinner.text = "Processing files...";
     await modules.process(ctx);
+
+    spinner.text = "Resolving links...";
     await modules.resolve(ctx);
+
+    spinner.text = "Building statistics...";
     await modules.stats(ctx);
 
     // Stats must be populated by stats module
@@ -48,16 +58,18 @@ export async function convertCommand(options: ConvertOptions): Promise<void> {
       throw new Error("Stats module failed to populate statistics");
     }
 
+    // Complete spinner
+    spinner.succeed("Conversion complete!");
+
     // Display summary
-    console.log("\n✅ Conversion complete!");
-    console.log(`Files processed: ${ctx.stats.successful}/${ctx.stats.totalFiles}`);
+    console.log(`\nFiles processed: ${ctx.stats.successful}/${ctx.stats.totalFiles}`);
     console.log(`Images downloaded: ${ctx.stats.imagesDownloaded}`);
     console.log(`Links resolved: ${ctx.stats.linksResolved}`);
     if (ctx.stats.duration) {
       console.log(`Duration: ${(ctx.stats.duration / 1000).toFixed(2)}s`);
     }
   } catch (error) {
-    console.error("\n❌ Conversion failed:");
+    spinner.fail("Conversion failed");
     console.error(error);
     process.exit(1);
   }

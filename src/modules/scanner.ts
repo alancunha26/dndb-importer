@@ -52,10 +52,7 @@ async function loadSourcebookMetadata(
     const metadata = JSON.parse(content) as SourcebookMetadata;
     return metadata;
   } catch (error) {
-    console.warn(
-      `Warning: Failed to load sourcebook.json from ${directory}:`,
-      error,
-    );
+    // Silently return empty metadata if file doesn't exist or fails to parse
     return {};
   }
 }
@@ -72,15 +69,9 @@ async function loadSourcebookMetadata(
  */
 export async function scan(ctx: ConversionContext): Promise<void> {
   const inputDir = path.resolve(ctx.config.input.directory);
-  console.log("Scanning directory:", inputDir);
 
   // 1. Detect global templates (in input root)
   const globalTemplates = await detectTemplates(inputDir);
-  if (globalTemplates.index || globalTemplates.file) {
-    console.log("Found global templates:");
-    if (globalTemplates.index) console.log(`  - index.md.hbs`);
-    if (globalTemplates.file) console.log(`  - file.md.hbs`);
-  }
 
   // 2. Discover HTML files using fast-glob (exclude .hbs files)
   const htmlFiles = await glob(ctx.config.input.pattern, {
@@ -91,7 +82,6 @@ export async function scan(ctx: ConversionContext): Promise<void> {
   });
 
   if (htmlFiles.length === 0) {
-    console.warn("No HTML files found in:", inputDir);
     ctx.files = [];
     ctx.sourcebooks = [];
     ctx.fileIndex = new Map();
@@ -99,8 +89,6 @@ export async function scan(ctx: ConversionContext): Promise<void> {
     ctx.globalTemplates = globalTemplates;
     return;
   }
-
-  console.log(`Found ${htmlFiles.length} HTML file(s)`);
 
   // 3. Sort files by numeric prefix (e.g., 01-, 02-, etc.)
   const sortedFiles = htmlFiles.sort((a, b) => {
@@ -191,13 +179,6 @@ export async function scan(ctx: ConversionContext): Promise<void> {
       });
 
       sourcebookIdMap.set(sourcebook, indexId);
-
-      // Log sourcebook-specific templates if found
-      if (sourcebookTemplates.index || sourcebookTemplates.file) {
-        console.log(`  Templates for ${sourcebook}:`);
-        if (sourcebookTemplates.index) console.log(`    - index.md.hbs`);
-        if (sourcebookTemplates.file) console.log(`    - file.md.hbs`);
-      }
     }
 
     // Generate unique ID for this file
@@ -252,10 +233,4 @@ export async function scan(ctx: ConversionContext): Promise<void> {
   ctx.fileIndex = fileIndex;
   ctx.pathIndex = pathIndex;
   ctx.globalTemplates = globalTemplates;
-
-  console.log(`Grouped into ${sourcebooks.length} sourcebook(s)`);
-  for (const sb of sourcebooks) {
-    const sourcebookFiles = files.filter((f) => f.sourcebookId === sb.id);
-    console.log(`  - ${sb.title}: ${sourcebookFiles.length} file(s)`);
-  }
 }

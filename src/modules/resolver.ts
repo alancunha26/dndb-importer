@@ -33,15 +33,11 @@ export async function resolve(ctx: ConversionContext): Promise<void> {
 
   // Skip if link resolution is disabled
   if (!ctx.config.links.resolveInternal) {
-    console.log("Link resolution disabled, skipping...");
     return;
   }
 
-  // Only process files that have been written
-  const writtenFiles = ctx.files.filter((f) => f.written);
-  console.log(`Resolving links in ${writtenFiles.length} files...`);
-
   // TODO: Implement link resolution logic
+  // const writtenFiles = ctx.files.filter((f) => f.written);
   // 1. Build LinkResolutionIndex from all file anchors
   //    const index: LinkResolutionIndex = {}
   //    for (const file of writtenFiles) {

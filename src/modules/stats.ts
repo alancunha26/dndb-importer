@@ -20,8 +20,6 @@ export async function stats(ctx: ConversionContext): Promise<void> {
     throw new Error("All pipeline stages must complete before building stats");
   }
 
-  console.log("Building statistics...");
-
   // TODO: Implement stats building logic
   // 1. Count files (total, successful = written, failed, skipped)
   //    const writtenFiles = ctx.files.filter(f => f.written)
