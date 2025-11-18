@@ -4,6 +4,7 @@
  */
 
 import ShortUniqueId from "short-unique-id";
+import { extractIdFromFilename } from "./string";
 
 export class IdGenerator {
   private uid: ShortUniqueId;
@@ -14,6 +15,29 @@ export class IdGenerator {
       length: 4,
       dictionary: "alphanum_lower",
     });
+  }
+
+  /**
+   * Create an IdGenerator from an existing mapping
+   * Registers all IDs from the mapping to prevent collisions
+   *
+   * @param mapping - Record mapping keys to filenames (e.g., URL -> "a3f9.png")
+   * @returns IdGenerator instance with registered IDs
+   *
+   * @example
+   * const mapping = { "url1": "a3f9.png", "url2": "b4x8.png" };
+   * const generator = IdGenerator.fromMapping(mapping);
+   * // generator won't generate "a3f9" or "b4x8" (already registered)
+   */
+  static fromMapping(mapping: Record<string, string>): IdGenerator {
+    const generator = new IdGenerator();
+
+    for (const filename of Object.values(mapping)) {
+      const id = extractIdFromFilename(filename);
+      generator.register(id);
+    }
+
+    return generator;
   }
 
   /**

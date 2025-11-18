@@ -21,7 +21,11 @@ import { loadIndexTemplate, loadFileTemplate } from "../templates";
 import { IdGenerator } from "../utils/id-generator";
 import { loadMapping, saveMapping } from "../utils/mapping";
 import { fileExists } from "../utils/fs";
-import { filenameToTitle, isImageUrl } from "../utils/string";
+import {
+  filenameToTitle,
+  isImageUrl,
+  extractIdFromFilename,
+} from "../utils/string";
 import type {
   ConversionContext,
   FileDescriptor,
@@ -116,11 +120,7 @@ export async function process(ctx: ConversionContext): Promise<void> {
   let imageMapping = await loadMapping(config.output.directory, "images.json");
 
   // Create ID generator and register existing IDs from mapping
-  const idGenerator = new IdGenerator();
-  for (const filename of Object.values(imageMapping)) {
-    const id = filename.split(".")[0];
-    idGenerator.register(id);
-  }
+  const idGenerator = IdGenerator.fromMapping(imageMapping);
 
   // ============================================================================
   // Inner Functions (created by factory, share variables via closure)
@@ -433,7 +433,7 @@ export async function process(ctx: ConversionContext): Promise<void> {
     // Check if we already have an ID for this cover image
     let uniqueId: string;
     if (imageMapping[mappingKey]) {
-      uniqueId = imageMapping[mappingKey].split(".")[0]; // Extract ID from filename
+      uniqueId = extractIdFromFilename(imageMapping[mappingKey]);
     } else {
       // Generate new unique ID
       uniqueId = idGenerator.generate();

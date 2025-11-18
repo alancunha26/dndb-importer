@@ -9,7 +9,7 @@ import { readFile } from "fs/promises";
 import { IdGenerator } from "../utils/id-generator";
 import { loadMapping, saveMapping } from "../utils/mapping";
 import { fileExists } from "../utils/fs";
-import { filenameToTitle } from "../utils/string";
+import { filenameToTitle, extractIdFromFilename } from "../utils/string";
 import type {
   ConversionContext,
   FileDescriptor,
@@ -112,14 +112,8 @@ export async function scan(ctx: ConversionContext): Promise<void> {
     ctx.config.output.directory,
     "files.json",
   );
-  const idGenerator = new IdGenerator();
+  const idGenerator = IdGenerator.fromMapping(fileMapping);
   const updatedFileMapping: FileMapping = { ...fileMapping };
-
-  // Register existing IDs to avoid collisions
-  for (const mdFilename of Object.values(fileMapping)) {
-    const id = path.basename(mdFilename, ctx.config.output.extension);
-    idGenerator.register(id);
-  }
 
   // 5. Single pass: Process files and create sourcebooks on-demand
   const files: FileDescriptor[] = [];
@@ -149,10 +143,7 @@ export async function scan(ctx: ConversionContext): Promise<void> {
 
       if (fileMapping[indexKey]) {
         // Reuse existing index ID
-        indexId = path.basename(
-          fileMapping[indexKey],
-          ctx.config.output.extension,
-        );
+        indexId = extractIdFromFilename(fileMapping[indexKey]);
       } else {
         // Generate new index ID
         indexId = idGenerator.generate();
@@ -185,10 +176,7 @@ export async function scan(ctx: ConversionContext): Promise<void> {
     let uniqueId: string;
     if (fileMapping[relativePath]) {
       // Reuse existing ID from mapping
-      uniqueId = path.basename(
-        fileMapping[relativePath],
-        ctx.config.output.extension,
-      );
+      uniqueId = extractIdFromFilename(fileMapping[relativePath]);
     } else {
       // Generate new ID
       uniqueId = idGenerator.generate();

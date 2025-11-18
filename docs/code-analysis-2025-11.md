@@ -1427,15 +1427,20 @@ None of the recommended changes would break the public API or user-facing featur
 - [x] Silent error handling (errors no longer interrupt spinner)
 
 **ID Extraction Standardization:**
-- [ ] Add `extractIdFromFilename()` to `src/utils/string.ts`
-- [ ] Replace ID extraction patterns in scanner.ts and processor.ts
+- [x] Add `extractIdFromFilename()` to `src/utils/string.ts`
+- [x] Replace ID extraction patterns in scanner.ts (3 occurrences)
+- [x] Replace ID extraction patterns in processor.ts (2 occurrences)
+- [x] Fixes bug with multi-dot filenames (e.g., "image.v2.png")
 
 **Verification:**
 - [x] TypeScript type checking passes
 - [x] Test conversion successful (59/59 files processed)
 - [x] Spinner displays correctly with clean output
+- [x] ID extraction works correctly with new utility function
 
-### Phase 2: Fix Stats (2-3 hours)
+### Phase 2: Fix Stats (2-3 hours) - SKIPPED
+
+**Note:** Stats implementation deferred to later. Current stats reporting is acceptable for v1.0.
 
 - [ ] Add startTime to context initialization
 - [ ] Track image download success/failure in processor
@@ -1443,12 +1448,27 @@ None of the recommended changes would break the public API or user-facing featur
 - [ ] Implement proper stats calculation in stats.ts
 - [ ] Update convert command to show accurate stats
 
-### Phase 3: Reduce Duplication (2-4 hours)
+### Phase 3: Reduce Duplication (2-4 hours) ✅ COMPLETED
 
-- [ ] Add `createIdGeneratorFromMapping()` to id-generator.ts
-- [ ] Add `loadMappingWithIdGenerator()` to mapping.ts
-- [ ] Update scanner.ts to use new utilities
-- [ ] Update processor.ts to use new utilities
+**Approach:** Option B - Static factory method on IdGenerator class
+
+- [x] Add `IdGenerator.fromMapping()` static factory method
+- [x] Update scanner.ts to use `IdGenerator.fromMapping(fileMapping)`
+- [x] Update processor.ts to use `IdGenerator.fromMapping(imageMapping)`
+
+**Implementation Details:**
+- Created static method `IdGenerator.fromMapping(mapping)` instead of standalone utility
+- Cleaner, more idiomatic design (follows common factory method patterns)
+- Reduces code duplication: 5 lines → 1 line in both modules
+- **Files modified:**
+  - `src/utils/id-generator.ts` - Added static `fromMapping()` method
+  - `src/modules/scanner.ts` - Replaced manual ID registration loop
+  - `src/modules/processor.ts` - Replaced manual ID registration loop
+
+**Verification:**
+- [x] TypeScript type checking passes
+- [x] Test conversion successful (59/59 files processed)
+- [x] ID collision prevention works correctly
 
 ### Phase 4: Improve Error Handling (2-3 hours)
 
