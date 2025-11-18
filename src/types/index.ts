@@ -21,11 +21,7 @@ export type {
   SourcebookInfo,
   SourcebookMetadata,
   TemplateSet,
-  ImageDescriptor,
-  DocumentMetadata,
-  NavigationLinks,
   FileAnchors,
-  ImageMapping,
   FileMapping,
   IndexTemplateContext,
   FileTemplateContext,
@@ -33,8 +29,6 @@ export type {
 
 // Pipeline
 export type {
-  ProcessedFile,
-  // WrittenFile is deprecated - FileDescriptor is enriched instead
   LinkResolutionIndex,
   LinkResolutionResult,
   ProcessingStats,

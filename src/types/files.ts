@@ -50,37 +50,6 @@ export interface SourcebookInfo {
   // Files are stored separately in ConversionContext.files with sourcebookId reference
 }
 
-export interface ImageDescriptor {
-  originalUrl: string; // Original image URL from HTML
-  uniqueId: string; // 4-character unique ID
-  extension: string; // File extension (png, jpg, webp, etc.)
-  localPath: string; // Filename in output (e.g., "m3x7.png")
-  sourcebook: string; // Sourcebook directory name
-  downloadStatus: "pending" | "success" | "failed";
-  error?: Error;
-}
-
-export interface DocumentMetadata {
-  title: string;
-  date: string; // ISO date string (YYYY-MM-DD)
-  tags: string[]; // e.g., ["dnd5e/chapter", "dnd5e/source"]
-}
-
-export interface NavigationLinks {
-  previous?: {
-    title: string;
-    id: string; // Unique ID of previous file
-  };
-  index: {
-    title: string; // Sourcebook title
-    id: string; // Unique ID of index file
-  };
-  next?: {
-    title: string;
-    id: string; // Unique ID of next file
-  };
-}
-
 export interface FileAnchors {
   // All valid markdown anchors in this file
   // Includes plural/singular variants for better matching
@@ -91,14 +60,6 @@ export interface FileAnchors {
   // Built during HTML processing using Cheerio to find elements with id attributes
   htmlIdToAnchor: Record<string, string>;
 }
-
-/**
- * Image mapping for persistence
- * Maps URL -> local filename
- * Example: { "https://media.dndbeyond.com/.../image.png": "a3f9.png" }
- * Saved to images.json in the output directory root
- */
-export type ImageMapping = Record<string, string>;
 
 /**
  * File mapping for persistence
@@ -119,6 +80,7 @@ export type FileMapping = Record<string, string>;
 export interface IndexTemplateContext {
   // Sourcebook metadata
   title: string;
+  date: string;
   edition?: string;
   description?: string;
   author?: string;

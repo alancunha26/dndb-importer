@@ -2,38 +2,7 @@
  * Pipeline module data types
  */
 
-import type { CheerioAPI } from "cheerio";
-import type {
-  FileDescriptor,
-  ImageDescriptor,
-  DocumentMetadata,
-  FileAnchors,
-} from "./files";
-
-// ============================================================================
-// Processor Module
-// ============================================================================
-
-export interface ProcessedFile {
-  descriptor: FileDescriptor;
-  html: CheerioAPI;
-  markdown: string;
-  metadata: DocumentMetadata;
-  images: ImageDescriptor[];
-  anchors: FileAnchors;
-}
-
-// ============================================================================
-// Writer Module (deprecated - processor now enriches FileDescriptor directly)
-// ============================================================================
-
-// WrittenFile is deprecated - FileDescriptor is enriched instead
-// export interface WrittenFile {
-//   descriptor: FileDescriptor;
-//   path: string;
-//   title: string;
-//   anchors: FileAnchors;
-// }
+import type { FileAnchors } from "./files";
 
 // ============================================================================
 // Resolver Module

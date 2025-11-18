@@ -10,7 +10,14 @@ import { IdGenerator } from "../utils/id-generator";
 import { loadMapping, saveMapping } from "../utils/mapping";
 import { fileExists } from "../utils/fs";
 import { filenameToTitle } from "../utils/string";
-import type { ConversionContext, FileDescriptor, FileMapping, SourcebookInfo, SourcebookMetadata, TemplateSet } from "../types";
+import type {
+  ConversionContext,
+  FileDescriptor,
+  FileMapping,
+  SourcebookInfo,
+  SourcebookMetadata,
+  TemplateSet,
+} from "../types";
 
 /**
  * Detect template files in a directory
@@ -30,7 +37,9 @@ async function detectTemplates(directory: string): Promise<TemplateSet> {
  * Load sourcebook metadata from sourcebook.json
  * Returns empty object if file doesn't exist or parsing fails
  */
-async function loadSourcebookMetadata(directory: string): Promise<SourcebookMetadata> {
+async function loadSourcebookMetadata(
+  directory: string,
+): Promise<SourcebookMetadata> {
   const metadataPath = path.join(directory, "sourcebook.json");
 
   try {
@@ -43,7 +52,10 @@ async function loadSourcebookMetadata(directory: string): Promise<SourcebookMeta
     const metadata = JSON.parse(content) as SourcebookMetadata;
     return metadata;
   } catch (error) {
-    console.warn(`Warning: Failed to load sourcebook.json from ${directory}:`, error);
+    console.warn(
+      `Warning: Failed to load sourcebook.json from ${directory}:`,
+      error,
+    );
     return {};
   }
 }
@@ -108,7 +120,10 @@ export async function scan(ctx: ConversionContext): Promise<void> {
   });
 
   // 4. Load persistent file mapping (HTML path -> markdown filename)
-  const fileMapping = await loadMapping(ctx.config.output.directory, "files.json");
+  const fileMapping = await loadMapping(
+    ctx.config.output.directory,
+    "files.json",
+  );
   const idGenerator = new IdGenerator();
   const updatedFileMapping: FileMapping = { ...fileMapping };
 
@@ -146,12 +161,16 @@ export async function scan(ctx: ConversionContext): Promise<void> {
 
       if (fileMapping[indexKey]) {
         // Reuse existing index ID
-        indexId = path.basename(fileMapping[indexKey], ctx.config.output.extension);
+        indexId = path.basename(
+          fileMapping[indexKey],
+          ctx.config.output.extension,
+        );
       } else {
         // Generate new index ID
         indexId = idGenerator.generate();
         // Add to updated mapping
-        updatedFileMapping[indexKey] = `${indexId}${ctx.config.output.extension}`;
+        updatedFileMapping[indexKey] =
+          `${indexId}${ctx.config.output.extension}`;
       }
 
       // Use title from metadata, or generate from directory name
@@ -159,8 +178,7 @@ export async function scan(ctx: ConversionContext): Promise<void> {
 
       const outputPath = path.join(
         ctx.config.output.directory,
-        sourcebook,
-        `${indexId}${ctx.config.output.extension}`
+        `${indexId}${ctx.config.output.extension}`,
       );
 
       sourcebooks.push({
@@ -186,18 +204,21 @@ export async function scan(ctx: ConversionContext): Promise<void> {
     let uniqueId: string;
     if (fileMapping[relativePath]) {
       // Reuse existing ID from mapping
-      uniqueId = path.basename(fileMapping[relativePath], ctx.config.output.extension);
+      uniqueId = path.basename(
+        fileMapping[relativePath],
+        ctx.config.output.extension,
+      );
     } else {
       // Generate new ID
       uniqueId = idGenerator.generate();
       // Add to updated mapping
-      updatedFileMapping[relativePath] = `${uniqueId}${ctx.config.output.extension}`;
+      updatedFileMapping[relativePath] =
+        `${uniqueId}${ctx.config.output.extension}`;
     }
 
     const outputPath = path.join(
       ctx.config.output.directory,
-      sourcebook,
-      `${uniqueId}${ctx.config.output.extension}`
+      `${uniqueId}${ctx.config.output.extension}`,
     );
 
     const sourcebookId = sourcebookIdMap.get(sourcebook)!;
@@ -219,7 +240,11 @@ export async function scan(ctx: ConversionContext): Promise<void> {
   }
 
   // 7. Save updated file mapping
-  await saveMapping(ctx.config.output.directory, "files.json", updatedFileMapping);
+  await saveMapping(
+    ctx.config.output.directory,
+    "files.json",
+    updatedFileMapping,
+  );
 
   // Write to context
   ctx.files = files;
@@ -230,7 +255,7 @@ export async function scan(ctx: ConversionContext): Promise<void> {
 
   console.log(`Grouped into ${sourcebooks.length} sourcebook(s)`);
   for (const sb of sourcebooks) {
-    const sourcebookFiles = files.filter(f => f.sourcebookId === sb.id);
+    const sourcebookFiles = files.filter((f) => f.sourcebookId === sb.id);
     console.log(`  - ${sb.title}: ${sourcebookFiles.length} file(s)`);
   }
 }

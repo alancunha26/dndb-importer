@@ -12,7 +12,7 @@ export class IdGenerator {
   constructor() {
     this.uid = new ShortUniqueId({
       length: 4,
-      dictionary: "alphanum_lower", // lowercase alphanumeric only
+      dictionary: "alphanum_lower",
     });
   }
 
