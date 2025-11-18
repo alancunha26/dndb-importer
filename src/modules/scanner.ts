@@ -110,6 +110,7 @@ export async function scan(ctx: ConversionContext): Promise<void> {
   // 4. Load persistent file mapping (HTML path -> markdown filename)
   const fileMapping = await loadMapping(ctx.config.output.directory, "files.json");
   const idGenerator = new IdGenerator();
+  const updatedFileMapping: FileMapping = { ...fileMapping };
 
   // Register existing IDs to avoid collisions
   for (const mdFilename of Object.values(fileMapping)) {
@@ -117,79 +118,71 @@ export async function scan(ctx: ConversionContext): Promise<void> {
     idGenerator.register(id);
   }
 
-  // 5. First pass: Collect unique sourcebook names and create SourcebookInfo objects
-  const sourcebookNames = new Set<string>();
-  for (const sourcePath of sortedFiles) {
-    const relativePath = path.relative(inputDir, sourcePath);
-    const sourcebook = path.dirname(relativePath);
-    sourcebookNames.add(sourcebook);
-  }
-
-  // Create SourcebookInfo objects with unique IDs
-  const sourcebooks: SourcebookInfo[] = [];
-  const sourcebookIdMap = new Map<string, string>(); // sourcebook dir name → ID
-  const updatedFileMapping: FileMapping = { ...fileMapping };
-
-  for (const sourcebookName of sourcebookNames) {
-    // Detect sourcebook-specific templates and metadata
-    const sourcebookDir = path.join(inputDir, sourcebookName);
-    const sourcebookTemplates = await detectTemplates(sourcebookDir);
-    const metadata = await loadSourcebookMetadata(sourcebookDir);
-
-    // Check if index file already has a mapping
-    const indexKey = `${sourcebookName}/index`;
-    let indexId: string;
-
-    if (fileMapping[indexKey]) {
-      // Reuse existing index ID
-      indexId = path.basename(fileMapping[indexKey], ctx.config.output.extension);
-    } else {
-      // Generate new index ID
-      indexId = idGenerator.generate();
-      // Add to updated mapping
-      updatedFileMapping[indexKey] = `${indexId}${ctx.config.output.extension}`;
-    }
-
-    // Use title from metadata, or generate from directory name
-    const title = metadata.title ?? filenameToTitle(sourcebookName);
-
-    const outputPath = path.join(
-      ctx.config.output.directory,
-      sourcebookName,
-      `${indexId}${ctx.config.output.extension}`
-    );
-
-    sourcebooks.push({
-      id: indexId,
-      title,
-      sourcebook: sourcebookName,
-      outputPath,
-      metadata,
-      templates: sourcebookTemplates,
-    });
-
-    sourcebookIdMap.set(sourcebookName, indexId);
-
-    // Log sourcebook-specific templates if found
-    if (sourcebookTemplates.index || sourcebookTemplates.file) {
-      console.log(`  Templates for ${sourcebookName}:`);
-      if (sourcebookTemplates.index) console.log(`    - index.md.hbs`);
-      if (sourcebookTemplates.file) console.log(`    - file.md.hbs`);
-    }
-  }
-
-  // 6. Second pass: Generate unique IDs and create FileDescriptors
-  // Build indices for fast lookups
+  // 5. Single pass: Process files and create sourcebooks on-demand
   const files: FileDescriptor[] = [];
   const fileIndex = new Map<string, FileDescriptor>();
   const pathIndex = new Map<string, string>();
+  const sourcebooks: SourcebookInfo[] = [];
+  const sourcebookIdMap = new Map<string, string>(); // sourcebook dir name → ID
+  const processedSourcebooks = new Set<string>(); // Track which sourcebooks we've seen
 
   for (const sourcePath of sortedFiles) {
     const relativePath = path.relative(inputDir, sourcePath);
     const sourcebook = path.dirname(relativePath);
     const filename = path.basename(sourcePath, path.extname(sourcePath));
 
-    // Check if this HTML file already has a mapping
+    // Create SourcebookInfo on first encounter
+    if (!processedSourcebooks.has(sourcebook)) {
+      processedSourcebooks.add(sourcebook);
+
+      // Detect sourcebook-specific templates and metadata
+      const sourcebookDir = path.join(inputDir, sourcebook);
+      const sourcebookTemplates = await detectTemplates(sourcebookDir);
+      const metadata = await loadSourcebookMetadata(sourcebookDir);
+
+      // Check if index file already has a mapping
+      const indexKey = `${sourcebook}/index`;
+      let indexId: string;
+
+      if (fileMapping[indexKey]) {
+        // Reuse existing index ID
+        indexId = path.basename(fileMapping[indexKey], ctx.config.output.extension);
+      } else {
+        // Generate new index ID
+        indexId = idGenerator.generate();
+        // Add to updated mapping
+        updatedFileMapping[indexKey] = `${indexId}${ctx.config.output.extension}`;
+      }
+
+      // Use title from metadata, or generate from directory name
+      const title = metadata.title ?? filenameToTitle(sourcebook);
+
+      const outputPath = path.join(
+        ctx.config.output.directory,
+        sourcebook,
+        `${indexId}${ctx.config.output.extension}`
+      );
+
+      sourcebooks.push({
+        id: indexId,
+        title,
+        sourcebook,
+        outputPath,
+        metadata,
+        templates: sourcebookTemplates,
+      });
+
+      sourcebookIdMap.set(sourcebook, indexId);
+
+      // Log sourcebook-specific templates if found
+      if (sourcebookTemplates.index || sourcebookTemplates.file) {
+        console.log(`  Templates for ${sourcebook}:`);
+        if (sourcebookTemplates.index) console.log(`    - index.md.hbs`);
+        if (sourcebookTemplates.file) console.log(`    - file.md.hbs`);
+      }
+    }
+
+    // Generate unique ID for this file
     let uniqueId: string;
     if (fileMapping[relativePath]) {
       // Reuse existing ID from mapping
