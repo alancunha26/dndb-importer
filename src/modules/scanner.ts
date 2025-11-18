@@ -114,10 +114,8 @@ export async function scan(ctx: ConversionContext): Promise<void> {
   });
 
   // 4. Load persistent file mapping (HTML path -> markdown filename)
-  const fileMapping = await loadMapping(
-    ctx.config.output.directory,
-    "files.json",
-  );
+  const fileMappingPath = path.join(ctx.config.output.directory, "files.json");
+  const fileMapping = await loadMapping(fileMappingPath);
   const idGenerator = IdGenerator.fromMapping(fileMapping);
   const updatedFileMapping: FileMapping = { ...fileMapping };
 
@@ -215,11 +213,7 @@ export async function scan(ctx: ConversionContext): Promise<void> {
   }
 
   // 7. Save updated file mapping
-  await saveMapping(
-    ctx.config.output.directory,
-    "files.json",
-    updatedFileMapping,
-  );
+  await saveMapping(fileMappingPath, updatedFileMapping);
 
   // Write to context
   ctx.files = files;

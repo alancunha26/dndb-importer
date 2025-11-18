@@ -5,6 +5,7 @@
 
 import ShortUniqueId from "short-unique-id";
 import { extractIdFromFilename } from "./string";
+import type { FileMapping } from "../types";
 
 export class IdGenerator {
   private uid: ShortUniqueId;
@@ -21,7 +22,7 @@ export class IdGenerator {
    * Create an IdGenerator from an existing mapping
    * Registers all IDs from the mapping to prevent collisions
    *
-   * @param mapping - Record mapping keys to filenames (e.g., URL -> "a3f9.png")
+   * @param mapping - FileMapping object (e.g., URL -> "a3f9.png")
    * @returns IdGenerator instance with registered IDs
    *
    * @example
@@ -29,7 +30,7 @@ export class IdGenerator {
    * const generator = IdGenerator.fromMapping(mapping);
    * // generator won't generate "a3f9" or "b4x8" (already registered)
    */
-  static fromMapping(mapping: Record<string, string>): IdGenerator {
+  static fromMapping(mapping: FileMapping): IdGenerator {
     const generator = new IdGenerator();
 
     for (const filename of Object.values(mapping)) {

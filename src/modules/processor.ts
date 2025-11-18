@@ -116,7 +116,8 @@ export async function process(ctx: ConversionContext): Promise<void> {
   const { config, files, sourcebooks, globalTemplates } = ctx;
 
   // Load persistent image mapping from images.json (if exists)
-  let imageMapping = await loadMapping(config.output.directory, "images.json");
+  const imageMappingPath = join(config.output.directory, "images.json");
+  let imageMapping = await loadMapping(imageMappingPath);
 
   // Create ID generator and register existing IDs from mapping
   const idGenerator = IdGenerator.fromMapping(imageMapping);
@@ -545,7 +546,7 @@ export async function process(ctx: ConversionContext): Promise<void> {
   }
 
   // 6. Save updated image mapping to images.json (includes cover images)
-  await saveMapping(config.output.directory, "images.json", imageMapping);
+  await saveMapping(imageMappingPath, imageMapping);
 
   // 7. Generate index files
   await processIndexes();

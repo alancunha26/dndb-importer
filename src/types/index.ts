@@ -14,6 +14,10 @@ export type {
   LinksConfig,
   LoggingConfig,
 } from "./config";
+export {
+  ConversionConfigSchema,
+  PartialConversionConfigSchema,
+} from "./config";
 
 // Files
 export type {
