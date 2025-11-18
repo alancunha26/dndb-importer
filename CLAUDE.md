@@ -503,6 +503,34 @@ cat examples/output/files.json | head -10
 cat examples/output/images.json | head -10
 ```
 
+**⚠️ IMPORTANT: Always Use the Same Output Directory During Testing**
+
+When testing and iterating on the converter, **ALWAYS use the same output directory** (e.g., `examples/output`). Do NOT create new directories like `examples/output-test`, `examples/output-test2`, etc. for each test run.
+
+**Why?**
+- The persistent cache (`files.json` and `images.json`) lives in the output directory
+- Using a different directory means:
+  - ❌ No cache → All images re-downloaded from D&D Beyond
+  - ❌ New random IDs generated for every file and image
+  - ❌ Wasted bandwidth and time
+  - ❌ Cannot verify cache system is working correctly
+
+**Correct approach:**
+```bash
+# Always use the same output directory
+npm run dndb-convert -- --input examples/input --output examples/output --verbose
+npm run dndb-convert -- --input examples/input --output examples/output --verbose  # Reuses cache!
+```
+
+**Incorrect approach:**
+```bash
+# ❌ DON'T DO THIS - creates new cache each time
+npm run dndb-convert -- --input examples/input --output examples/output-test1 --verbose
+npm run dndb-convert -- --input examples/input --output examples/output-test2 --verbose
+```
+
+**Exception:** Only use a different output directory when specifically testing cache behavior or when you want to start fresh (e.g., testing breaking changes to the mapping format).
+
 **Benefits:**
 - Safe to run converter repeatedly during development
 - No risk of IP blocking or account bans from D&D Beyond
