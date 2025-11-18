@@ -42,3 +42,6 @@ export type {
 
 // Context
 export type { ConversionContext } from "./context";
+
+// Turndown
+export type { TurndownNode } from "./turndown";

@@ -71,6 +71,12 @@ console.log(`Files processed: ${ctx.stats.successful}/${ctx.stats.totalFiles}`);
    - For each file:
      - Parses HTML with Cheerio
      - Extracts content using `.p-article-content` selector
+     - Removes unwanted elements (configured via `html.removeSelectors`)
+     - **Preprocesses HTML structure** for D&D Beyond patterns (inline in `processHtml`):
+       - Fixes nested lists: D&D Beyond uses `<ol><li>...</li><ul>...</ul></ol>` pattern
+       - Moves misplaced lists into previous `<li>` element before Turndown conversion
+       - Prevents incorrect markdown numbering (1,2,4 → 1,2,3)
+     - Extracts title from first H1
      - Builds `FileAnchors` (valid anchors + HTML ID mappings)
      - Converts HTML → Markdown using Turndown with custom D&D rules
      - Downloads images with retry logic (with persistent mapping)
@@ -217,6 +223,44 @@ console.log(`Files processed: ${ctx.stats.successful}/${ctx.stats.totalFiles}`);
 - External links preserved as-is
 - Maintains navigation while preventing broken links
 
+### HTML Preprocessing vs Turndown Rules
+
+The converter handles D&D Beyond HTML in two stages:
+
+**1. HTML Preprocessing** (in `src/modules/processor.ts`):
+- Runs BEFORE Turndown conversion
+- Fixes structural HTML issues that violate spec but are D&D Beyond patterns
+- Uses Cheerio DOM manipulation
+- **Why preprocessing instead of Turndown rules:**
+  - Turndown rules execute DURING conversion (element by element)
+  - DOM manipulation during Turndown conversion can cause content loss
+  - Turndown expects valid HTML structure to generate correct markdown
+  - Preprocessing ensures Turndown sees proper structure from the start
+
+**Current preprocessing operations:**
+- **Nested lists**: D&D Beyond uses `<ol><li>...</li><ul>...</ul></ol>` pattern
+  - Invalid HTML (nested list should be inside `<li>`)
+  - Preprocessing moves `<ul>` into previous `<li>` element
+  - Prevents incorrect markdown numbering (1,2,4 → 1,2,3)
+  - Selector: `ol > ul, ol > ol, ul > ul, ul > ol`
+  - Example: `<li>Item</li><ul>...</ul>` → `<li>Item<ul>...</ul></li>`
+
+**2. Turndown Rules** (in `src/turndown/rules/`):
+- Run DURING conversion (HTML → Markdown)
+- Handle D&D Beyond content patterns (not structural fixes)
+- Each rule focuses on converting specific HTML patterns to markdown
+
+**Current Turndown rules:**
+- `remove-heading-links.ts` - Remove anchor links from headings
+- `unwrap-linked-images.ts` - Remove `<a>` wrappers from images
+- `image-alt-text.ts` - Extract alt text from image URLs
+- `figure-caption.ts` - Convert figure captions to blockquotes with artist credits
+- `aside.ts` - Convert aside elements to Obsidian/GitHub callouts or blockquotes
+
+**Decision criteria:**
+- Use **preprocessing** if: Fixing invalid HTML structure that breaks Turndown
+- Use **Turndown rule** if: Converting valid HTML patterns to specific markdown format
+
 ### Type System
 
 Types are organized in `src/types/` by domain:
@@ -225,6 +269,7 @@ Types are organized in `src/types/` by domain:
 - **`types/files.ts`** - File-related types (`FileDescriptor`, `ImageDescriptor`, `FileAnchors`, template types, etc.)
 - **`types/pipeline.ts`** - Pipeline data types (`ScanResult`, `ProcessedFile`, `WrittenFile`, `LinkResolutionIndex`, etc.)
 - **`types/context.ts`** - `ConversionContext` (flows through all modules)
+- **`types/turndown.ts`** - Turndown-related types (`TurndownNode` - used by all Turndown rules)
 - **`types/index.ts`** - Re-exports all types
 
 Key types:
@@ -293,6 +338,7 @@ src/
 │   ├── files.ts             # File-related types (includes template types)
 │   ├── pipeline.ts          # Pipeline data types
 │   ├── context.ts           # ConversionContext
+│   ├── turndown.ts          # Turndown types (TurndownNode)
 │   └── index.ts
 └── config/
     └── default.json

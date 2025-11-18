@@ -86,7 +86,28 @@ async function processHtml(
     });
   }
 
-  // 5. Extract title from first H1 and anchors from all headings
+  // 5. Preprocess HTML structure for D&D Beyond patterns
+  // Fix nested lists BEFORE Turndown conversion (not as a Turndown rule)
+  // This is preprocessing because:
+  // - D&D Beyond uses a specific HTML pattern (lists as siblings, not children)
+  // - Turndown needs proper HTML structure to generate correct markdown
+  // - DOM manipulation during Turndown conversion can cause content loss
+  content
+    .find("ol > ul, ol > ol, ul > ul, ul > ol")
+    .each((_index: number, element: any) => {
+      const $nestedList = $(element);
+      const $parent = $nestedList.parent();
+
+      if (!$parent.is("ol, ul")) return;
+
+      const $previousLi = $nestedList.prev("li");
+      if ($previousLi.length === 0) return;
+
+      $nestedList.remove();
+      $previousLi.append($nestedList);
+    });
+
+  // 6. Extract title from first H1 and anchors from all headings
   let title = "";
   const valid: string[] = [];
   const htmlIdToAnchor: Record<string, string> = {};
@@ -127,7 +148,7 @@ async function processHtml(
     }
   });
 
-  // 6. Extract image URLs from <img> tags
+  // 7. Extract image URLs from <img> tags
   const imageUrls: string[] = [];
   content.find("img").each((_index, element) => {
     const src = $(element).attr("src");

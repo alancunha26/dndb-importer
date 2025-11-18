@@ -6,12 +6,7 @@
  */
 
 import type TurndownService from "turndown";
-
-interface TurndownNode {
-  nodeName: string;
-  childNodes: TurndownNode[];
-  getAttribute?(name: string): string | null;
-}
+import type { TurndownNode } from "../../types";
 
 export function removeHeadingLinks(service: TurndownService): void {
   service.addRule("removeHeadingLinks", {

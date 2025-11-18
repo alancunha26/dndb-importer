@@ -9,13 +9,7 @@
  */
 
 import type TurndownService from "turndown";
-
-interface TurndownNode {
-  nodeName: string;
-  childNodes: TurndownNode[];
-  getAttribute?(name: string): string | null;
-  textContent?: string;
-}
+import type { TurndownNode } from "../../types";
 
 /**
  * Get artist credit from a figure element
