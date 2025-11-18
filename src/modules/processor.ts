@@ -432,6 +432,7 @@ async function processDocument(
   const template = await loadFileTemplate(
     sourcebook.templates.file,
     ctx.globalTemplates?.file ?? null,
+    ctx.config.markdown,
   );
 
   // 2. Build template context
@@ -575,6 +576,7 @@ async function processIndexes(
     const template = await loadIndexTemplate(
       sourcebook.templates.index,
       ctx.globalTemplates?.index ?? null,
+      ctx.config.markdown,
     );
 
     // 3. Build template context

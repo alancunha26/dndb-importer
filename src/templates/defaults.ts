@@ -3,21 +3,28 @@
  * These are used when no user templates are provided
  */
 
+import type { MarkdownConfig } from "../types";
+
 /**
- * Default index template
+ * Generate default index template
  * Generates sourcebook index page with table of contents
  */
-export const DEFAULT_INDEX_TEMPLATE = `---
+export function getDefaultIndexTemplate(config: MarkdownConfig): string {
+  const em = config.emphasis;
+  const bullet = config.bulletMarker;
+  const hr = config.horizontalRule;
+
+  return `---
 title: "{{{title}}}"
 date: {{date}}
 tags:
-  - dnd5e/source
+  ${bullet} dnd5e/source
 ---
 
 # {{{title}}}
 {{#if author}}
 
-_by {{{author}}}_
+${em}by {{{author}}}${em}
 {{/if}}
 {{#if coverImage}}
 
@@ -31,30 +38,38 @@ _by {{{author}}}_
 {{/if}}
 
 {{#each files}}
-- [{{{this.title}}}]({{{this.filename}}})
+${bullet} [{{{this.title}}}]({{{this.filename}}})
 {{/each}}
+
+${hr}
 `;
+}
 
 /**
- * Default file template
+ * Generate default file template
  * Generates individual chapter/file pages with navigation
  */
-export const DEFAULT_FILE_TEMPLATE = `---
+export function getDefaultFileTemplate(config: MarkdownConfig): string {
+  const bullet = config.bulletMarker;
+  const hr = config.horizontalRule;
+
+  return `---
 title: "{{{title}}}"
 date: {{date}}
 tags:
 {{#each tags}}
-  - {{{this}}}
+  ${bullet} {{{this}}}
 {{/each}}
 ---
 
 {{#if navigation.prev}}{{{navigation.prev}}} | {{/if}}{{{navigation.index}}}{{#if navigation.next}} | {{{navigation.next}}}{{/if}}
 
----
+${hr}
 
 {{{content}}}
 
----
+${hr}
 
 {{#if navigation.prev}}{{{navigation.prev}}} | {{/if}}{{{navigation.index}}}{{#if navigation.next}} | {{{navigation.next}}}{{/if}}
 `;
+}

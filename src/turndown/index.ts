@@ -19,18 +19,23 @@ export function createTurndownService(
     strongDelimiter: config.strong,
     bulletListMarker: config.bulletMarker,
     linkStyle: config.linkStyle,
+    linkReferenceStyle: config.linkReferenceStyle,
+    hr: config.horizontalRule,
+    br: config.lineBreak,
+    fence: config.codeFence,
+    preformattedCode: config.preformattedCode,
   });
 
   // Add GitHub Flavored Markdown support (tables, strikethrough, task lists)
   turndownService.use(gfm);
 
   // Apply custom D&D Beyond rules
-  turndownService.use(removeHeadingLinks);
+  turndownService.use(removeHeadingLinks(config));
   turndownService.use(unwrapLinkedImages(imageMapping));
   turndownService.use(imageAltText(imageMapping));
-  turndownService.use(figureCaptionRule);
+  turndownService.use(figureCaptionRule(config));
   turndownService.use(asideRule(config));
-  turndownService.use(flexibleColumnsRule);
+  turndownService.use(flexibleColumnsRule(config));
 
   return turndownService;
 }

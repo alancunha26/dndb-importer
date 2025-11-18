@@ -4,7 +4,8 @@
 
 import Handlebars from "handlebars";
 import { readFile } from "fs/promises";
-import { DEFAULT_INDEX_TEMPLATE, DEFAULT_FILE_TEMPLATE } from "./defaults";
+import { getDefaultIndexTemplate, getDefaultFileTemplate } from "./defaults";
+import type { MarkdownConfig } from "../types";
 
 /**
  * Load and compile a template from file path or use default
@@ -36,10 +37,12 @@ export async function loadTemplate(
 export async function loadIndexTemplate(
   sourcebookTemplatePath: string | null,
   globalTemplatePath: string | null,
+  config: MarkdownConfig,
 ): Promise<HandlebarsTemplateDelegate> {
   // Try sourcebook-specific first, then global, then default
   const templatePath = sourcebookTemplatePath ?? globalTemplatePath;
-  return loadTemplate(templatePath, DEFAULT_INDEX_TEMPLATE);
+  const defaultTemplate = getDefaultIndexTemplate(config);
+  return loadTemplate(templatePath, defaultTemplate);
 }
 
 /**
@@ -48,8 +51,10 @@ export async function loadIndexTemplate(
 export async function loadFileTemplate(
   sourcebookTemplatePath: string | null,
   globalTemplatePath: string | null,
+  config: MarkdownConfig,
 ): Promise<HandlebarsTemplateDelegate> {
   // Try sourcebook-specific first, then global, then default
   const templatePath = sourcebookTemplatePath ?? globalTemplatePath;
-  return loadTemplate(templatePath, DEFAULT_FILE_TEMPLATE);
+  const defaultTemplate = getDefaultFileTemplate(config);
+  return loadTemplate(templatePath, defaultTemplate);
 }

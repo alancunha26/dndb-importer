@@ -7,7 +7,7 @@
  */
 
 import type TurndownService from "turndown";
-import type { TurndownNode } from "../../types";
+import type { MarkdownConfig, TurndownNode } from "../../types";
 
 // ============================================================================
 // Content Classification
@@ -85,7 +85,7 @@ function hasOnlySimpleContent(node: TurndownNode): boolean {
 /**
  * Render flexible column as markdown unordered list
  */
-function renderAsList(content: string): string {
+function renderAsList(content: string, bulletMarker: string): string {
   const items: string[] = [];
 
   // Split content by paragraphs/divs and convert to list items
@@ -97,7 +97,7 @@ function renderAsList(content: string): string {
     if (trimmed) {
       // Remove any leading/trailing whitespace and newlines within the item
       const cleaned = trimmed.replace(/\n+/g, " ");
-      items.push(`- ${cleaned}`);
+      items.push(`${bulletMarker} ${cleaned}`);
     }
   }
 
@@ -113,9 +113,10 @@ function renderAsList(content: string): string {
 // ============================================================================
 
 /**
- * Add flexible column list rule to Turndown service
+ * Factory function to create flexible column rule with markdown config
  */
-export function flexibleColumnsRule(service: TurndownService): void {
+export function flexibleColumnsRule(config: MarkdownConfig) {
+  return (service: TurndownService): void => {
   service.addRule("flexibleColumns", {
     filter: (node) => {
       if (node.nodeName !== "DIV" || !node.getAttribute) {
@@ -130,17 +131,18 @@ export function flexibleColumnsRule(service: TurndownService): void {
       // Match flexible-quad-column, flexible-triple-column, flexible-double-column, etc.
       return /flexible-(?:quad|triple|double|single)-column/.test(className);
     },
-    replacement: (content, node) => {
-      const flexNode = node as TurndownNode;
+      replacement: (content, node) => {
+        const flexNode = node as TurndownNode;
 
-      // Check if this is a simple list or complex layout
-      if (hasOnlySimpleContent(flexNode)) {
-        // Simple content: Convert to markdown list
-        return renderAsList(content);
-      }
+        // Check if this is a simple list or complex layout
+        if (hasOnlySimpleContent(flexNode)) {
+          // Simple content: Convert to markdown list
+          return renderAsList(content, config.bulletMarker);
+        }
 
-      // Complex content: Preserve default behavior (just return content)
-      return content;
-    },
-  });
+        // Complex content: Preserve default behavior (just return content)
+        return content;
+      },
+    });
+  };
 }

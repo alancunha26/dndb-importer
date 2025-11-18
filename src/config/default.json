@@ -17,10 +17,15 @@
   "markdown": {
     "headingStyle": "atx",
     "codeBlockStyle": "fenced",
-    "emphasis": "*",
+    "emphasis": "_",
     "strong": "**",
     "bulletMarker": "-",
-    "linkStyle": "inlined"
+    "linkStyle": "inlined",
+    "linkReferenceStyle": "full",
+    "horizontalRule": "---",
+    "lineBreak": "  ",
+    "codeFence": "```",
+    "preformattedCode": false
   },
   "html": {
     "contentSelector": ".p-article-content",
