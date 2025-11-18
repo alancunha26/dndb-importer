@@ -6,785 +6,537 @@
 
 **Created:** 2025-11-15
 
-**Updated:** 2025-11-15
+**Updated:** 2025-11-18
 
 ## Summary
 
-A CLI tool that converts D&D Beyond sourcebook HTML pages into clean, structured Markdown files with unique ID-based file naming, local image downloading, navigation links, and D&D-specific formatting preservation (stat blocks, spell descriptions, tables).
+A CLI tool that converts D&D Beyond sourcebook HTML pages into clean, structured Markdown files suitable for note-taking applications like Obsidian. The tool uses unique ID-based file naming, downloads images locally, generates navigation links, and preserves D&D-specific formatting (stat blocks, spell descriptions, tables).
 
 ## Motivation
 
+### Problem Statement
+
+D&D Beyond provides excellent online access to D&D sourcebooks, but users often want to:
+
+- Access content offline
+- Take notes alongside official content
+- Organize content in personal knowledge management systems (Obsidian, Notion, etc.)
+- Search across all content efficiently
+- Customize presentation and formatting
+
+Manual conversion is time-consuming and error-prone. We need an automated solution that preserves the rich formatting and structure of D&D content while making it accessible in Markdown format.
+
 ### Goals
 
-- Convert D&D Beyond HTML sourcebooks to Markdown format
-- Preserve content hierarchy and structure
-- Handle D&D-specific formatting (stat blocks, tables, spell descriptions, etc.)
-- Maintain relative file organization per sourcebook
-- Provide a simple, intuitive CLI interface
-- Generate unique IDs for files and images to avoid naming conflicts
-- Create navigation links between related content
-- Download and organize images locally
+- Convert D&D Beyond HTML sourcebooks to clean, structured Markdown
+- Preserve content hierarchy and D&D-specific formatting
+- Download and organize images locally for offline access
+- Generate navigation links between related content
+- Provide unique, collision-free file naming
+- Support customization through configuration and templates
+- Handle errors gracefully and provide clear feedback
 
 ### Non-Goals
 
-- Automated downloading from D&D Beyond (users manually download)
+- Automated downloading from D&D Beyond (users manually save HTML pages)
 - Real-time conversion or web scraping
-- PDF generation or other output formats (for now)
+- PDF generation or other output formats
+- Reverse conversion (Markdown back to HTML)
 
-## Proposal
+## Architecture
 
-### High-Level Architecture
+### Pipeline Architecture
 
-**Pipeline Architecture with Context:**
+The converter uses a **pipeline architecture** where a shared context object flows through sequential modules. This design provides several benefits:
 
-The converter uses a pipeline architecture where a shared context object flows through sequential modules. Each module reads what it needs from context, performs its work, and writes results back to context.
+- **Simplicity**: Each module is a pure function that receives context, performs work, and writes results
+- **Testability**: Modules can be tested independently with mock contexts
+- **Flexibility**: Easy to add, remove, or reorder pipeline stages
+- **Memory Efficiency**: Context contains only metadata, not full content
 
-```
-┌─────────────────────────────────────────────────────────────┐
-│                    CONVERT COMMAND                          │
-│                                                             │
-│  ┌──────────────────────────────────────────────────────┐   │
-│  │  Configuration Loader                                │   │
-│  │  - Load default.json                                 │   │
-│  │  - Merge user config                                 │   │
-│  │  - Apply CLI overrides                               │   │
-│  └────────────────────────┬─────────────────────────────┘   │
-│                           ▼                                 │
-│  ┌──────────────────────────────────────────────────────┐   │
-│  │  Initialize ConversionContext                        │   │
-│  │  - config: ConversionConfig                          │   │
-│  │  - files?: FileDescriptor[]                          │   │
-│  │  - sourcebooks?: SourcebookInfo[]                    │   │
-│  │  - mappings?: Map<string, string>                    │   │
-│  │  - writtenFiles?: WrittenFile[]                      │   │
-│  │  - stats?: ProcessingStats                           │   │
-│  └────────────────────────┬─────────────────────────────┘   │
-│                              │                              │
-│                              ▼                              │
-│  ┌──────────────────────────────────────────────────────┐   │
-│  │  1. Scanner Module                                   │   │
-│  │  - Discover HTML files                               │   │
-│  │  - Assign unique IDs (short-uuid)                    │   │
-│  │  - Build filename → ID mappings                      │   │
-│  │  - Group by sourcebook                               │   │
-│  │  → Writes: ctx.files, ctx.sourcebooks, ctx.mappings  │   │
-│  └────────────────────────┬─────────────────────────────┘   │
-│                           ▼                                 │
-│  ┌──────────────────────────────────────────────────────┐   │
-│  │  2. Processor Module (Memory-Efficient)              │   │
-│  │  For EACH file (one at a time):                      │   │
-│  │  - Parse HTML with Cheerio                           │   │
-│  │  - Extract content & metadata                        │   │
-│  │  - Build FileAnchors (valid + HTML ID mappings)      │   │
-│  │  - Convert HTML → Markdown (Turndown)                │   │
-│  │  - Download images with retry logic                  │   │
-│  │  - Build navigation (prev/index/next)                │   │
-│  │  - Assemble final markdown (frontmatter + content)   │   │
-│  │  - Write to disk IMMEDIATELY                         │   │
-│  │  - Store lightweight WrittenFile (path + anchors)    │   │
-│  │  - HTML/markdown garbage collected before next file  │   │
-│  │  → Writes: ctx.writtenFiles                          │   │
-│  └────────────────────────┬─────────────────────────────┘   │
-│                           ▼                                 │
-│  ┌──────────────────────────────────────────────────────┐   │
-│  │  3. Resolver Module                                  │   │
-│  │  - Build LinkResolutionIndex from all anchors        │   │
-│  │  - Resolve D&D Beyond links to local markdown        │   │
-│  │  - Validate anchors exist in target files            │   │
-│  │  - Fallback to bold for unresolved links             │   │
-│  │  - Overwrite files with resolved links               │   │
-│  │  (Skipped if convertInternalLinks: false)            │   │
-│  └────────────────────────┬─────────────────────────────┘   │
-│                           ▼                                 │
-│  ┌──────────────────────────────────────────────────────┐   │
-│  │  4. Stats Module                                     │   │
-│  │  - Count files, images, links                        │   │
-│  │  - Calculate duration                                │   │
-│  │  → Writes: ctx.stats                                 │   │
-│  └────────────────────────┬─────────────────────────────┘   │
-│                           ▼                                 │
-│  ┌──────────────────────────────────────────────────────┐   │
-│  │  Display Summary                                     │   │
-│  │  - Files processed                                   │   │
-│  │  - Images downloaded                                 │   │
-│  │  - Links resolved                                    │   │
-│  │  - Duration                                          │   │
-│  └──────────────────────────────────────────────────────┘   │
-└─────────────────────────────────────────────────────────────┘
+Each module follows the signature: `async fn(ctx: ConversionContext): Promise<void>`
+
+```mermaid
+flowchart TD
+    Start([User runs dndb-convert]) --> LoadConfig[Load & Validate Configuration]
+    LoadConfig --> |Zod validation<br/>Track errors| InitCtx[Initialize ConversionContext]
+
+    InitCtx --> Scanner[Scanner Module]
+    Scanner --> |Discover HTML files<br/>Assign unique IDs<br/>Load metadata<br/>Detect templates| ScannerWrite[Write to context:<br/>files, sourcebooks,<br/>fileIndex, pathIndex,<br/>globalTemplates]
+
+    ScannerWrite --> Processor[Processor Module]
+    Processor --> |For each file:<br/>Parse HTML<br/>Convert to Markdown<br/>Download images<br/>Write to disk| ProcessorWrite[Files written<br/>with anchors]
+
+    ProcessorWrite --> Resolver[Resolver Module<br/>optional]
+    Resolver --> |Build link index<br/>Resolve D&D Beyond URLs<br/>Validate anchors<br/>Rewrite files| ResolverWrite[Links resolved]
+
+    ResolverWrite --> Stats[Stats Module]
+    Stats --> |Count successes/failures<br/>Calculate duration| StatsWrite[Write to context:<br/>stats]
+
+    StatsWrite --> Display[Display Summary<br/>& Error Report]
+    Display --> End([Conversion Complete])
+
+    style Start fill:#e1f5e1
+    style End fill:#e1f5e1
+    style InitCtx fill:#fff4e1
+    style ScannerWrite fill:#e1f0ff
+    style ProcessorWrite fill:#e1f0ff
+    style ResolverWrite fill:#e1f0ff
+    style StatsWrite fill:#e1f0ff
 ```
 
-### User Experience
+### Context-Based Communication
 
-**CLI Commands:**
+A shared `ConversionContext` object flows through all modules, containing:
+
+- **Configuration** - User settings and preferences
+- **Error Tracking** - Three categories (files, images, resources)
+- **Pipeline Data** - File descriptors, sourcebook metadata, mappings
+- **Statistics** - Processing metrics
+
+This approach eliminates the need for complex module interfaces or message passing systems.
+
+### Validation and Error Handling Strategy
+
+**Runtime Validation with Zod:**
+
+All user inputs are validated using Zod schemas for type safety:
+
+- CLI command options
+- Configuration files (default, user, custom)
+- Sourcebook metadata files
+- Mapping cache files
+
+**Error Tracking:**
+
+Errors are categorized and tracked in context rather than stopping execution:
+
+- **File errors** - Processing failures for individual files
+- **Image errors** - Download failures with retry logic
+- **Resource errors** - Config/metadata validation failures
+
+**Graceful Degradation:**
+
+- Invalid configs → Fall back to defaults
+- Invalid metadata → Use empty metadata
+- Corrupted cache → Delete and rebuild
+- Per-file failures → Continue to next file
+
+All errors are displayed in a summary report after conversion completes.
+
+### Memory-Efficient Processing
+
+The processor module handles files **one at a time** to avoid memory bloat:
+
+1. Parse HTML (in memory briefly)
+2. Convert to Markdown (in memory briefly)
+3. Download images
+4. Write to disk immediately
+5. Store only lightweight metadata
+6. HTML/markdown garbage collected before next file
+
+This approach allows processing large sourcebooks (50+ files, 100+ MB of content) without excessive memory usage.
+
+## User Experience
+
+### CLI Interface
+
+Simple, intuitive command structure:
 
 ```bash
-# Convert all books in input directory
-dndb-convert --input ./input --output ./output
+dndb-convert [options]
 
-# Convert specific book
-dndb-convert --input ./input/players-handbook --output ./output
-
-# Dry run (preview without writing)
-dndb-convert --input ./input --dry-run
-
-# Verbose output
-dndb-convert --input ./input --output ./output --verbose
-
-# Custom config
-dndb-convert --input ./input --output ./output --config custom.json
+Options:
+  -i, --input <path>    Input directory containing HTML files
+  -o, --output <path>   Output directory for Markdown files
+  -c, --config <path>   Path to custom config file
+  --dry-run             Preview conversion without writing files
+  -v, --verbose         Verbose output
 ```
 
-**Directory Structure:**
+### Configuration System
 
-```
-my-dndbeyond-books/
-├── input/
-│   ├── players-handbook/
-│   │   ├── 01-introduction.html
-│   │   ├── 02-chapter-1.html
-│   │   └── 03-chapter-2.html
-│   └── dungeon-masters-guide/
-│       └── 01-chapter-1.html
-└── output/
-    ├── players-handbook/
-    │   ├── m3x7.png             # Downloaded images with unique IDs
-    │   ├── p4q2.jpg
-    │   ├── k2p8.md              # Index file
-    │   ├── a3f9.md              # Introduction
-    │   └── m5x1.md              # Chapter 1
-    └── dungeon-masters-guide/
-        ├── j4uv.md              # Index file
-        └── yg6c.md              # Chapter 1
-```
+**Layered Configuration:**
 
-**Output File Format:**
+Three-tier priority system:
 
-Each markdown file contains:
+1. Default config (built-in)
+2. User config (OS-specific location)
+3. Custom config (CLI flag)
 
-- YAML front matter (title, date, tags)
-- Navigation header (prev | index | next)
-- Content converted from HTML
-- Image references using unique IDs (e.g., `![Alt](m3x7.png)`)
+Configs are deep-merged, allowing partial overrides while preserving defaults.
 
-## Design Details
+**OS-Specific Paths:**
 
-### Architecture Decisions
+Uses `env-paths` library for cross-platform compatibility:
 
-**File Naming & IDs:**
-
-- Use unique 4-character IDs generated by `short-unique-id` library
-- Format: lowercase alphanumeric only (e.g., `a3f9.md`, `k2p8.md`)
-- Images also use unique IDs (e.g., `m3x7.png`, `p4q2.jpg`)
-- Images saved in same directory as markdown files
-
-**Navigation & Structure:**
-
-- Create one index file per sourcebook with ordered links
-- Add previous/index/next navigation header to each file
-- Index files link to all content in order
-
-**YAML Front Matter:**
-
-- Simplified format with title, date, and tags
-- Two tag types:
-  - `dnd5e/chapter` - for source sections/chapters
-  - `dnd5e/source` - for source index files
-
-**Content Handling:**
-
-- **Headings**: Preserve source heading levels (don't normalize)
-- **Cross-References**: Two-phase approach - generate files first, then resolve all links in post-processing (see "Link Resolution Strategy" below)
-- **Images**: Download images locally and name with unique IDs
-- **Duplicate Content**: Repeat content if it appears in multiple files
-
-**File Ordering:**
-
-- Use numeric prefix in filenames (e.g., `01-introduction.html`, `02-chapter-1.html`)
-- Scanner sorts by numeric prefix, falls back to alphabetical
-
-**Pipeline Processing:**
-
-The conversion follows a sequential pipeline where each module receives a shared context object:
-
-1. **Scanner**: Discover files and assign unique IDs
-2. **Processor**: Process + write each file immediately (memory-efficient streaming)
-3. **Resolver**: Resolve all D&D Beyond links to local markdown links (optional)
-4. **Stats**: Build final processing statistics
-
-Each module:
-- Reads what it needs from the context
-- Performs its work
-- Writes results back to context
-- Passes context to the next module
-
-This architecture provides:
-- Clear separation of concerns
-- Simple data flow (context threading)
-- Complete knowledge of all files before link resolution
-- Easy testing and maintenance
-
-### Core Components
-
-The converter is organized into pipeline modules located in `src/modules/`:
-
-#### 1. Scanner Module (`src/modules/scanner.ts`)
-
-**Responsibility**: File discovery and ID assignment
-
-**Reads from context**: `config`
-
-**Writes to context**:
-- `files`: Array of `FileDescriptor` with unique IDs
-- `sourcebooks`: Grouped files by sourcebook directory
-- `mappings`: Map of relative HTML path → unique ID
-
-**Key operations**:
-- Discovers HTML files in input directory using fast-glob
-- Generates unique 4-character IDs using `short-unique-id`
-- Sorts files by numeric prefix (01-, 02-, etc.)
-- Groups files by sourcebook (directory name)
-- Builds runtime mapping for link resolution
-  - Example: `players-handbook/08-equipment.html` → `yw3w`
-
-#### 2. Processor Module (`src/modules/processor.ts`)
-
-**Responsibility**: HTML parsing, markdown conversion, file writing (all in one)
-
-**Memory-efficient streaming**: Processes files **one at a time**, writing immediately to avoid memory bloat from accumulating large HTML/markdown content.
-
-**Reads from context**: `config`, `files`, `sourcebooks`
-
-**Writes to context**: `writtenFiles` (lightweight - only paths and anchors, no HTML/markdown)
-
-**Key operations** (per file, sequentially):
-1. **Parse HTML** with Cheerio
-   - Extract main content using `.p-article-content` selector
-   - Remove unwanted elements via `removeSelectors` config
-   - Extract metadata (title, date, tags)
-2. **Build FileAnchors**:
-   - **HTML ID mappings**: `<h2 id="Bell1GP">` → `{ "Bell1GP": "bell-1-gp" }`
-   - **Valid anchors**: All headings with plural/singular variants
-3. **Convert to Markdown** using Turndown with custom D&D rules
-   - Stat blocks, spell descriptions, tables, sidebars
-4. **Download images** with retry logic (3 attempts, exponential backoff)
-   - Assign unique IDs to images
-   - Track success/failure
-5. **Build navigation links** (previous/index/next)
-6. **Assemble final markdown**:
-   - YAML front matter (title, date, tags)
-   - Navigation header
-   - Content (with image references using unique IDs)
-7. **Write file to disk immediately**
-8. **Store lightweight WrittenFile**:
-   - File descriptor
-   - File path
-   - Anchors (for link resolution)
-9. **Garbage collection**: HTML and markdown are freed before processing next file
-10. **Generate index files** for each sourcebook
-
-**Note**: Writer module is deprecated and merged into Processor to avoid accumulating large content in memory.
-
-#### 3. Resolver Module (`src/modules/resolver.ts`)
-
-**Responsibility**: Link resolution (optional)
-
-**Memory-efficient**: Reads files **one at a time** from disk, processes, and overwrites.
-
-**Reads from context**: `config`, `mappings`, `writtenFiles`
-
-**Modifies**: Overwrites markdown files with resolved links
-
-**Key operations**:
-1. Skip if `config.links.resolveInternal` is false
-2. Build `LinkResolutionIndex` from all `writtenFiles` anchors
-3. For each file (one at a time):
-   - **Read markdown from disk**
-   - Find D&D Beyond links and internal anchors
-   - Resolve using URL mapping + ID mapping + anchor validation
-   - Replace links or fallback to bold text
-   - **Overwrite file with resolved content**
-   - Markdown content freed before next file
-4. Track resolution stats (resolved/failed)
-
-**Link types handled**:
-- **Internal links** (same-page): `[Bell](#Bell1GP)` → `[Bell](#bell-1-gp)`
-- **D&D Beyond links** (cross-file): URL → local markdown link
-- **External links**: Preserved as-is
-- **Header links** (no anchor): Removed entirely
-
-#### 4. Stats Module (`src/modules/stats.ts`)
-
-**Responsibility**: Build processing statistics
-
-**Reads from context**: `files`, `processedFiles`, `writtenFiles`
-
-**Writes to context**: `stats`
-
-**Key operations**:
-- Count files (total, successful, failed, skipped)
-- Count images (downloaded, failed)
-- Count links (resolved, failed)
-- Count indexes created
-- Calculate duration
-
-### Pipeline Orchestration
-
-The conversion pipeline is orchestrated directly in the convert command (`src/cli/commands/convert.ts`):
-
-```typescript
-export async function convertCommand(options: ConvertOptions) {
-  // Load and merge config
-  const config = await loadConfig(options.config)
-
-  // Initialize context
-  const ctx: ConversionContext = { config }
-
-  // Run pipeline
-  await modules.scan(ctx)       // 1. File discovery
-  await modules.process(ctx)    // 2. Process + write (streaming)
-  await modules.resolve(ctx)    // 3. Resolve links
-  await modules.stats(ctx)      // 4. Build stats
-
-  // Display summary
-  console.log(`Files processed: ${ctx.stats.successful}/${ctx.stats.totalFiles}`)
-}
-```
-
-Each module receives the context, reads what it needs, performs its work, and writes results back to context.
-
-### Technology Stack
-
-**Core Dependencies:**
-
-- Node.js (v18+)
-- TypeScript (v5+)
-- Turndown - HTML to Markdown conversion
-- Cheerio - HTML parsing and manipulation
-- Commander.js - CLI argument parsing
-- Chalk - Terminal styling and colors
-- Ora - Progress spinners
-- Fast-glob - File pattern matching
-- short-unique-id - Unique ID generation
-- axios - Image downloading
-- env-paths - Cross-platform config paths (XDG on Linux)
-
-**Development Dependencies:**
-
-- esbuild - Production bundling and builds
-- tsx - TypeScript execution for development
-- Jest or Vitest - Testing
-- ESLint + @typescript-eslint/\* - Linting
-- Prettier - Code formatting
-
-### Link Resolution Strategy
-
-This section provides comprehensive details on how D&D Beyond links are converted to local markdown links.
-
-**Overview:**
-
-Link resolution is **optional** and controlled by `links.resolveInternal`:
-- **If true**: Run Phase 2 to resolve links (default behavior)
-- **If false**: Skip Phase 2, convert all D&D Beyond links to bold text
-
-**Phase 1: Generation**
-- Links preserved as-is from Turndown HTML-to-Markdown conversion
-- All files written with their unique IDs
-- Runtime mapping built: HTML path → unique ID
-
-**Phase 2: Link Resolution** (only if `links.resolveInternal: true`)
-
-**Step 1: User Configuration**
-
-Users configure URL-to-HTML-path mapping in `links.urlMapping`:
-```json
-{
-  "/sources/dnd/phb-2024/equipment": "players-handbook/08-chapter-6-equipment.html",
-  "/sources/dnd/phb-2024/spells": "players-handbook/09-chapter-7-spells.html",
-  "/spells": "players-handbook/10-spell-descriptions.html",
-  "/monsters": "players-handbook/12-creature-stat-blocks.html"
-}
-```
-
-Two types of mappings:
-1. **Source book paths**: `/sources/dnd/phb-2024/spells` → book section
-2. **Entity type paths**: `/spells` → spell description page (for entity links like `https://www.dndbeyond.com/spells/2619022-magic-missile`)
-
-- Paths relative to input directory root (supports multiple sourcebooks)
-- Config deep-merge allows adding/overriding individual mappings
-
-**Step 2: Build Link Resolution Index**
-
-Before resolving any links, collect anchor data from all Phase 1 conversion results:
-- Gather `FileAnchors` from all `ConversionResult`s generated in Phase 1
-- Each file provides:
-  1. **Valid anchors**: List of all markdown anchors with plural/singular variants
-     - Built during HTML processing from headings
-     - Example: `["fireball", "fireballs", "magic-missile", "magic-missiles"]`
-  2. **HTML ID mappings**: HTML element IDs → markdown anchors
-     - Built during HTML processing using Cheerio
-     - Example: `{ "Bell1GP": "bell-1-gp", "Fireball": "fireball" }`
-- Build `LinkResolutionIndex`: `{ "a3f9": { valid: [...], htmlIdToAnchor: {...} }, ... }`
-
-This single index supports both same-page link resolution and cross-file anchor validation
-
-**Step 3: Three-Level Link Validation**
-
-For each D&D Beyond link, extract the relevant URL path and validate:
-
-**Example 1 - Source book link:**
-`[Fireball](/sources/dnd/phb-2024/spells#fireball)`
-1. **URL Lookup**: `/sources/dnd/phb-2024/spells` → `players-handbook/09-spells.html`
-2. **File Lookup**: `players-handbook/09-spells.html` → `a3f9`
-3. **Anchor Validation**: `"fireball"` in `index["a3f9"].valid`? ✓
-→ Result: `[Fireball](a3f9.md#fireball)`
-
-**Example 2 - Entity link:**
-`[Magic Missile](https://www.dndbeyond.com/spells/2619022-magic-missile)`
-1. **URL Lookup**: `/spells` → `players-handbook/10-spell-descriptions.html`
-2. **File Lookup**: `players-handbook/10-spell-descriptions.html` → `b4x8`
-3. **Anchor Validation**: `"magic-missile"` in `index["b4x8"].valid`? ✓
-→ Result: `[Magic Missile](b4x8.md#magic-missile)`
-
-**Example 3 - Header with suffix (prefix matching):**
-`[Alchemist's Fire](/sources/dnd/phb-2024/equipment#alchemists-fire)`
-- Heading in target: `## Alchemist's Fire (50 GP)`
-- Generated anchor: `"alchemists-fire-50-gp"`
-- Link anchor: `"alchemists-fire"`
-1. **Exact match**: `index["a3f9"].valid.includes("alchemists-fire")`? ✗
-2. **Prefix match**: `index["a3f9"].valid.find(a => a.startsWith("alchemists-fire"))`? ✓ `"alchemists-fire-50-gp"`
-→ Result: `[Alchemist's Fire](a3f9.md#alchemists-fire-50-gp)`
-
-**Anchor Matching Strategy:**
-1. Check for exact match in `index[fileId].valid` (includes plural/singular variants)
-2. If no exact match, check if any anchor starts with the link anchor
-3. If multiple prefix matches, use the shortest one
-4. If no matches: Apply fallback strategy
-
-**Header Links (No Anchor):**
-Links without anchors (e.g., `[Equipment](/sources/dnd/phb-2024/equipment)`) are removed entirely:
-- These are typically table of contents or chapter reference links
-- Not converted to bold text or preserved as links
-- Simply removed from the output
-
-If all validations pass: Create link
-If any fail: Apply fallback strategy
-
-**Step 4: Anchor Generation**
-
-- Generate anchor from **link text** (not href): `"Fire Ball!"` → `"fire-ball"`
-- GitHub format: lowercase, spaces→hyphens, remove special chars
-- Always preserves original link text for display
-
-**Step 5: Fallback Strategy**
-
-**When link resolution is enabled** (`convertInternalLinks: true`):
-
-Convert `[LinkText](url)` → `**LinkText**` if `fallbackToBold: true` and:
-1. URL not in config mapping
-2. File not found in runtime mapping
-3. Anchor doesn't exist in target file (after checking plural/singular variants)
-
-If `fallbackToBold: false`: Keep original URL (useful for debugging)
-Logs warning with: URL, source file, line number, failure reason
-
-**When link resolution is disabled** (`convertInternalLinks: false`):
-
-All D&D Beyond links converted to bold text in Phase 2:
-- `[Fireball](/sources/...)` → `**Fireball**`
-- `[Magic Missile](https://www.dndbeyond.com/spells/...)` → `**Magic Missile**`
-- External links preserved as-is
-- Phase 2 only performs this conversion, no validation needed
-
-**Link Type Detection:**
-
-The resolver identifies and processes different link types:
-
-1. **HTML Internal Links** (same-page anchors):
-   - Pattern: `[Bell](#Bell1GP)` (from Turndown conversion of `<a href="#Bell1GP">`)
-   - Action: Resolve using `htmlIdToAnchor` from link resolution index
-   - Process:
-     1. Extract HTML ID from anchor: `#Bell1GP` → `"Bell1GP"`
-     2. Look up in `index[currentFileId].htmlIdToAnchor["Bell1GP"]` → `"bell-1-gp"`
-     3. Replace anchor: `[Bell](#Bell1GP)` → `[Bell](#bell-1-gp)`
-   - Note: HTML ID `"Bell1GP"` may not match markdown anchor `"bell-1-gp"` because:
-     - HTML: `<h2 id="Bell1GP">Bell (1 GP)</h2>` (compact ID)
-     - Markdown: `## Bell (1 GP)` → anchor `#bell-1-gp` (from heading text)
-   - Mapping built during Phase 1 HTML processing using Cheerio
-   - Always resolved, regardless of `convertInternalLinks` setting
-
-2. **D&D Beyond Cross-File Links**:
-   - **Full URLs**: `https://www.dndbeyond.com/spells/2619022-magic-missile` → Extract `/spells`
-   - **Absolute paths**: `/sources/dnd/phb-2024/equipment` → Use as-is
-   - Action: Resolve to local markdown file + anchor (Phase 2)
-
-3. **External Links**:
-   - Pattern: Non-D&D Beyond URLs (e.g., `https://example.com`)
-   - Action: Preserved as-is
-
-**Edge Cases:**
-- Internal links (same-page): Anchors normalized to GitHub format, always preserved
-- External links: Preserved as-is
-- Page-level links (no anchor): Removed entirely (table of contents / chapter references)
-- Duplicate anchors: Links to first occurrence (GitHub behavior)
-- Entity ID in URL (e.g., `2619022-`): Ignored, only entity type matters
-- Plural/singular mismatch: Both forms checked (e.g., link says "Fireballs" but heading is "Fireball")
-- Headers with suffixes: Prefix matching used (e.g., "Alchemist's Fire" matches "Alchemist's Fire (50 GP)")
-
-**Plural/Singular Matching:**
-
-Common patterns handled:
-- Add/remove 's': `"spell"` ↔ `"spells"`
-- Add/remove 'es': `"class"` ↔ `"classes"`
-- 'y' ↔ 'ies': `"ability"` ↔ `"abilities"`
-
-When validating anchors, both forms are checked automatically.
-
-### Type Definitions
-
-Types are organized in `src/types/` with logical groupings:
-
-**`src/types/config.ts`** - Configuration types
-```typescript
-export interface ConversionConfig {
-  input: InputConfig;
-  output: OutputConfig;
-  parser: ParserConfig;
-  media: MediaConfig;
-  logging: LoggingConfig;
-}
-```
-
-**`src/types/files.ts`** - File-related types
-```typescript
-export interface FileDescriptor {
-  sourcePath: string;
-  relativePath: string;
-  outputPath: string;
-  sourcebook: string;
-  filename: string;
-  uniqueId: string; // 4-character unique ID
-}
-
-export interface FileAnchors {
-  valid: string[]; // All valid markdown anchors
-  htmlIdToAnchor: Record<string, string>; // HTML IDs → markdown anchors
-}
-```
-
-**`src/types/pipeline.ts`** - Pipeline module data types
-```typescript
-export interface ProcessedFile {
-  descriptor: FileDescriptor;
-  html: CheerioAPI;
-  markdown: string;
-  metadata: DocumentMetadata;
-  images: ImageDescriptor[];
-  anchors: FileAnchors;
-}
-
-export interface WrittenFile {
-  descriptor: FileDescriptor;
-  path: string;
-  anchors: FileAnchors;
-}
-
-export interface LinkResolutionIndex {
-  [fileId: string]: FileAnchors;
-}
-```
-
-**`src/types/context.ts`** - Conversion context
-```typescript
-export interface ConversionContext {
-  config: ConversionConfig;
-
-  // Scanner writes:
-  files?: FileDescriptor[];
-  sourcebooks?: SourcebookInfo[];
-  mappings?: Map<string, string>;
-
-  // Processor writes (processes + writes immediately):
-  writtenFiles?: WrittenFile[];  // Lightweight - no HTML/markdown
-
-  // Stats writes:
-  stats?: ProcessingStats;
-}
-```
-
-All types are re-exported from `src/types/index.ts` for convenient imports.
-
-### Configuration
-
-**Layered Configuration System:**
-
-The tool uses a three-tier configuration priority:
-
-1. **Default config** - Built-in defaults from `src/config/default.json`
-2. **User config** - OS-specific user configuration (optional)
-3. **Custom config** - CLI `--config` flag (highest priority)
-
-**OS-Specific Config Paths (using env-paths):**
-
-- **Linux:** `$XDG_CONFIG_HOME/dndbeyond-importer/config.json` (defaults to `~/.config/dndbeyond-importer/config.json`)
-  - Follows XDG Base Directory specification
-- **macOS:** `~/Library/Preferences/dndbeyond-importer/config.json`
-- **Windows:** `%APPDATA%\dndbeyond-importer\config.json`
+- Linux: `~/.config/dndbeyond-importer/config.json` (XDG compliant)
+- macOS: `~/Library/Preferences/dndbeyond-importer/config.json`
+- Windows: `%APPDATA%\dndbeyond-importer\config.json`
 
 **Configuration Sections:**
 
-User-centric configuration structure with 8 top-level sections:
+User-centric organization:
 
-- **`input`**: Source HTML files location and pattern
-- **`output`**: Output directory and file settings
-- **`ids`**: Unique ID generation (used for files and images)
-- **`markdown`**: Markdown formatting preferences
-  - `headingStyle`: "atx" (# Heading) or "setext" (underlined)
-  - `codeBlockStyle`: "fenced" (```) or "indented" (4 spaces)
-  - `emphasis`: "_" or "*" for italic text
-  - `strong`: "**" or "__" for bold text
-  - `bulletMarker`: "-", "+", or "*" for unordered lists
-  - `linkStyle`: "inlined" or "referenced"
-  - `linkReferenceStyle`: "full", "collapsed", or "shortcut"
-  - `horizontalRule`: Any string (e.g., "---", "* * *", "___")
-  - `lineBreak`: Two spaces for line breaks
-  - `codeFence`: "```" or "~~~" for fenced code blocks
-  - `preformattedCode`: Preserve preformatted code (boolean)
-- **`html`**: HTML parsing settings (content selector, remove selectors)
-- **`images`**: Image download settings (formats, timeout, retries, max size)
-- **`links`**: Link resolution configuration (URL mapping, fallback behavior)
-- **`logging`**: Log level and progress display
+- `input` - Source HTML location and pattern
+- `output` - Output directory and file settings
+- `ids` - Unique ID generation settings
+- `markdown` - Markdown formatting preferences (all Turndown options)
+- `html` - HTML parsing settings
+- `images` - Image download settings
+- `links` - Link resolution configuration
+- `logging` - Log level and progress display
 
-**Markdown Configuration Scope:**
+### Template System
 
-All markdown settings are respected throughout the conversion process:
-- **Default templates**: Dynamically generated with user's preferred delimiters and markers
-- **Turndown conversion**: All HTML-to-Markdown conversion uses configured options
-- **Custom Turndown rules**: Figure captions, flexible columns, and headings respect configuration
-- **Link resolution**: Link formatting follows `linkStyle` and `linkReferenceStyle`
+**Handlebars Templates:**
 
-Configs are deep-merged (default → user → custom), allowing partial overrides while preserving defaults.
+Allows full customization of output format:
 
-See "Link Resolution Strategy" section for details on `links.urlMapping`.
+- **Index templates** - Sourcebook table of contents
+- **File templates** - Individual page layout
 
-### Error Handling
+**Template Precedence:**
 
-**Error Categories:**
+1. Sourcebook-specific templates (e.g., `input/players-handbook/file.md.hbs`)
+2. Global templates (e.g., `input/file.md.hbs`)
+3. Built-in defaults
 
-1. File System Errors (directory not found, permissions)
-2. Parsing Errors (malformed HTML, unexpected structure)
-3. Conversion Errors (Turndown failures, custom rule exceptions)
-4. Write Errors (output directory creation, file permissions)
+Templates receive rich context with metadata, navigation, and content.
 
-**Strategy:**
+## Technology Choices
 
-- Fail Fast: Critical errors (config issues, input not found) stop execution
-- Graceful Degradation: Per-file errors log and continue to next file
-- Detailed Logging: All errors logged with context
-- Summary Report: End-of-run summary showing successes and failures
-- Image Download Errors: Retry with exponential backoff (3 attempts), generate JSON report for persistent failures
+### Core Dependencies
+
+**Zod** - Runtime type validation and schema inference
+
+- Provides type safety beyond TypeScript compilation
+- Clear error messages for invalid inputs
+- Single source of truth for types (via `z.infer`)
+
+**Turndown** - HTML to Markdown conversion
+
+- Industry-standard converter
+- Extensible rule system for custom formatting
+- Respects user's markdown style preferences
+
+**Cheerio** - HTML parsing and manipulation
+
+- Fast, jQuery-like API for server-side HTML
+- Efficient for extracting content and building anchor mappings
+- Allows preprocessing before Turndown conversion
+
+**Handlebars** - Template engine
+
+- Simple, logic-less templates
+- Widely adopted with good documentation
+- Allows users to fully customize output format
+
+**Commander.js** - CLI argument parsing
+
+- De facto standard for Node.js CLIs
+- Automatic help generation
+- Type-safe option handling
+
+**short-unique-id** - Unique ID generation
+
+- Fast generation of collision-resistant IDs
+- Configurable length and character set
+- Maintains set of used IDs to prevent duplicates
+
+**env-paths** - Cross-platform config paths
+
+- Automatic XDG Base Directory compliance on Linux
+- Handles platform differences transparently
+- Well-maintained, focused library
+
+**axios** - Image downloading
+
+- Robust HTTP client with retry support
+- Stream support for large files
+- Good error handling
+
+### Why Zod for Validation
+
+TypeScript provides compile-time type safety, but user inputs arrive at runtime. Zod bridges this gap:
+
+- Validates JSON configs, CLI args, and metadata files
+- Provides clear, user-friendly error messages
+- Enables type inference (no duplicate type definitions)
+- Catches errors before they cause silent failures
+
+### Why Handlebars for Templates
+
+- **Simplicity**: Logic-less templates are easy to understand and maintain
+- **Safety**: Can't execute arbitrary code
+- **Familiarity**: Widely used, good documentation
+- **Power**: Sufficient for our needs (variables, conditionals, loops)
+
+### Why Context-Based Pipeline
+
+Alternatives considered:
+
+- **Event emitter pattern**: More complex, harder to test
+- **Class-based modules**: More boilerplate, tighter coupling
+- **Functional pipeline with return values**: Awkward with multiple outputs
+
+Context-based approach is simple, testable, and flexible.
+
+## Design Decisions
+
+### Unique ID System
+
+**Decision:** Use 4-character alphanumeric IDs for all files and images.
+
+**Alternatives Considered:**
+
+- Descriptive filenames (e.g., `chapter-1-introduction.md`)
+- Sequential numbers (001, 002, etc.)
+- Full UUIDs
+
+**Rationale:**
+
+- Short IDs are easy to type and remember
+- Avoid filename conflicts and special character issues
+- No renumbering when files are added/removed
+- Better collision resistance than sequential numbers
+- More user-friendly than UUIDs
+
+### Persistent Caching
+
+**Decision:** Store mappings in JSON files (`files.json`, `images.json`) in output directory.
+
+**Why:**
+
+- Consistent IDs across conversion runs
+- Avoid re-downloading images (bandwidth + time savings)
+- Simple, human-readable format
+- Easy to inspect and debug
+
+**How:**
+
+- First run: Generate random IDs and save mappings
+- Subsequent runs: Load mappings and reuse existing IDs
+- Corrupted files: Validate with Zod, delete if invalid, rebuild
+
+### Link Resolution Strategy
+
+**Decision:** Multi-stage resolution with user-provided URL mapping, automatic ID resolution, and anchor validation.
+
+**Architecture:**
+
+The link resolution system spans three pipeline stages:
+
+**1. Scanner Stage - Build URL to ID Mapping**
+
+- Loads user's URL mapping from config: `D&D Beyond URL → HTML file path`
+- Builds runtime mapping as files are discovered: `HTML file path → unique ID`
+- Combined result provides: `D&D Beyond URL → unique ID`
+
+**2. Processor Stage - Build Anchor Index**
+
+- For each file during HTML processing:
+  - Extracts all headings and generates markdown anchors
+  - Creates plural/singular variants for better matching
+  - Maps HTML element IDs to markdown anchors (for same-page links)
+- Stores `FileAnchors` with file metadata:
+  - `valid: string[]` - All valid anchor targets
+  - `htmlIdToAnchor: Record<string, string>` - HTML ID mappings
+
+**3. Resolver Stage - Resolve and Validate**
+
+- Builds unified `LinkResolutionIndex` from all file anchors
+- For each markdown file:
+  - Finds D&D Beyond links
+  - Looks up target file ID via URL mapping
+  - Validates anchor exists in target file with smart matching:
+    - Exact match (including plural/singular variants)
+    - Prefix match for headers with suffixes (e.g., "Alchemist's Fire" matches "Alchemist's Fire (50 GP)")
+    - Uses shortest match if multiple candidates
+  - Rewrites link: `[Text](dndbeyond.com/...)` → `[Text](a3f9.md#anchor)`
+  - Falls back to bold text if configured and unresolved
+
+**Rationale:**
+
+- **Minimal user configuration** - Users only map URLs to HTML files, system handles IDs
+- **Automatic validation** - Prevents broken links in output
+- **Flexible fallback** - Configurable behavior for unresolved links
+- **Smart matching** - Handles D&D Beyond's naming patterns (plurals, suffixes)
+- **Separation of concerns** - Each pipeline stage has distinct responsibility
+
+**Configuration Example:**
+
+```json
+{
+  "links": {
+    "resolveInternal": true,
+    "fallbackToBold": true,
+    "urlMapping": {
+      "/sources/dnd/phb-2024/equipment": "players-handbook/08-equipment.html",
+      "/spells": "players-handbook/10-spell-descriptions.html"
+    }
+  }
+}
+```
+
+### HTML Preprocessing vs Turndown Rules
+
+**Decision:** Fix structural HTML issues before Turndown conversion.
+
+**Why:**
+
+D&D Beyond HTML contains patterns that violate HTML spec but are consistent:
+
+- Lists as siblings instead of children (e.g., `<ol><li>...</li><ul>...</ul></ol>`)
+
+**Approach:**
+
+1. **HTML Preprocessing** (in processor, before Turndown):
+   - Fix structural issues using Cheerio DOM manipulation
+   - Prevents Turndown from seeing invalid structure
+
+2. **Turndown Rules** (during conversion):
+   - Handle D&D Beyond content patterns (tables, figures, asides)
+   - Format valid HTML into specific markdown patterns
+
+**Rationale:**
+
+- Turndown expects valid HTML structure
+- DOM manipulation during Turndown can cause content loss
+- Preprocessing ensures Turndown sees correct structure from the start
+
+### Table Handling
+
+**Decision:** Custom Turndown rule for complex table patterns.
+
+**D&D Beyond Table Complexity:**
+
+- Rowspan cells in their own `<tr>` (non-standard pattern)
+- Multiple header rows with colspan grouping
+- Section dividers within tbody using colspan
+- Caption and footer extraction
+
+**Why Custom Rule:**
+
+- Full control over markdown generation
+- Can walk through table structure systematically
+- Handles all edge cases in single location
+- No risk of breaking HTML structure
+
+**Validation:** 576 tables across PHB, DMG, MM tested and working.
 
 ## Alternatives Considered
 
 ### Alternative 1: Normalized Heading Levels
 
 **Considered:** Normalizing all heading levels to start at H1 for consistency.
-**Rejected:** Preserving source heading levels maintains the original document structure and hierarchy.
 
-### Alternative 2: Convert Cross-Reference Links to Bold Text
+**Rejected:** Preserving source heading levels maintains the original document structure and hierarchy. Users can adjust in their knowledge management tool if needed.
 
-**Considered:** Converting all entity cross-reference links (spells, monsters, equipment) to bold text to match PDF style.
-**Rejected:** Markdown links preserve navigation and user experience. By building a URL-to-file mapping, we can convert D&D Beyond internal links to local markdown links (e.g., `[Fireball](a3f9.md#fireball)`), maintaining navigation while keeping everything offline. This is superior to losing all navigation by converting to bold text.
+### Alternative 2: Convert Links to Bold Text
+
+**Considered:** Converting all internal links to bold text to match PDF style.
+
+**Rejected:** Markdown links preserve navigation and user experience. With URL mapping and anchor validation, we can maintain offline navigation while keeping everything local.
 
 ### Alternative 3: Image Subdirectory
 
 **Considered:** Storing images in a separate `images/` subdirectory.
-**Rejected:** Keeping images in the same directory as markdown files simplifies references and organization.
+
+**Rejected:** Keeping images in the same directory as markdown files simplifies references, organization, and portability. Users can see all sourcebook content in one directory.
 
 ### Alternative 4: Descriptive Filenames
 
 **Considered:** Using descriptive filenames based on chapter titles (e.g., `chapter-1-character-creation.md`).
-**Rejected:** Unique IDs are more robust, avoid filename conflicts, and prevent issues with special characters or long titles.
+
+**Rejected:** Unique IDs are more robust, avoid filename conflicts, and prevent issues with special characters or long titles. Descriptive information goes in frontmatter.
 
 ### Alternative 5: Sequential Numeric IDs
 
 **Considered:** Using sequential numbers (001, 002, etc.) for file IDs.
-**Rejected:** Short unique IDs are more flexible, avoid renumbering when files are added/removed, and provide better collision resistance.
+
+**Rejected:** Short unique IDs avoid renumbering when files are added/removed and provide better collision resistance. Sequential IDs require careful management.
 
 ### Alternative 6: Manual OS Detection for Config Paths
 
 **Considered:** Manually detecting OS and building config paths with custom logic.
-**Rejected:** Using `env-paths` library provides:
 
-- Automatic XDG Base Directory specification compliance on Linux
-- Platform-specific conventions (macOS Preferences, Windows AppData)
-- Tested and maintained cross-platform behavior
-- Environment variable support (e.g., `$XDG_CONFIG_HOME`)
+**Rejected:** Using `env-paths` library provides automatic XDG compliance, handles platform differences, and is well-maintained. Don't reinvent the wheel.
 
-## Open Questions
+### Alternative 7: Class-Based Module Architecture
 
-- [x] Should we use unique IDs or descriptive filenames? → **Decision: Unique 4-character IDs**
-- [x] Should images be in a subdirectory or same directory as markdown? → **Decision: Same directory**
-- [x] How should cross-references to entities be handled? → **Decision: Convert to bold text**
-- [x] What tag structure should we use in YAML front matter? → **Decision: `dnd5e/chapter` and `dnd5e/source`**
-- [x] Which build tool should we use for production? → **Decision: esbuild**
-- [x] Which HTML parser should we use (JSDOM vs Cheerio)? → **Decision: Cheerio (simpler and faster)**
-- [x] Which CLI framework should we use (Commander.js vs Yargs)? → **Decision: Commander.js + Chalk**
-- [x] How should we handle errors during image downloads? → **Decision: Retry 3 times with backoff, generate JSON report for failures**
-- [x] Should we support batch processing with parallel conversion? → **Decision: No parallel processing in Phase 1, sequential file processing**
+**Considered:** Using classes for modules with shared state and methods.
 
-## Implementation Phases
+**Rejected:** Simple functions with context parameter are easier to test, have no hidden dependencies, and require less boilerplate. Context object provides all needed state.
 
-### Phase 1 (MVP)
+### Alternative 8: Process All Files Then Write
 
-- Basic HTML to Markdown conversion
-- Custom rules for stat blocks, spells, tables
-- CLI interface with essential options (Commander.js + Chalk)
-- Sequential file processing (no parallelization)
-- Unique ID generation for files and images
-- Image downloading with retry logic and failure reporting (JSON)
-- Navigation links
-- Index file generation
+**Considered:** Processing all files into memory, then writing in a separate stage.
 
-### Phase 2 (Enhancements)
+**Rejected:** Memory-inefficient for large sourcebooks. Processing and writing one file at a time keeps memory usage constant regardless of sourcebook size.
 
-- Parallel processing of files
-- Better cross-reference handling
-- Generate table of contents
-- Plugin system for custom rules
-- Watch mode for automatic conversion
+## Success Metrics
 
-### Phase 3 (Advanced)
+The solution is successful if it:
 
-- Support for other VTT HTML exports
-- Interactive mode for handling ambiguous structures
-- Advanced metadata extraction
-- Export to other formats (Obsidian, Notion, etc.)
+1. **Correctly converts** all D&D Beyond HTML content to valid Markdown
+2. **Preserves formatting** for D&D-specific content (tables, stat blocks, spells)
+3. **Handles errors gracefully** without stopping the entire conversion
+4. **Provides clear feedback** on what succeeded and what failed
+5. **Reuses cached data** to avoid unnecessary downloads
+6. **Generates consistent IDs** across multiple conversion runs
+7. **Resolves links accurately** with anchor validation
+8. **Allows customization** through config and templates
 
-## Success Criteria
+## Testing Strategy
 
-- ✅ Converts HTML files to readable Markdown
-- ✅ Preserves directory structure (one folder per sourcebook)
-- ✅ Generates unique 4-character IDs for all files
-- ✅ Generates unique 4-character IDs for all images
-- ✅ Downloads images and saves to same directory as markdown files
-- ✅ Image references use simple filenames
-- ✅ Creates navigation headers with previous/index/next links
-- ✅ Generates index file per sourcebook with ordered links
-- ✅ Uses correct tags (`dnd5e/chapter` and `dnd5e/source`)
-- ✅ Converts entity cross-references to bold text
-- ✅ Preserves source heading levels
-- ✅ Stat blocks are properly formatted
-- ✅ Tables are preserved and readable
-- ✅ Spell blocks follow consistent format
-- ✅ CLI is intuitive and provides helpful feedback
-- ✅ Handles errors gracefully without data loss
-- ✅ Processes entire sourcebook without manual intervention
+### Validation Testing
 
-## References
+- Test all Zod schemas with valid and invalid inputs
+- Verify error messages are clear and actionable
+- Test graceful degradation for each error category
 
-- [Turndown](https://github.com/mixmark-io/turndown) - HTML to Markdown converter
-- [short-unique-id](https://github.com/jeanlescure/short-unique-id) - Unique ID generation
-- [JSDOM](https://github.com/jsdom/jsdom) - HTML parsing option
-- [Cheerio](https://github.com/cheeriojs/cheerio) - HTML parsing option
-- [Commander.js](https://github.com/tj/commander.js) - CLI framework option
-- [Yargs](https://github.com/yargs/yargs) - CLI framework option
+### Conversion Testing
+
+- Test with real D&D Beyond HTML files (included in `examples/`)
+- Verify all formatting patterns are preserved (tables, lists, headings)
+- Test custom Turndown rules with edge cases
+- Compare output with expected results
+
+### Caching Testing
+
+- Verify IDs remain consistent across runs
+- Test corrupted cache detection and recovery
+- Verify image download is skipped when cached
+
+### Integration Testing
+
+- Full conversion runs with example sourcebooks
+- Verify all pipeline stages execute correctly
+- Test error tracking and summary display
+- Verify template rendering with custom templates
+
+### Performance Testing
+
+- Memory usage remains constant regardless of sourcebook size
+- Large sourcebooks (50+ files) convert successfully
+- Image download respects retries and timeouts
+
+## Implementation Notes
+
+For implementation details, type definitions, file structure, and coding conventions, see `CLAUDE.md` in the repository root.
+
+## Future Enhancements
+
+Potential future improvements (out of scope for initial implementation):
+
+- Dry-run mode to preview conversion
+- Interactive mode to resolve link ambiguities
+- Plugin system for custom content transformations
+- Support for other output formats (PDF, HTML)
+- Automated link detection without URL mapping
+- Incremental conversion (only process changed files)
+
+## Conclusion
+
+This architecture provides a solid foundation for converting D&D Beyond HTML to Markdown while maintaining flexibility for future enhancements. The pipeline design is simple and testable, the validation strategy catches errors early, and the memory-efficient approach handles large sourcebooks effectively.
