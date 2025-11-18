@@ -1470,12 +1470,39 @@ None of the recommended changes would break the public API or user-facing featur
 - [x] Test conversion successful (59/59 files processed)
 - [x] ID collision prevention works correctly
 
-### Phase 4: Improve Error Handling (2-3 hours)
+### Phase 4: Improve Error Handling (2-3 hours) ✅ COMPLETED
 
-- [ ] Add errors object to ConversionContext
-- [ ] Update modules to track errors
-- [ ] Add error summary to convert command output
-- [ ] Consider adding --verbose mode for detailed errors
+- [x] Add errors object to ConversionContext type
+- [x] Initialize errors in convert command
+- [x] Update processor.ts to track image download errors (2 locations)
+- [x] Update scanner.ts to track metadata parsing errors
+- [x] Add error summary display in convert command (after spinner completes)
+
+**Changes Made:**
+
+**Context Type (`src/types/context.ts`):**
+- Added `errors` object with arrays for files, images, and templates
+
+**Convert Command (`src/cli/commands/convert.ts`):**
+- Initialize `ctx.errors` with empty arrays
+- Display error summaries after `spinner.succeed()`:
+  - Image download failures (warnings)
+  - File processing failures (errors)
+  - Template loading failures (warnings)
+
+**Processor (`src/modules/processor.ts`):**
+- Track image download failures in `processImages()` (line 302)
+- Track cover image copy failures in `processCoverImage()` (line 461)
+
+**Scanner (`src/modules/scanner.ts`):**
+- Updated `loadSourcebookMetadata()` to accept `ctx` parameter
+- Track metadata parsing errors (line 57)
+- Updated call site to pass `ctx` (line 140)
+
+**Verification:**
+- [x] TypeScript type checking passes
+- [x] Test conversion successful (59/59 files processed)
+- [x] Error tracking working (no errors in test run, but infrastructure in place)
 
 ### Phase 5: Polish (Optional, 3-5 hours)
 

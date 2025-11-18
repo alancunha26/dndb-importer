@@ -39,6 +39,7 @@ async function detectTemplates(directory: string): Promise<TemplateSet> {
  */
 async function loadSourcebookMetadata(
   directory: string,
+  ctx: ConversionContext,
 ): Promise<SourcebookMetadata> {
   const metadataPath = path.join(directory, "sourcebook.json");
 
@@ -52,7 +53,8 @@ async function loadSourcebookMetadata(
     const metadata = JSON.parse(content) as SourcebookMetadata;
     return metadata;
   } catch (error) {
-    // Silently return empty metadata if file doesn't exist or fails to parse
+    // Track error silently - don't interrupt spinner
+    ctx.errors?.resources.push({ path: metadataPath, error: error as Error });
     return {};
   }
 }
@@ -135,7 +137,7 @@ export async function scan(ctx: ConversionContext): Promise<void> {
       // Detect sourcebook-specific templates and metadata
       const sourcebookDir = path.join(inputDir, sourcebook);
       const sourcebookTemplates = await detectTemplates(sourcebookDir);
-      const metadata = await loadSourcebookMetadata(sourcebookDir);
+      const metadata = await loadSourcebookMetadata(sourcebookDir, ctx);
 
       // Check if index file already has a mapping
       const indexKey = `${sourcebook}/index`;

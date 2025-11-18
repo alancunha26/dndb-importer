@@ -1,5 +1,3 @@
-/* eslint-disable @typescript-eslint/no-unused-vars */
-
 /**
  * Processor Module
  * Processes files one at a time and writes immediately to avoid memory bloat
@@ -17,7 +15,13 @@ import { readFile, writeFile, mkdir, copyFile } from "fs/promises";
 import { dirname, join, extname } from "node:path";
 import { load } from "cheerio";
 import { createTurndownService } from "../turndown";
-import { loadIndexTemplate, loadFileTemplate } from "../templates";
+import {
+  loadIndexTemplate,
+  loadFileTemplate,
+  getDefaultIndexTemplate,
+  getDefaultFileTemplate,
+} from "../templates";
+import Handlebars from "handlebars";
 import { IdGenerator } from "../utils/id-generator";
 import { loadMapping, saveMapping } from "../utils/mapping";
 import { fileExists } from "../utils/fs";
@@ -298,7 +302,8 @@ export async function process(ctx: ConversionContext): Promise<void> {
             config.images.timeout,
           );
         } catch (error) {
-          // Silently continue - image download failures don't stop processing
+          // Track error silently - don't interrupt spinner
+          ctx.errors?.images.push({ url: src, error: error as Error });
         }
       }
 
@@ -456,7 +461,8 @@ export async function process(ctx: ConversionContext): Promise<void> {
 
       return localFilename;
     } catch (error) {
-      // Silently continue - cover image copy failures don't stop processing
+      // Track error silently - don't interrupt spinner
+      ctx.errors?.images.push({ url: inputPath, error: error as Error });
       return undefined;
     }
   }
@@ -520,20 +526,27 @@ export async function process(ctx: ConversionContext): Promise<void> {
     const sourcebook = sourcebooks.find((sb) => sb.id === file.sourcebookId);
     if (!sourcebook) continue;
 
-    // 2. Parse HTML and extract content, title, anchors, and image URLs (ONLY place Cheerio is used)
-    const { content, title, anchors, images } = await processHtml(file);
-    file.anchors = anchors;
-    file.title = title;
+    try {
+      // 2. Parse HTML and extract content, title, anchors, and image URLs (ONLY place Cheerio is used)
+      const { content, title, anchors, images } = await processHtml(file);
+      file.anchors = anchors;
+      file.title = title;
 
-    // 3. Download images and build URL mapping (original URL -> local path)
-    await processImages(file, images);
+      // 3. Download images and build URL mapping (original URL -> local path)
+      await processImages(file, images);
 
-    // 4. Convert HTML to Markdown using Turndown with image URL mapping
-    const markdown = await processMarkdown(content);
+      // 4. Convert HTML to Markdown using Turndown with image URL mapping
+      const markdown = await processMarkdown(content);
 
-    // 5. Assemble and write document using template (enriches FileDescriptor)
-    await processDocument(file, markdown, sourcebook);
-    file.written = true;
+      // 5. Assemble and write document using template (enriches FileDescriptor)
+      await processDocument(file, markdown, sourcebook);
+      file.written = true;
+    } catch (error) {
+      ctx.errors.files.push({
+        file: file.relativePath,
+        error: error as Error,
+      });
+    }
   }
 
   // 6. Save updated image mapping to images.json (includes cover images)

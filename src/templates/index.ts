@@ -7,8 +7,12 @@ import { readFile } from "fs/promises";
 import { getDefaultIndexTemplate, getDefaultFileTemplate } from "./defaults";
 import type { MarkdownConfig } from "../types";
 
+// Re-export default template functions for module-level error handling
+export { getDefaultIndexTemplate, getDefaultFileTemplate };
+
 /**
  * Load and compile a template from file path or use default
+ * Throws error if custom template fails to load
  */
 export async function loadTemplate(
   templatePath: string | null,
@@ -19,16 +23,9 @@ export async function loadTemplate(
     return Handlebars.compile(defaultTemplate);
   }
 
-  try {
-    const templateContent = await readFile(templatePath, "utf-8");
-    return Handlebars.compile(templateContent);
-  } catch (error) {
-    console.warn(
-      `Warning: Failed to load template from ${templatePath}, using default:`,
-      error,
-    );
-    return Handlebars.compile(defaultTemplate);
-  }
+  // Load custom template - let errors bubble up to module level
+  const templateContent = await readFile(templatePath, "utf-8");
+  return Handlebars.compile(templateContent);
 }
 
 /**
