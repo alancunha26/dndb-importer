@@ -10,7 +10,6 @@ import type {
   TemplateSet,
 } from "./files";
 import type {
-  WrittenFile,
   ProcessingStats,
 } from "./pipeline";
 
@@ -21,15 +20,14 @@ export interface ConversionContext {
   // Accumulated by modules as pipeline progresses
 
   // Scanner module writes:
-  files?: FileDescriptor[];
-  sourcebooks?: SourcebookInfo[];
-  mappings?: Map<string, string>; // HTML relative path → unique ID
+  files?: FileDescriptor[]; // All files (flat list) - primary data structure
+  sourcebooks?: SourcebookInfo[]; // Sourcebook metadata only (no files array)
+  fileIndex?: Map<string, FileDescriptor>; // Fast lookup: uniqueId → FileDescriptor
+  pathIndex?: Map<string, string>; // Fast lookup: relativePath → uniqueId
   globalTemplates?: TemplateSet; // Global templates from input root
 
-  // Processor module writes (processes AND writes files immediately):
-  // Note: processedFiles removed to avoid memory bloat
-  // HTML and markdown are processed one file at a time and written immediately
-  writtenFiles?: WrittenFile[];
+  // Processor module enriches FileDescriptor objects in files array (adds title, anchors, written)
+  // No separate collection needed - files are updated in place
 
   // Stats module writes:
   stats?: ProcessingStats;

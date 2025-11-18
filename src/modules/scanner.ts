@@ -52,9 +52,10 @@ async function loadSourcebookMetadata(directory: string): Promise<SourcebookMeta
  * Scans input directory for HTML files and populates context
  *
  * Writes to context:
- * - files: Array of FileDescriptor with unique IDs
- * - sourcebooks: Grouped files by sourcebook
- * - mappings: Map of HTML path → unique ID
+ * - files: All files (flat list) - primary data structure
+ * - sourcebooks: Sourcebook metadata only (no files array)
+ * - fileIndex: Map of uniqueId → FileDescriptor (for fast lookups)
+ * - pathIndex: Map of relativePath → uniqueId (for URL mapping)
  * - globalTemplates: Global templates from input root
  */
 export async function scan(ctx: ConversionContext): Promise<void> {
@@ -81,7 +82,8 @@ export async function scan(ctx: ConversionContext): Promise<void> {
     console.warn("No HTML files found in:", inputDir);
     ctx.files = [];
     ctx.sourcebooks = [];
-    ctx.mappings = new Map();
+    ctx.fileIndex = new Map();
+    ctx.pathIndex = new Map();
     ctx.globalTemplates = globalTemplates;
     return;
   }
@@ -115,61 +117,20 @@ export async function scan(ctx: ConversionContext): Promise<void> {
     idGenerator.register(id);
   }
 
-  // 5. Generate unique IDs and create FileDescriptors
-  const files: FileDescriptor[] = [];
-  const mappings = new Map<string, string>();
-  const updatedFileMapping: FileMapping = { ...fileMapping };
-
+  // 5. First pass: Collect unique sourcebook names and create SourcebookInfo objects
+  const sourcebookNames = new Set<string>();
   for (const sourcePath of sortedFiles) {
     const relativePath = path.relative(inputDir, sourcePath);
     const sourcebook = path.dirname(relativePath);
-    const filename = path.basename(sourcePath, path.extname(sourcePath));
-
-    // Check if this HTML file already has a mapping
-    let uniqueId: string;
-    if (fileMapping[relativePath]) {
-      // Reuse existing ID from mapping
-      uniqueId = path.basename(fileMapping[relativePath], ctx.config.output.extension);
-    } else {
-      // Generate new ID
-      uniqueId = idGenerator.generate();
-      // Add to updated mapping
-      updatedFileMapping[relativePath] = `${uniqueId}${ctx.config.output.extension}`;
-    }
-
-    const outputPath = path.join(
-      ctx.config.output.directory,
-      sourcebook,
-      `${uniqueId}${ctx.config.output.extension}`
-    );
-
-    const descriptor: FileDescriptor = {
-      sourcePath,
-      relativePath,
-      outputPath,
-      sourcebook,
-      filename,
-      uniqueId,
-    };
-
-    files.push(descriptor);
-    mappings.set(relativePath, uniqueId);
+    sourcebookNames.add(sourcebook);
   }
 
-  // 6. Group files by sourcebook
-  const sourcebookMap = new Map<string, FileDescriptor[]>();
-
-  for (const file of files) {
-    if (!sourcebookMap.has(file.sourcebook)) {
-      sourcebookMap.set(file.sourcebook, []);
-    }
-    sourcebookMap.get(file.sourcebook)!.push(file);
-  }
-
-  // 7. Create SourcebookInfo objects with templates
+  // Create SourcebookInfo objects with unique IDs
   const sourcebooks: SourcebookInfo[] = [];
+  const sourcebookIdMap = new Map<string, string>(); // sourcebook dir name → ID
+  const updatedFileMapping: FileMapping = { ...fileMapping };
 
-  for (const [sourcebookName, sourcebookFiles] of sourcebookMap) {
+  for (const sourcebookName of sourcebookNames) {
     // Detect sourcebook-specific templates and metadata
     const sourcebookDir = path.join(inputDir, sourcebookName);
     const sourcebookTemplates = await detectTemplates(sourcebookDir);
@@ -202,11 +163,12 @@ export async function scan(ctx: ConversionContext): Promise<void> {
       id: indexId,
       title,
       sourcebook: sourcebookName,
-      files: sourcebookFiles,
       outputPath,
       metadata,
       templates: sourcebookTemplates,
     });
+
+    sourcebookIdMap.set(sourcebookName, indexId);
 
     // Log sourcebook-specific templates if found
     if (sourcebookTemplates.index || sourcebookTemplates.file) {
@@ -216,17 +178,66 @@ export async function scan(ctx: ConversionContext): Promise<void> {
     }
   }
 
-  // 8. Save updated file mapping
+  // 6. Second pass: Generate unique IDs and create FileDescriptors
+  // Build indices for fast lookups
+  const files: FileDescriptor[] = [];
+  const fileIndex = new Map<string, FileDescriptor>();
+  const pathIndex = new Map<string, string>();
+
+  for (const sourcePath of sortedFiles) {
+    const relativePath = path.relative(inputDir, sourcePath);
+    const sourcebook = path.dirname(relativePath);
+    const filename = path.basename(sourcePath, path.extname(sourcePath));
+
+    // Check if this HTML file already has a mapping
+    let uniqueId: string;
+    if (fileMapping[relativePath]) {
+      // Reuse existing ID from mapping
+      uniqueId = path.basename(fileMapping[relativePath], ctx.config.output.extension);
+    } else {
+      // Generate new ID
+      uniqueId = idGenerator.generate();
+      // Add to updated mapping
+      updatedFileMapping[relativePath] = `${uniqueId}${ctx.config.output.extension}`;
+    }
+
+    const outputPath = path.join(
+      ctx.config.output.directory,
+      sourcebook,
+      `${uniqueId}${ctx.config.output.extension}`
+    );
+
+    const sourcebookId = sourcebookIdMap.get(sourcebook)!;
+
+    const descriptor: FileDescriptor = {
+      sourcePath,
+      relativePath,
+      outputPath,
+      sourcebook,
+      sourcebookId,
+      filename,
+      uniqueId,
+    };
+
+    // Add to flat list and indices
+    files.push(descriptor);
+    fileIndex.set(uniqueId, descriptor);
+    pathIndex.set(relativePath, uniqueId);
+  }
+
+  // 7. Save updated file mapping
   await saveMapping(ctx.config.output.directory, "files.json", updatedFileMapping);
 
   // Write to context
   ctx.files = files;
   ctx.sourcebooks = sourcebooks;
-  ctx.mappings = mappings;
+  ctx.fileIndex = fileIndex;
+  ctx.pathIndex = pathIndex;
   ctx.globalTemplates = globalTemplates;
 
   console.log(`Grouped into ${sourcebooks.length} sourcebook(s)`);
   for (const sb of sourcebooks) {
-    console.log(`  - ${sb.title}: ${sb.files.length} file(s)`);
+    const sourcebookFiles = files.filter(f => f.sourcebookId === sb.id);
+    console.log(`  - ${sb.title}: ${sourcebookFiles.length} file(s)`);
   }
 }

@@ -30,7 +30,6 @@ import type {
   IndexTemplateContext,
   FileTemplateContext,
   SourcebookInfo,
-  WrittenFile,
 } from "../types";
 
 // ============================================================================
@@ -369,7 +368,7 @@ async function downloadImageWithRetry(
  * Build navigation links (prev/index/next)
  *
  * @param file - Current file descriptor
- * @param ctx - Conversion context (has sourcebooks with file ordering)
+ * @param ctx - Conversion context (has files and sourcebooks)
  * @returns Navigation links object for template
  */
 function processNavigation(
@@ -378,15 +377,20 @@ function processNavigation(
 ): { prev?: string; index: string; next?: string } {
   // 1. Find the sourcebook for this file
   const sourcebook = ctx.sourcebooks?.find(
-    (sb) => sb.sourcebook === file.sourcebook,
+    (sb) => sb.id === file.sourcebookId,
   );
 
   if (!sourcebook) {
     return { index: "[Index](index.md)" }; // Fallback if sourcebook not found
   }
 
-  // 2. Find current file's index in the sourcebook
-  const currentIndex = sourcebook.files.findIndex(
+  // 2. Get all files for this sourcebook in order
+  const sourcebookFiles = (ctx.files || []).filter(
+    (f) => f.sourcebookId === file.sourcebookId,
+  );
+
+  // 3. Find current file's index in the sourcebook
+  const currentIndex = sourcebookFiles.findIndex(
     (f) => f.uniqueId === file.uniqueId,
   );
 
@@ -394,14 +398,14 @@ function processNavigation(
     return { index: `[Index](${sourcebook.id}${ctx.config.output.extension})` };
   }
 
-  // 3. Get previous, index, and next files
-  const prevFile = currentIndex > 0 ? sourcebook.files[currentIndex - 1] : null;
+  // 4. Get previous, index, and next files
+  const prevFile = currentIndex > 0 ? sourcebookFiles[currentIndex - 1] : null;
   const nextFile =
-    currentIndex < sourcebook.files.length - 1
-      ? sourcebook.files[currentIndex + 1]
+    currentIndex < sourcebookFiles.length - 1
+      ? sourcebookFiles[currentIndex + 1]
       : null;
 
-  // 4. Build navigation links object
+  // 5. Build navigation links object
   const navigation: { prev?: string; index: string; next?: string } = {
     index: `[Index](${sourcebook.id}${ctx.config.output.extension})`,
   };
@@ -421,13 +425,13 @@ function processNavigation(
 
 /**
  * Assemble final document using template and write to disk
+ * Enriches the FileDescriptor with title, anchors, and written flag
  *
- * @param file - File descriptor
+ * @param file - File descriptor (will be mutated to add title, anchors, written)
  * @param markdown - Main markdown content
  * @param anchors - FileAnchors for link resolution
  * @param sourcebook - Sourcebook info
  * @param ctx - Conversion context
- * @returns WrittenFile with path and anchors
  */
 async function processDocument(
   file: FileDescriptor,
@@ -436,7 +440,7 @@ async function processDocument(
   anchors: FileAnchors,
   sourcebook: SourcebookInfo,
   ctx: ConversionContext,
-): Promise<WrittenFile> {
+): Promise<void> {
   // 1. Load template (sourcebook-specific > global > default)
   const template = await loadFileTemplate(
     sourcebook.templates.file,
@@ -468,13 +472,10 @@ async function processDocument(
   // 6. Write to disk
   await writeFile(file.outputPath, finalMarkdown, "utf-8");
 
-  // 7. Return WrittenFile with lightweight metadata
-  return {
-    descriptor: file,
-    path: file.outputPath,
-    title,
-    anchors,
-  };
+  // 7. Enrich FileDescriptor with processed data
+  file.title = title;
+  file.anchors = anchors;
+  file.written = true;
 }
 
 /**
@@ -552,24 +553,17 @@ async function processCoverImage(
 /**
  * Generate index files for all sourcebooks
  *
- * @param ctx - Conversion context (has sourcebooks with files)
+ * @param ctx - Conversion context (has sourcebooks with enriched files)
  * @param imageMapping - Current image mapping (will be updated with cover images)
  * @param idGenerator - ID generator for cover images
  */
 async function processIndexes(
   ctx: ConversionContext,
-  writtenFiles: WrittenFile[],
   imageMapping: ImageMapping,
   idGenerator: IdGenerator,
 ): Promise<void> {
   if (!ctx.sourcebooks || !ctx.config.output.createIndex) {
     return; // Skip if no sourcebooks or index creation disabled
-  }
-
-  // Build map of file uniqueId -> title from writtenFiles
-  const titleMap = new Map<string, string>();
-  for (const writtenFile of writtenFiles) {
-    titleMap.set(writtenFile.descriptor.uniqueId, writtenFile.title);
   }
 
   for (const sourcebook of ctx.sourcebooks) {
@@ -588,7 +582,12 @@ async function processIndexes(
       ctx.config.markdown,
     );
 
-    // 3. Build template context
+    // 3. Get all files for this sourcebook (should have title from processing)
+    const sourcebookFiles = (ctx.files || []).filter(
+      (f) => f.sourcebookId === sourcebook.id,
+    );
+
+    // 4. Build template context
     const context: IndexTemplateContext = {
       title: sourcebook.title,
       edition: sourcebook.metadata.edition,
@@ -596,8 +595,8 @@ async function processIndexes(
       author: sourcebook.metadata.author,
       coverImage: processedCoverImage, // Use processed filename with unique ID
       metadata: sourcebook.metadata,
-      files: sourcebook.files.map((file) => ({
-        title: titleMap.get(file.uniqueId) || "",
+      files: sourcebookFiles.map((file) => ({
+        title: file.title || "", // Title should be set by processor
         filename: `${file.uniqueId}${ctx.config.output.extension}`,
         uniqueId: file.uniqueId,
       })),
@@ -626,14 +625,15 @@ async function processIndexes(
 
 /**
  * Processes all scanned files and writes them to disk
+ * Enriches FileDescriptor objects with title, anchors, and written flag
  *
  * Reads from context:
- * - files
- * - sourcebooks (for navigation)
+ * - files (flat list of all files)
+ * - sourcebooks (metadata only)
  * - config
  *
- * Writes to context:
- * - writtenFiles: Array of WrittenFile with paths and anchors (lightweight)
+ * Mutates:
+ * - FileDescriptor objects in files array (adds title, anchors, written)
  */
 export async function process(ctx: ConversionContext): Promise<void> {
   if (!ctx.files || !ctx.sourcebooks) {
@@ -641,8 +641,6 @@ export async function process(ctx: ConversionContext): Promise<void> {
   }
 
   console.log(`Processing ${ctx.files.length} files...`);
-
-  const writtenFiles: WrittenFile[] = [];
 
   // Load persistent image mapping from images.json (if exists)
   let imageMapping = await loadMapping(
@@ -660,9 +658,7 @@ export async function process(ctx: ConversionContext): Promise<void> {
   // Process each file one at a time (memory-efficient)
   for (const file of ctx.files) {
     // 1. Find sourcebook for this file
-    const sourcebook = ctx.sourcebooks?.find(
-      (sb) => sb.sourcebook === file.sourcebook,
-    );
+    const sourcebook = ctx.sourcebooks.find((sb) => sb.id === file.sourcebookId);
 
     if (!sourcebook) {
       console.warn(`Skipping file ${file.relativePath}: sourcebook not found`);
@@ -689,8 +685,8 @@ export async function process(ctx: ConversionContext): Promise<void> {
     // 4. Convert HTML to Markdown using Turndown with image URL mapping
     const markdown = await processMarkdown(htmlContent, urlMapping, ctx.config);
 
-    // 5. Assemble and write document using template
-    const writtenFile = await processDocument(
+    // 5. Assemble and write document using template (enriches FileDescriptor)
+    await processDocument(
       file,
       title,
       markdown,
@@ -699,17 +695,14 @@ export async function process(ctx: ConversionContext): Promise<void> {
       ctx,
     );
 
-    writtenFiles.push(writtenFile);
-
     // All strings are garbage collected here before next iteration
   }
 
   // 7. Generate index files (may add cover images to imageMapping)
-  await processIndexes(ctx, writtenFiles, imageMapping, idGenerator);
+  await processIndexes(ctx, imageMapping, idGenerator);
 
   // 8. Save updated image mapping to images.json (includes cover images)
   await saveMapping(ctx.config.output.directory, "images.json", imageMapping);
 
-  // Write to context
-  ctx.writtenFiles = writtenFiles;
+  // No need to write to context - FileDescriptor objects in sourcebooks are enriched in place
 }

@@ -34,7 +34,7 @@ export type {
 // Pipeline
 export type {
   ProcessedFile,
-  WrittenFile,
+  // WrittenFile is deprecated - FileDescriptor is enriched instead
   LinkResolutionIndex,
   LinkResolutionResult,
   ProcessingStats,

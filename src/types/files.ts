@@ -3,12 +3,19 @@
  */
 
 export interface FileDescriptor {
+  // Scanner fills these fields:
   sourcePath: string; // Absolute path to source HTML
   relativePath: string; // Relative path from input root
   outputPath: string; // Target markdown file path
-  sourcebook: string; // Sourcebook name (directory name)
+  sourcebook: string; // Sourcebook directory name (for output path)
+  sourcebookId: string; // ID of the SourcebookInfo this file belongs to
   filename: string; // Base filename without extension
   uniqueId: string; // 4-character unique ID (e.g., "a3f9")
+
+  // Processor fills these fields (after processing):
+  title?: string; // Extracted from first H1 in document
+  anchors?: FileAnchors; // Valid anchors and HTML ID mappings
+  written?: boolean; // True after file has been written to disk
 }
 
 /**
@@ -37,10 +44,10 @@ export interface SourcebookInfo {
   id: string; // Unique ID for the index file
   title: string; // Sourcebook title (from metadata or directory name)
   sourcebook: string; // Sourcebook directory name
-  files: FileDescriptor[]; // Ordered list of content files
   outputPath: string; // Path to index markdown file
   metadata: SourcebookMetadata; // Metadata from sourcebook.json (or empty)
   templates: TemplateSet; // Sourcebook-specific templates (or null for global/default)
+  // Files are stored separately in ConversionContext.files with sourcebookId reference
 }
 
 export interface ImageDescriptor {

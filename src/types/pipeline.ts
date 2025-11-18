@@ -24,15 +24,16 @@ export interface ProcessedFile {
 }
 
 // ============================================================================
-// Writer Module
+// Writer Module (deprecated - processor now enriches FileDescriptor directly)
 // ============================================================================
 
-export interface WrittenFile {
-  descriptor: FileDescriptor;
-  path: string;
-  title: string; // Extracted from first H1 in document
-  anchors: FileAnchors;
-}
+// WrittenFile is deprecated - FileDescriptor is enriched instead
+// export interface WrittenFile {
+//   descriptor: FileDescriptor;
+//   path: string;
+//   title: string;
+//   anchors: FileAnchors;
+// }
 
 // ============================================================================
 // Resolver Module
@@ -40,7 +41,7 @@ export interface WrittenFile {
 
 export interface LinkResolutionIndex {
   // Maps file unique ID to anchor data for that file
-  // Built by collecting FileAnchors from all WrittenFiles
+  // Built by collecting FileAnchors from all FileDescriptors
   // Example: { "a3f9": { valid: [...], htmlIdToAnchor: {...} }, "b4x8": {...} }
   //
   // Usage:
