@@ -14,14 +14,9 @@
 import { readFile, writeFile, mkdir, copyFile } from "fs/promises";
 import { dirname, join, extname } from "node:path";
 import { load } from "cheerio";
+import type { AnyNode } from "domhandler";
 import { createTurndownService } from "../turndown";
-import {
-  loadIndexTemplate,
-  loadFileTemplate,
-  getDefaultIndexTemplate,
-  getDefaultFileTemplate,
-} from "../templates";
-import Handlebars from "handlebars";
+import { loadIndexTemplate, loadFileTemplate } from "../templates";
 import { IdGenerator } from "../utils/id-generator";
 import { loadMapping, saveMapping } from "../utils/mapping";
 import { fileExists } from "../utils/fs";
@@ -173,7 +168,7 @@ export async function process(ctx: ConversionContext): Promise<void> {
     // - DOM manipulation during Turndown conversion can cause content loss
     content
       .find("ol > ul, ol > ol, ul > ul, ul > ol")
-      .each((_index: number, element: any) => {
+      .each((_index: number, element: AnyNode) => {
         const $nestedList = $(element);
         const $parent = $nestedList.parent();
 
@@ -303,7 +298,7 @@ export async function process(ctx: ConversionContext): Promise<void> {
           );
         } catch (error) {
           // Track error silently - don't interrupt spinner
-          ctx.errors?.images.push({ url: src, error: error as Error });
+          ctx.errors?.images.push({ path: src, error: error as Error });
         }
       }
 
@@ -462,7 +457,7 @@ export async function process(ctx: ConversionContext): Promise<void> {
       return localFilename;
     } catch (error) {
       // Track error silently - don't interrupt spinner
-      ctx.errors?.images.push({ url: inputPath, error: error as Error });
+      ctx.errors?.images.push({ path: inputPath, error: error as Error });
       return undefined;
     }
   }
@@ -543,7 +538,7 @@ export async function process(ctx: ConversionContext): Promise<void> {
       file.written = true;
     } catch (error) {
       ctx.errors.files.push({
-        file: file.relativePath,
+        path: file.relativePath,
         error: error as Error,
       });
     }

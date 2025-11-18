@@ -5,7 +5,26 @@
 
 import type { ConversionConfig } from "./config";
 import type { FileDescriptor, SourcebookInfo, TemplateSet } from "./files";
-import type { ProcessingStats } from "./pipeline";
+
+export interface ErrorStats {
+  path: string;
+  error: Error;
+}
+
+export interface ProcessingStats {
+  totalFiles: number;
+  successful: number;
+  failed: number;
+  skipped: number;
+  indexesCreated: number;
+  imagesDownloaded: number;
+  imagesFailed: number;
+  linksResolved: number;
+  linksFailed: number;
+  startTime: Date;
+  endTime?: Date;
+  duration?: number;
+}
 
 export interface ConversionContext {
   // Input - provided at initialization
@@ -13,9 +32,9 @@ export interface ConversionContext {
 
   // Error tracking (initialized in convert command, populated by all modules)
   errors: {
-    files: Array<{ file: string; error: Error }>;
-    images: Array<{ url: string; error: Error }>;
-    resources: Array<{ path: string; error: Error }>;
+    files: ErrorStats[];
+    images: ErrorStats[];
+    resources: ErrorStats[];
   };
 
   files?: FileDescriptor[]; // All files (flat list) - primary data structure

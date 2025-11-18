@@ -27,15 +27,12 @@ export type {
   FileTemplateContext,
 } from "./files";
 
-// Pipeline
-export type {
-  LinkResolutionIndex,
-  LinkResolutionResult,
-  ProcessingStats,
-} from "./pipeline";
-
 // Context
-export type { ConversionContext } from "./context";
+export type {
+  ConversionContext,
+  ErrorStats,
+  ProcessingStats,
+} from "./context";
 
 // Turndown
 export type { TurndownNode } from "./turndown";

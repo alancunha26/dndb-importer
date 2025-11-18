@@ -20,7 +20,7 @@ export async function convertCommand(options: ConvertOptions): Promise<void> {
 
   try {
     // Load configuration (default → user → custom)
-    const config = await loadConfig(options.config);
+    const { config, errors } = await loadConfig(options.config);
 
     // Override with CLI options
     if (options.input) {
@@ -35,13 +35,13 @@ export async function convertCommand(options: ConvertOptions): Promise<void> {
 
     // TODO: Handle dry-run mode
 
-    // Initialize context
+    // Initialize context with config errors
     const ctx: ConversionContext = {
       config,
       errors: {
         files: [],
         images: [],
-        resources: [],
+        resources: [...errors],
       },
     };
 
@@ -82,7 +82,7 @@ export async function convertCommand(options: ConvertOptions): Promise<void> {
         `\n⚠️  ${ctx.errors.images.length} image(s) failed to download:`,
       );
       ctx.errors.images.forEach((err) => {
-        console.warn(`  - ${err.url}`);
+        console.warn(`  - ${err.path}`);
       });
     }
 
@@ -91,7 +91,7 @@ export async function convertCommand(options: ConvertOptions): Promise<void> {
         `\n❌ ${ctx.errors.files.length} file(s) failed to process:`,
       );
       ctx.errors.files.forEach((err) => {
-        console.error(`  - ${err.file}: ${err.error.message}`);
+        console.error(`  - ${err.path}: ${err.error.message}`);
       });
     }
 

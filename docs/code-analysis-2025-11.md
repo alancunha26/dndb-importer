@@ -1504,12 +1504,44 @@ None of the recommended changes would break the public API or user-facing featur
 - [x] Test conversion successful (59/59 files processed)
 - [x] Error tracking working (no errors in test run, but infrastructure in place)
 
-### Phase 5: Polish (Optional, 3-5 hours)
+### Phase 5: Polish (Optional, 3-5 hours) ✅ PARTIALLY COMPLETED
 
-- [ ] Create constants.ts with magic strings
-- [ ] Update imports across codebase
-- [ ] Add proper types from cheerio
-- [ ] Consider type improvements from section 3
+**Type Improvements (COMPLETED):**
+- [x] Add Zod for config validation
+- [x] Create Zod schemas for all config types
+- [x] Use `z.infer<typeof Schema>` to generate TypeScript types
+- [x] Update config loading with Zod validation
+- [x] Add proper Cheerio element types (AnyNode from domhandler)
+- [x] Create PartialConversionConfigSchema for user/custom configs
+
+**Not Implemented:**
+- [ ] Create constants.ts with magic strings (low value)
+- [ ] Extract HTML selectors to constants (low value)
+
+**Changes Made:**
+
+**Config Types (`src/types/config.ts`):**
+- Replaced all interface definitions with Zod schemas
+- Used `z.infer<typeof Schema>` to generate TypeScript types from schemas
+- Created `PartialConversionConfigSchema` for partial config validation
+- Added validation rules (e.g., `z.number().int().positive()`)
+
+**Config Loading (`src/utils/config.ts`):**
+- Updated `loadDefaultConfig()` to use `ConversionConfigSchema.parse()`
+- Updated `loadUserConfig()` to use `PartialConversionConfigSchema.parse()`
+- Updated `loadCustomConfig()` to use `PartialConversionConfigSchema.parse()`
+- Provides runtime validation with helpful error messages
+
+**Processor (`src/modules/processor.ts`):**
+- Imported `AnyNode` type from `domhandler`
+- Changed `element: any` to `element: AnyNode` in Cheerio .each() callback
+- Provides proper type checking for DOM manipulation
+
+**Verification:**
+- [x] TypeScript type checking passes
+- [x] Test conversion successful (59/59 files processed)
+- [x] Zod validation working correctly for default config
+- [x] Partial config validation working (user config loads successfully)
 
 **Total estimated effort:**
 

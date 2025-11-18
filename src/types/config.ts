@@ -1,75 +1,102 @@
 /**
- * Configuration type definitions
+ * Configuration type definitions with Zod schemas
  */
 
-export interface ConversionConfig {
-  input: InputConfig;
-  output: OutputConfig;
-  ids: IdConfig;
-  markdown: MarkdownConfig;
-  html: HtmlConfig;
-  images: ImagesConfig;
-  links: LinksConfig;
-  logging: LoggingConfig;
-}
+import { z } from "zod";
 
-export interface InputConfig {
-  directory: string;
-  pattern: string;
-  encoding: BufferEncoding;
-}
+// Zod schemas
+export const InputConfigSchema = z.object({
+  directory: z.string(),
+  pattern: z.string(),
+  encoding: z.string() as z.ZodType<BufferEncoding>,
+});
 
-export interface OutputConfig {
-  directory: string;
-  overwrite: boolean;
-  extension: string;
-  createIndex: boolean;
-}
+export const OutputConfigSchema = z.object({
+  directory: z.string(),
+  overwrite: z.boolean(),
+  extension: z.string(),
+  createIndex: z.boolean(),
+});
 
-export interface IdConfig {
-  length: number;
-  characters: string;
-}
+export const IdConfigSchema = z.object({
+  length: z.number().int().positive(),
+  characters: z.string(),
+});
 
-export interface MarkdownConfig {
-  headingStyle: "atx" | "setext";
-  codeBlockStyle: "fenced" | "indented";
-  emphasis: "_" | "*";
-  strong: "__" | "**";
-  bulletMarker: "-" | "+" | "*";
-  linkStyle: "inlined" | "referenced";
-  linkReferenceStyle: "full" | "collapsed" | "shortcut";
-  horizontalRule: string;
-  lineBreak: string;
-  codeFence: "```" | "~~~";
-  preformattedCode: boolean;
-}
+export const MarkdownConfigSchema = z.object({
+  headingStyle: z.enum(["atx", "setext"]),
+  codeBlockStyle: z.enum(["fenced", "indented"]),
+  emphasis: z.enum(["_", "*"]),
+  strong: z.enum(["__", "**"]),
+  bulletMarker: z.enum(["-", "+", "*"]),
+  linkStyle: z.enum(["inlined", "referenced"]),
+  linkReferenceStyle: z.enum(["full", "collapsed", "shortcut"]),
+  horizontalRule: z.string(),
+  lineBreak: z.string(),
+  codeFence: z.enum(["```", "~~~"]),
+  preformattedCode: z.boolean(),
+});
 
-export interface HtmlConfig {
-  contentSelector: string;
-  removeSelectors: string[];
-}
+export const HtmlConfigSchema = z.object({
+  contentSelector: z.string(),
+  removeSelectors: z.array(z.string()),
+});
 
-export interface ImagesConfig {
-  download: boolean;
-  formats: string[];
-  maxSize: number; // In bytes (default: 10MB)
-  timeout: number; // In milliseconds
-  retries: number;
-}
+export const ImagesConfigSchema = z.object({
+  download: z.boolean(),
+  formats: z.array(z.string()),
+  maxSize: z.number().int().positive(), // In bytes (default: 10MB)
+  timeout: z.number().int().positive(), // In milliseconds
+  retries: z.number().int().nonnegative(),
+});
 
-export interface LinksConfig {
-  resolveInternal: boolean;
-  fallbackToBold: boolean;
+export const LinksConfigSchema = z.object({
+  resolveInternal: z.boolean(),
+  fallbackToBold: z.boolean(),
   // Maps D&D Beyond URL paths to HTML file paths (relative to input directory)
   // Supports two types of mappings:
   // 1. Source book paths: "/sources/dnd/phb-2024/equipment" -> "players-handbook/08-equipment.html"
   // 2. Entity type paths: "/spells" -> "players-handbook/10-spell-descriptions.html"
   //    (for entity links like https://www.dndbeyond.com/spells/2619022-magic-missile)
-  urlMapping: Record<string, string>;
-}
+  urlMapping: z.record(z.string(), z.string()),
+});
 
-export interface LoggingConfig {
-  level: "debug" | "info" | "warn" | "error";
-  showProgress: boolean;
-}
+export const LoggingConfigSchema = z.object({
+  level: z.enum(["debug", "info", "warn", "error"]),
+  showProgress: z.boolean(),
+});
+
+export const ConversionConfigSchema = z.object({
+  input: InputConfigSchema,
+  output: OutputConfigSchema,
+  ids: IdConfigSchema,
+  markdown: MarkdownConfigSchema,
+  html: HtmlConfigSchema,
+  images: ImagesConfigSchema,
+  links: LinksConfigSchema,
+  logging: LoggingConfigSchema,
+});
+
+// Partial schema for user/custom configs (top-level AND nested properties optional)
+export const PartialConversionConfigSchema = ConversionConfigSchema.partial()
+  .extend({
+    input: InputConfigSchema.partial().optional(),
+    output: OutputConfigSchema.partial().optional(),
+    ids: IdConfigSchema.partial().optional(),
+    markdown: MarkdownConfigSchema.partial().optional(),
+    html: HtmlConfigSchema.partial().optional(),
+    images: ImagesConfigSchema.partial().optional(),
+    links: LinksConfigSchema.partial().optional(),
+    logging: LoggingConfigSchema.partial().optional(),
+  });
+
+// Infer TypeScript types from Zod schemas
+export type InputConfig = z.infer<typeof InputConfigSchema>;
+export type OutputConfig = z.infer<typeof OutputConfigSchema>;
+export type IdConfig = z.infer<typeof IdConfigSchema>;
+export type MarkdownConfig = z.infer<typeof MarkdownConfigSchema>;
+export type HtmlConfig = z.infer<typeof HtmlConfigSchema>;
+export type ImagesConfig = z.infer<typeof ImagesConfigSchema>;
+export type LinksConfig = z.infer<typeof LinksConfigSchema>;
+export type LoggingConfig = z.infer<typeof LoggingConfigSchema>;
+export type ConversionConfig = z.infer<typeof ConversionConfigSchema>;
