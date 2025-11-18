@@ -33,7 +33,7 @@ export function createTurndownService(
   turndownService.use(removeHeadingLinks(config));
   turndownService.use(unwrapLinkedImages(imageMapping));
   turndownService.use(imageAltText(imageMapping));
-  turndownService.use(figureCaptionRule(config));
+  turndownService.use(figureCaptionRule(config, imageMapping));
   turndownService.use(asideRule(config));
   turndownService.use(flexibleColumnsRule(config));
 

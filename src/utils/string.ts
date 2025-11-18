@@ -4,6 +4,22 @@
  */
 
 /**
+ * Check if a URL points to an image file
+ * Tests for common image file extensions
+ *
+ * @param url - URL to check
+ * @returns true if URL ends with an image extension
+ *
+ * @example
+ * isImageUrl("https://example.com/image.jpg") // true
+ * isImageUrl("https://example.com/map-player.png") // true
+ * isImageUrl("https://example.com/document.pdf") // false
+ */
+export function isImageUrl(url: string): boolean {
+  return /\.(jpe?g|png|gif|webp|svg)$/i.test(url);
+}
+
+/**
  * Convert a filename to a readable title
  * Removes numeric prefix, splits by hyphens/underscores, and capitalizes each word
  *

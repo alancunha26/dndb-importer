@@ -19,7 +19,7 @@ import { loadIndexTemplate, loadFileTemplate } from "../templates";
 import { IdGenerator } from "../utils/id-generator";
 import { loadMapping, saveMapping } from "../utils/mapping";
 import { fileExists } from "../utils/fs";
-import { filenameToTitle } from "../utils/string";
+import { filenameToTitle, isImageUrl } from "../utils/string";
 import type {
   ConversionContext,
   ConversionConfig,
@@ -157,7 +157,16 @@ async function processHtml(
     }
   });
 
-  // 7. Return extracted data
+  // 8. Extract alternate image URLs from figcaption links (generic pattern)
+  // Finds any <a> in <figcaption> that links to an image file
+  content.find("figcaption a").each((_index, element) => {
+    const href = $(element).attr("href");
+    if (href && isImageUrl(href)) {
+      imageUrls.push(href);
+    }
+  });
+
+  // 9. Return extracted data
   return {
     htmlContent: content.html() || "",
     title,
