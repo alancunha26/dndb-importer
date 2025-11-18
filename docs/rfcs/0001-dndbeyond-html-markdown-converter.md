@@ -637,11 +637,30 @@ User-centric configuration structure with 8 top-level sections:
 - **`input`**: Source HTML files location and pattern
 - **`output`**: Output directory and file settings
 - **`ids`**: Unique ID generation (used for files and images)
-- **`markdown`**: Markdown formatting preferences (Turndown options, front matter, navigation)
-- **`html`**: HTML parsing settings (content selector, etc.)
-- **`images`**: Image download settings (formats, timeout, retries)
+- **`markdown`**: Markdown formatting preferences
+  - `headingStyle`: "atx" (# Heading) or "setext" (underlined)
+  - `codeBlockStyle`: "fenced" (```) or "indented" (4 spaces)
+  - `emphasis`: "_" or "*" for italic text
+  - `strong`: "**" or "__" for bold text
+  - `bulletMarker`: "-", "+", or "*" for unordered lists
+  - `linkStyle`: "inlined" or "referenced"
+  - `linkReferenceStyle`: "full", "collapsed", or "shortcut"
+  - `horizontalRule`: Any string (e.g., "---", "* * *", "___")
+  - `lineBreak`: Two spaces for line breaks
+  - `codeFence`: "```" or "~~~" for fenced code blocks
+  - `preformattedCode`: Preserve preformatted code (boolean)
+- **`html`**: HTML parsing settings (content selector, remove selectors)
+- **`images`**: Image download settings (formats, timeout, retries, max size)
 - **`links`**: Link resolution configuration (URL mapping, fallback behavior)
 - **`logging`**: Log level and progress display
+
+**Markdown Configuration Scope:**
+
+All markdown settings are respected throughout the conversion process:
+- **Default templates**: Dynamically generated with user's preferred delimiters and markers
+- **Turndown conversion**: All HTML-to-Markdown conversion uses configured options
+- **Custom Turndown rules**: Figure captions, flexible columns, and headings respect configuration
+- **Link resolution**: Link formatting follows `linkStyle` and `linkReferenceStyle`
 
 Configs are deep-merged (default → user → custom), allowing partial overrides while preserving defaults.
 

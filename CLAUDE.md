@@ -137,7 +137,7 @@ console.log(`Files processed: ${ctx.stats.successful}/${ctx.stats.totalFiles}`);
   - `input` - Source HTML files location and pattern
   - `output` - Output directory and file settings
   - `ids` - Unique ID generation (used for files and images)
-  - `markdown` - Markdown formatting preferences
+  - `markdown` - Markdown formatting preferences (all Turndown options: headingStyle, emphasis, strong, bulletMarker, linkStyle, linkReferenceStyle, horizontalRule, lineBreak, codeFence, preformattedCode)
   - `html` - HTML parsing settings (content selector, etc.)
   - `images` - Image download settings
   - `links` - Link resolution configuration

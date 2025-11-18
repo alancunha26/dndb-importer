@@ -102,30 +102,98 @@ Create a `config.json` in your OS-specific directory to customize settings. See 
 
 The configuration system follows the XDG Base Directory specification on Linux and platform conventions on other operating systems.
 
-### Configuration Structure
+### Default Configuration
 
-The config file uses a user-centric structure with 8 top-level sections:
+Here's the complete default configuration with explanations for each option:
 
-- **`input`** - Source HTML files location and pattern
-- **`output`** - Output directory and file settings
-- **`ids`** - Unique ID generation (used for files and images)
-- **`markdown`** - Markdown formatting preferences
-- **`html`** - HTML parsing settings (content selector, etc.)
-- **`images`** - Image download settings
-- **`links`** - Link resolution configuration
-- **`logging`** - Logging level and progress display
+```jsonc
+{
+  // === Input Settings ===
+  "input": {
+    "directory": "./input",          // Where your downloaded HTML files are located
+    "pattern": "**/*.html",          // Glob pattern to match HTML files (excludes *.hbs templates)
+    "encoding": "utf-8"              // Text encoding for reading files
+  },
 
-### Key Configuration Options
+  // === Output Settings ===
+  "output": {
+    "directory": "./output",         // Where to write converted markdown files
+    "overwrite": true,               // Overwrite existing files without prompting
+    "extension": ".md",              // File extension for output files
+    "createIndex": true              // Generate index.md for each sourcebook
+  },
 
-- **`links.urlMapping`**: Maps D&D Beyond URLs to local HTML files for cross-reference resolution
-- **`links.resolveInternal`**: Enable/disable link resolution (default: true)
-- **`links.fallbackToBold`**: Convert unresolvable links to bold text (default: true)
-- **`images.download`**: Enable/disable image downloading
-- **`images.retries`**: Number of retry attempts for failed downloads (default: 3)
-- **`ids.length`**: Length of unique IDs (default: 4)
-- **`html.contentSelector`**: CSS selector for main content extraction (default: `.p-article-content`)
+  // === Unique ID Settings ===
+  "ids": {
+    "length": 4,                     // Length of generated IDs (e.g., "a3f9")
+    "characters": "abcdefghijklmnopqrstuvwxyz0123456789"  // Character set for IDs
+  },
 
-See `src/config/default.json` for all available options.
+  // === Markdown Formatting ===
+  // Customize how your markdown is generated to match your preferred style
+  // or tool requirements (Obsidian, GitHub, CommonMark, etc.)
+  "markdown": {
+    "headingStyle": "atx",           // "atx" (# Heading) or "setext" (underlined)
+    "codeBlockStyle": "fenced",      // "fenced" (```) or "indented" (4 spaces)
+    "emphasis": "_",                 // "_" or "*" for italic text
+    "strong": "**",                  // "**" or "__" for bold text
+    "bulletMarker": "-",             // "-", "+", or "*" for unordered lists
+    "linkStyle": "inlined",          // "inlined" [text](url) or "referenced" [text][ref]
+    "linkReferenceStyle": "full",    // "full", "collapsed", or "shortcut" (for referenced links)
+    "horizontalRule": "---",         // Any string (e.g., "---", "* * *", "___")
+    "lineBreak": "  ",               // Two spaces for soft line breaks
+    "codeFence": "```",              // "```" or "~~~" for fenced code blocks
+    "preformattedCode": false        // Preserve preformatted code blocks
+  },
+
+  // === HTML Parsing ===
+  "html": {
+    "contentSelector": ".p-article-content",  // CSS selector for main content
+    "removeSelectors": []                     // CSS selectors for elements to remove
+  },
+
+  // === Image Download Settings ===
+  "images": {
+    "download": true,                // Enable/disable image downloading
+    "formats": ["png", "jpg", "jpeg", "webp", "gif"],  // Allowed image formats
+    "maxSize": 10485760,             // Maximum image size in bytes (10MB)
+    "timeout": 30000,                // Download timeout in milliseconds (30s)
+    "retries": 3                     // Number of retry attempts for failed downloads
+  },
+
+  // === Link Resolution ===
+  "links": {
+    "resolveInternal": true,         // Enable/disable link resolution
+    "fallbackToBold": true,          // Convert unresolvable links to bold text
+    "urlMapping": {                  // Map D&D Beyond URLs to local HTML files
+      // Format: "URL_PATH": "relative/path/to/file.html"
+      "/sources/dnd/phb-2024/playing-the-game": "players-handbook/02-chapter-1-playing-the-game.html",
+      "/spells": "players-handbook/10-chapter-7-spell-descriptions.html"
+      // Add more mappings as needed...
+    }
+  },
+
+  // === Logging ===
+  "logging": {
+    "level": "info",                 // "debug", "info", "warn", or "error"
+    "showProgress": true             // Show progress indicators during conversion
+  }
+}
+```
+
+**Markdown Configuration Notes:**
+
+All markdown settings are respected throughout the conversion:
+- **Templates**: Index and file frontmatter formatting
+- **Content**: All Turndown-converted HTML
+- **Custom Rules**: Figure captions, flexible columns, headings
+
+**Configuration Priority:**
+
+Configs are deep-merged with this priority order (lowest to highest):
+1. Default config (shown above)
+2. User config (OS-specific location)
+3. Custom config (via `--config` flag)
 
 ## Templates
 
