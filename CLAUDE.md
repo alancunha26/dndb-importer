@@ -256,10 +256,68 @@ The converter handles D&D Beyond HTML in two stages:
 - `image-alt-text.ts` - Extract alt text from image URLs
 - `figure-caption.ts` - Convert figure captions to blockquotes with artist credits
 - `aside.ts` - Convert aside elements to Obsidian/GitHub callouts or blockquotes
+- `flexible-columns.ts` - Convert D&D Beyond flexible column layouts to lists
+- `table.ts` - Custom table handling for complex D&D Beyond table patterns
 
 **Decision criteria:**
 - Use **preprocessing** if: Fixing invalid HTML structure that breaks Turndown
 - Use **Turndown rule** if: Converting valid HTML patterns to specific markdown format
+
+### Table Handling
+
+D&D Beyond uses complex table patterns that don't translate cleanly to standard markdown tables because **markdown tables don't support rowspan or colspan**. The converter uses a custom Turndown rule (`src/turndown/rules/table.ts`) to handle these patterns.
+
+**Implemented Features:**
+
+1. **Caption Extraction**
+   - Extracts `<caption>` content and renders above table
+   - Uses `config.strong` for formatting (respects user config)
+   - Example: `**Magic Item Rarities**`
+
+2. **Rowspan Handling**
+   - Detects D&D Beyond's special pattern: rowspan cell in its own `<tr>`
+   - Merges with next row's data automatically
+   - Renders value in first row, empty cells for subsequent spanned rows
+   - Example HTML: `<tr><td rowspan="5">Chaotic</td></tr><tr><td>1</td><td>Boastful</td></tr>`
+   - Example Output:
+     ```markdown
+     | Chaotic | 1 | Boastful |
+     |  | 2 | Impulsive |
+     |  | 3 | Rebellious |
+     ```
+
+3. **Multiple Header Rows** (Option A - Keep Detailed Row Only)
+   - Discards grouping headers with colspan (e.g., "————— 1d100 Roll —————")
+   - Keeps only the most granular/detailed header row
+   - Prevents double separator rows (non-standard markdown)
+   - Future option: Can add book-specific handling if needed
+
+4. **Footer Extraction**
+   - Extracts `<tfoot>` content and renders below table as plain text
+   - Preserves asterisk footnotes and multi-line notes
+   - Example: `*Halve the value for a consumable item...`
+
+5. **Section Dividers** (Colspan in Tbody)
+   - Preserves section headers within tables (e.g., "Simple Melee Weapons")
+   - Renders as first column with empty cells for remaining columns
+   - Example: `| Simple Melee Weapons |  |  |  |  |  |`
+
+6. **Multiple Tbody Elements**
+   - Combines all `<tbody>` sections into single table
+   - Rowspan handling provides visual grouping
+
+**Table Statistics:**
+- **576 tables** across PHB, DMG, MM validated and working
+- **377 tables** use captions
+- **224 tables** use footers
+- **22 files** use rowspan
+- **10+ instances** of section dividers
+
+**Why Custom Rule Instead of HTML Preprocessing:**
+- Full control over markdown generation
+- Can walk through table structure systematically
+- Cleaner code organization (all table logic in one place)
+- No risk of breaking HTML structure before conversion
 
 ### Type System
 
