@@ -10,6 +10,7 @@ import { IdGenerator } from "../utils/id-generator";
 import { loadMapping, saveMapping } from "../utils/mapping";
 import { fileExists } from "../utils/fs";
 import { filenameToTitle, extractIdFromFilename } from "../utils/string";
+import { SourcebookMetadataSchema } from "../types/files";
 import type {
   ConversionContext,
   FileDescriptor,
@@ -35,7 +36,7 @@ async function detectTemplates(directory: string): Promise<TemplateSet> {
 
 /**
  * Load sourcebook metadata from sourcebook.json
- * Returns empty object if file doesn't exist or parsing fails
+ * Returns empty object if file doesn't exist or parsing/validation fails
  */
 async function loadSourcebookMetadata(
   directory: string,
@@ -50,8 +51,11 @@ async function loadSourcebookMetadata(
     }
 
     const content = await readFile(metadataPath, "utf-8");
-    const metadata = JSON.parse(content) as SourcebookMetadata;
-    return metadata;
+    const parsed = JSON.parse(content);
+
+    // Validate with Zod schema
+    const metadata = SourcebookMetadataSchema.parse(parsed);
+    return metadata as SourcebookMetadata;
   } catch (error) {
     // Track error silently - don't interrupt spinner
     ctx.errors?.resources.push({ path: metadataPath, error: error as Error });

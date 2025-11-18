@@ -2,6 +2,8 @@
  * File-related type definitions
  */
 
+import { z } from "zod";
+
 export interface FileDescriptor {
   // Scanner fills these fields:
   sourcePath: string; // Absolute path to source HTML
@@ -21,15 +23,24 @@ export interface FileDescriptor {
 /**
  * Sourcebook metadata from sourcebook.json
  * Optional file that users can provide to customize sourcebook output
+ *
+ * Fields:
+ * - title: Display title (overrides directory name)
+ * - edition: e.g., "5th Edition (2024)"
+ * - coverImage: Filename of cover image in sourcebook directory
+ * - description: Brief description for index page
+ * - author: e.g., "Wizards of the Coast"
+ * - Custom fields allowed for user templates
  */
-export interface SourcebookMetadata {
-  title?: string; // Display title (overrides directory name)
-  edition?: string; // e.g., "5th Edition (2024)"
-  coverImage?: string; // Filename of cover image in sourcebook directory
-  description?: string; // Brief description for index page
-  author?: string; // e.g., "Wizards of the Coast"
-  [key: string]: unknown; // Allow custom fields for user templates
-}
+export const SourcebookMetadataSchema = z.looseObject({
+  title: z.string().optional(),
+  edition: z.string().optional(),
+  coverImage: z.string().optional(),
+  description: z.string().optional(),
+  author: z.string().optional(),
+});
+
+export type SourcebookMetadata = z.infer<typeof SourcebookMetadataSchema>;
 
 /**
  * Template file paths

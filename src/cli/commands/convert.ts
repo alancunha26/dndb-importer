@@ -3,22 +3,28 @@
  */
 
 import ora from "ora";
+import { z } from "zod";
 import { loadConfig } from "../../utils/config";
 import * as modules from "../../modules";
 import type { ConversionContext } from "../../types";
 
-interface ConvertOptions {
-  input?: string;
-  output?: string;
-  config?: string;
-  dryRun?: boolean;
-  verbose?: boolean;
-}
+const ConvertOptionsSchema = z.object({
+  input: z.string().optional(),
+  output: z.string().optional(),
+  config: z.string().optional(),
+  dryRun: z.boolean().optional(),
+  verbose: z.boolean().optional(),
+});
 
-export async function convertCommand(options: ConvertOptions): Promise<void> {
+type Options = z.infer<typeof ConvertOptionsSchema>;
+
+export async function convertCommand(opts: Options): Promise<void> {
   const spinner = ora("Initializing...").start();
 
   try {
+    // Validate CLI options
+    const options = ConvertOptionsSchema.parse(opts);
+
     // Load configuration (default → user → custom)
     const { config, errors } = await loadConfig(options.config);
 
@@ -32,8 +38,6 @@ export async function convertCommand(options: ConvertOptions): Promise<void> {
     if (options.verbose) {
       config.logging.level = "debug";
     }
-
-    // TODO: Handle dry-run mode
 
     // Initialize context with config errors
     const ctx: ConversionContext = {

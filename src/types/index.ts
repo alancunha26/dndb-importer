@@ -26,6 +26,7 @@ export type {
   IndexTemplateContext,
   FileTemplateContext,
 } from "./files";
+export { SourcebookMetadataSchema } from "./files";
 
 // Context
 export type {
@@ -33,6 +34,9 @@ export type {
   ErrorStats,
   ProcessingStats,
 } from "./context";
+
+// Resolver
+export type { LinkResolutionIndex, LinkResolutionResult } from "./resolver";
 
 // Turndown
 export type { TurndownNode } from "./turndown";
