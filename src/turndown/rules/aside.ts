@@ -28,6 +28,8 @@ const ASIDE_RENDERING_MAP: Array<{
 }> = [
   { pattern: "gameplay-callout", type: "plain" },
   { pattern: "epigraph", type: "blockquote" },
+  { pattern: "monster-lore", type: "blockquote" },
+  { pattern: "text--quote-box", type: "blockquote" },
 ];
 
 /**
