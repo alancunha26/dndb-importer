@@ -4,33 +4,43 @@
  */
 
 import type { ConversionConfig } from "./config";
-import type {
-  FileDescriptor,
-  SourcebookInfo,
-  TemplateSet,
-} from "./files";
-import type {
-  WrittenFile,
-  ProcessingStats,
-} from "./pipeline";
+import type { FileDescriptor, SourcebookInfo, TemplateSet } from "./files";
+
+export interface ErrorStats {
+  path: string;
+  error: Error;
+}
+
+export interface ProcessingStats {
+  totalFiles: number;
+  successful: number;
+  failed: number;
+  skipped: number;
+  indexesCreated: number;
+  imagesDownloaded: number;
+  imagesFailed: number;
+  linksResolved: number;
+  linksFailed: number;
+  startTime: Date;
+  endTime?: Date;
+  duration?: number;
+}
 
 export interface ConversionContext {
   // Input - provided at initialization
   config: ConversionConfig;
 
-  // Accumulated by modules as pipeline progresses
+  // Error tracking (initialized in convert command, populated by all modules)
+  errors: {
+    files: ErrorStats[];
+    images: ErrorStats[];
+    resources: ErrorStats[];
+  };
 
-  // Scanner module writes:
-  files?: FileDescriptor[];
-  sourcebooks?: SourcebookInfo[];
-  mappings?: Map<string, string>; // HTML relative path → unique ID
+  files?: FileDescriptor[]; // All files (flat list) - primary data structure
+  sourcebooks?: SourcebookInfo[]; // Sourcebook metadata only (no files array)
+  fileIndex?: Map<string, FileDescriptor>; // Fast lookup: uniqueId → FileDescriptor
+  pathIndex?: Map<string, string>; // Fast lookup: relativePath → uniqueId
   globalTemplates?: TemplateSet; // Global templates from input root
-
-  // Processor module writes (processes AND writes files immediately):
-  // Note: processedFiles removed to avoid memory bloat
-  // HTML and markdown are processed one file at a time and written immediately
-  writtenFiles?: WrittenFile[];
-
-  // Stats module writes:
   stats?: ProcessingStats;
 }

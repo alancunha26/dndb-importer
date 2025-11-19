@@ -2,27 +2,45 @@
  * File-related type definitions
  */
 
+import { z } from "zod";
+
 export interface FileDescriptor {
+  // Scanner fills these fields:
   sourcePath: string; // Absolute path to source HTML
   relativePath: string; // Relative path from input root
   outputPath: string; // Target markdown file path
-  sourcebook: string; // Sourcebook name (directory name)
+  sourcebook: string; // Sourcebook directory name (for output path)
+  sourcebookId: string; // ID of the SourcebookInfo this file belongs to
   filename: string; // Base filename without extension
   uniqueId: string; // 4-character unique ID (e.g., "a3f9")
+
+  // Processor fills these fields (after processing):
+  title?: string; // Extracted from first H1 in document
+  anchors?: FileAnchors; // Valid anchors and HTML ID mappings
+  written?: boolean; // True after file has been written to disk
 }
 
 /**
  * Sourcebook metadata from sourcebook.json
  * Optional file that users can provide to customize sourcebook output
+ *
+ * Fields:
+ * - title: Display title (overrides directory name)
+ * - edition: e.g., "5th Edition (2024)"
+ * - coverImage: Filename of cover image in sourcebook directory
+ * - description: Brief description for index page
+ * - author: e.g., "Wizards of the Coast"
+ * - Custom fields allowed for user templates
  */
-export interface SourcebookMetadata {
-  title?: string; // Display title (overrides directory name)
-  edition?: string; // e.g., "5th Edition (2024)"
-  coverImage?: string; // Filename of cover image in sourcebook directory
-  description?: string; // Brief description for index page
-  author?: string; // e.g., "Wizards of the Coast"
-  [key: string]: unknown; // Allow custom fields for user templates
-}
+export const SourcebookMetadataSchema = z.looseObject({
+  title: z.string().optional(),
+  edition: z.string().optional(),
+  coverImage: z.string().optional(),
+  description: z.string().optional(),
+  author: z.string().optional(),
+});
+
+export type SourcebookMetadata = z.infer<typeof SourcebookMetadataSchema>;
 
 /**
  * Template file paths
@@ -37,41 +55,10 @@ export interface SourcebookInfo {
   id: string; // Unique ID for the index file
   title: string; // Sourcebook title (from metadata or directory name)
   sourcebook: string; // Sourcebook directory name
-  files: FileDescriptor[]; // Ordered list of content files
   outputPath: string; // Path to index markdown file
   metadata: SourcebookMetadata; // Metadata from sourcebook.json (or empty)
   templates: TemplateSet; // Sourcebook-specific templates (or null for global/default)
-}
-
-export interface ImageDescriptor {
-  originalUrl: string; // Original image URL from HTML
-  uniqueId: string; // 4-character unique ID
-  extension: string; // File extension (png, jpg, webp, etc.)
-  localPath: string; // Filename in output (e.g., "m3x7.png")
-  sourcebook: string; // Sourcebook directory name
-  downloadStatus: "pending" | "success" | "failed";
-  error?: Error;
-}
-
-export interface DocumentMetadata {
-  title: string;
-  date: string; // ISO date string (YYYY-MM-DD)
-  tags: string[]; // e.g., ["dnd5e/chapter", "dnd5e/source"]
-}
-
-export interface NavigationLinks {
-  previous?: {
-    title: string;
-    id: string; // Unique ID of previous file
-  };
-  index: {
-    title: string; // Sourcebook title
-    id: string; // Unique ID of index file
-  };
-  next?: {
-    title: string;
-    id: string; // Unique ID of next file
-  };
+  // Files are stored separately in ConversionContext.files with sourcebookId reference
 }
 
 export interface FileAnchors {
@@ -84,14 +71,6 @@ export interface FileAnchors {
   // Built during HTML processing using Cheerio to find elements with id attributes
   htmlIdToAnchor: Record<string, string>;
 }
-
-/**
- * Image mapping for persistence
- * Maps URL -> local filename
- * Example: { "https://media.dndbeyond.com/.../image.png": "a3f9.png" }
- * Saved to images.json in the output directory root
- */
-export type ImageMapping = Record<string, string>;
 
 /**
  * File mapping for persistence
@@ -112,6 +91,7 @@ export type FileMapping = Record<string, string>;
 export interface IndexTemplateContext {
   // Sourcebook metadata
   title: string;
+  date: string;
   edition?: string;
   description?: string;
   author?: string;

@@ -32,6 +32,38 @@ npm run lint
 npm run format
 ```
 
+## Development Guidelines
+
+### ⚠️ CRITICAL: Always Use the Same Output Directory During Testing
+
+When testing and iterating on the converter, **ALWAYS use the same output directory** (e.g., `examples/output`).
+
+**DO NOT create new directories** like `examples/output-test`, `examples/output-test2`, etc. for each test run.
+
+**Why?**
+- The persistent cache (`files.json` and `images.json`) lives in the output directory
+- Using a different directory means:
+  - ❌ No cache → All images re-downloaded from D&D Beyond
+  - ❌ New random IDs generated for every file and image
+  - ❌ Wasted bandwidth and time
+  - ❌ Cannot verify cache system is working correctly
+
+**Correct approach:**
+```bash
+# Always use the same output directory
+npm run dndb-convert -- --input examples/input --output examples/output
+npm run dndb-convert -- --input examples/input --output examples/output  # Reuses cache!
+```
+
+**Incorrect approach:**
+```bash
+# ❌ DON'T DO THIS - creates new cache each time
+npm run dndb-convert -- --input examples/input --output examples/output-test1
+npm run dndb-convert -- --input examples/input --output examples/output-test2
+```
+
+**Exception:** Only use a different output directory when specifically testing cache behavior or when you want to start fresh (e.g., testing breaking changes to the mapping format).
+
 ## Architecture Overview
 
 ### Core Processing Pipeline
@@ -132,6 +164,11 @@ console.log(`Files processed: ${ctx.stats.successful}/${ctx.stats.totalFiles}`);
 - Uses `env-paths` library for OS-specific config paths
 - Linux: Follows XDG Base Directory specification (`$XDG_CONFIG_HOME`)
 - Configs are deep-merged: default.json → user config → CLI --config flag
+- **Validated with Zod**: Uses `ConversionConfigSchema` for default config, `PartialConversionConfigSchema` for user/custom configs
+- **Error handling**: `loadConfig()` returns `{ config, errors }` instead of throwing
+  - Invalid user/custom configs tracked in errors array
+  - Falls back to default config automatically
+  - Errors displayed in final summary via `ctx.errors.resources`
 - Location: `src/config/default.json` (copied to `dist/config/` during build)
 - Structure: User-centric organization with 8 top-level sections:
   - `input` - Source HTML files location and pattern
@@ -145,6 +182,28 @@ console.log(`Files processed: ${ctx.stats.successful}/${ctx.stats.totalFiles}`);
 - HTML Parser: Uses `.p-article-content` selector to extract main content from D&D Beyond HTML
 - URL Mapping: `links.urlMapping` maps D&D Beyond URLs to HTML file paths (relative to input directory)
 - Fallback: `links.fallbackToBold` converts unresolvable links to bold text (default: true)
+
+**Input Validation and Error Tracking:**
+
+- **All user inputs validated with Zod** - ensures type safety and provides clear error messages
+- **Validated inputs:**
+  1. CLI options (`ConvertOptionsSchema`) - validates command-line arguments in convert command
+  2. Config files (`ConversionConfigSchema`, `PartialConversionConfigSchema`) - validates default, user, and custom configs
+  3. Sourcebook metadata (`SourcebookMetadataSchema`) - validates sourcebook.json files
+  4. Mapping files (`MappingSchema`) - validates files.json and images.json
+- **Error tracking architecture:**
+  - Utilities throw errors naturally (simple error handling)
+  - Modules catch errors and track in `ctx.errors`
+  - Three error categories:
+    - `ctx.errors.files` - File processing errors
+    - `ctx.errors.images` - Image download errors
+    - `ctx.errors.resources` - Config/metadata/mapping loading errors
+  - All errors displayed in final summary after conversion completes
+- **Graceful degradation:**
+  - Invalid config → Falls back to default config
+  - Invalid sourcebook metadata → Uses empty metadata
+  - Invalid mapping file → Deletes corrupted file and starts fresh
+  - Conversion continues even with errors (fails gracefully)
 
 **File Organization:**
 
@@ -175,13 +234,17 @@ console.log(`Files processed: ${ctx.stats.successful}/${ctx.stats.totalFiles}`);
 **Sourcebook Metadata:**
 
 - **Optional `sourcebook.json`** in each sourcebook directory
+- **Validated with Zod**: Uses `SourcebookMetadataSchema` with `.looseObject()` to allow custom fields
 - Scanner loads metadata using `loadSourcebookMetadata()` helper
 - Fields: `title`, `edition`, `description`, `author`, `coverImage`, plus any custom fields
+- Invalid metadata files tracked in `ctx.errors.resources` and falls back to empty metadata
 - Stored in `SourcebookInfo.metadata` and passed to templates
 - Title from metadata overrides directory-name-based title generation
 - All metadata accessible in templates via `metadata` object
 
 **Cross-References (Resolver Module):**
+
+See RFC 0001 "Link Resolution Strategy" section for complete architecture.
 
 - **Link resolution is optional** (`links.resolveInternal`):
   - If `true`: Resolver module resolves links with full validation (default)
@@ -190,14 +253,14 @@ console.log(`Files processed: ${ctx.stats.successful}/${ctx.stats.totalFiles}`);
   - Source paths: `/sources/dnd/phb-2024/equipment` → `players-handbook/08-chapter-6-equipment.html`
   - Entity paths: `/spells` → `players-handbook/10-spell-descriptions.html`
 - Supports both source book links and entity links (e.g., `https://www.dndbeyond.com/spells/2619022-magic-missile`)
-- Scanner builds runtime mapping: `players-handbook/08-chapter-6-equipment.html` → unique ID `yw3w`
+- Multi-stage resolution: Scanner builds URL→ID mapping, Processor builds anchors, Resolver validates and rewrites
 - **Processor builds `FileAnchors`** for each file during HTML processing:
   - `valid: string[]` - All markdown anchors with plural/singular variants
   - `htmlIdToAnchor: Record<string, string>` - HTML element IDs → markdown anchors
+  - Example: `<h2 id="Bell1GP">Bell (1 GP)</h2>` → `{ "Bell1GP": "bell-1-gp" }`
 - **Resolver builds `LinkResolutionIndex`** by collecting all `FileAnchors`:
   - Single unified index: file ID → anchor data
   - Used for both same-page link resolution and cross-file validation
-- Link resolver combines mappings: URL → HTML path → unique ID
 - **Validates** anchor exists in target file with smart matching:
   1. Exact match (including plural/singular variants)
   2. Prefix match for headers with suffixes (e.g., "Alchemist's Fire" matches "Alchemist's Fire (50 GP)")
@@ -323,44 +386,67 @@ D&D Beyond uses complex table patterns that don't translate cleanly to standard 
 
 Types are organized in `src/types/` by domain:
 
-- **`types/config.ts`** - Configuration types (`ConversionConfig`, `HtmlParserConfig`, etc.)
-- **`types/files.ts`** - File-related types (`FileDescriptor`, `ImageDescriptor`, `FileAnchors`, template types, etc.)
-- **`types/pipeline.ts`** - Pipeline data types (`ScanResult`, `ProcessedFile`, `WrittenFile`, `LinkResolutionIndex`, etc.)
-- **`types/context.ts`** - `ConversionContext` (flows through all modules)
+- **`types/config.ts`** - Configuration types with Zod schemas (uses `z.infer` for type inference)
+- **`types/files.ts`** - File-related types including templates and sourcebook metadata (with Zod schemas)
+- **`types/context.ts`** - `ConversionContext`, `ErrorStats`, `ProcessingStats` (core pipeline types)
+- **`types/resolver.ts`** - Resolver module types (`LinkResolutionIndex`, `LinkResolutionResult`)
 - **`types/turndown.ts`** - Turndown-related types (`TurndownNode` - used by all Turndown rules)
-- **`types/index.ts`** - Re-exports all types
+- **`types/index.ts`** - Re-exports all types and schemas
+
+**Zod Schema Pattern:**
+All user-facing types use Zod for runtime validation with TypeScript type inference:
+```typescript
+// Schema defines both runtime validation and TypeScript type
+export const SourcebookMetadataSchema = z.looseObject({
+  title: z.string().optional(),
+  edition: z.string().optional(),
+  // ...
+});
+
+// Type inferred from schema (single source of truth)
+export type SourcebookMetadata = z.infer<typeof SourcebookMetadataSchema>;
+```
+
+Validated types:
+- **Config files** - `ConversionConfigSchema`, `PartialConversionConfigSchema`
+- **CLI options** - `ConvertOptionsSchema`
+- **Sourcebook metadata** - `SourcebookMetadataSchema`
+- **Mapping files** - `MappingSchema` (files.json, images.json)
 
 Key types:
 
-- `ConversionContext` - Context object that flows through pipeline modules (flattened structure):
-  - `config`: Configuration
-  - `files`: FileDescriptor[] (from scanner)
-  - `sourcebooks`: SourcebookInfo[] (from scanner)
-  - `mappings`: Map<string, string> (from scanner)
-  - `globalTemplates`: TemplateSet (from scanner - global template paths)
-  - `writtenFiles`: WrittenFile[] (from processor - lightweight, no HTML/markdown)
-  - `stats`: ProcessingStats (from stats)
+- `ConversionContext` - Context object that flows through pipeline modules:
+  - `config`: ConversionConfig
+  - `errors`: { files: ErrorStats[], images: ErrorStats[], resources: ErrorStats[] }
+  - `files?`: FileDescriptor[] (all files - flat list)
+  - `sourcebooks?`: SourcebookInfo[] (sourcebook metadata only)
+  - `fileIndex?`: Map<string, FileDescriptor> (uniqueId → FileDescriptor)
+  - `pathIndex?`: Map<string, string> (relativePath → uniqueId)
+  - `globalTemplates?`: TemplateSet (global templates from input root)
+  - `stats?`: ProcessingStats
+- `ErrorStats` - Error tracking entry:
+  - `path`: string (file path that failed)
+  - `error`: Error (error object)
 - `FileDescriptor` - File metadata with unique ID
-- `SourcebookInfo` - Sourcebook metadata with templates and files:
-  - `metadata`: SourcebookMetadata (from sourcebook.json)
+- `SourcebookInfo` - Sourcebook metadata with templates:
+  - `metadata`: SourcebookMetadata (from sourcebook.json - validated with Zod)
   - `templates`: TemplateSet (sourcebook-specific template paths)
-  - `files`: FileDescriptor[] (content files)
   - `id`, `title`, `sourcebook`, `outputPath`
-- `SourcebookMetadata` - Optional metadata from sourcebook.json:
+- `SourcebookMetadata` - Optional metadata from sourcebook.json (validated with Zod):
   - `title?`, `edition?`, `description?`, `author?`, `coverImage?`
-  - `[key: string]: unknown` - Allows custom fields
+  - Allows custom fields for user templates
 - `TemplateSet` - Template file paths:
   - `index: string | null` - Path to index.md.hbs (null = use default)
   - `file: string | null` - Path to file.md.hbs (null = use default)
 - `IndexTemplateContext` - Variables available in index templates
 - `FileTemplateContext` - Variables available in file templates
-- `FileAnchors` - Anchor data for a single file (valid anchors + HTML ID mappings)
+- `FileAnchors` - Anchor data for a single file:
   - `valid: string[]` - All markdown anchors with plural/singular variants
   - `htmlIdToAnchor: Record<string, string>` - HTML element IDs → markdown anchors
-- `ProcessedFile` - Output of processor module (HTML, markdown, images, anchors)
-- `WrittenFile` - Output of writer module (descriptor, path, anchors)
+- `FileMapping` - Type alias for `Record<string, string>` (used by files.json and images.json)
 - `LinkResolutionIndex` - Maps file IDs to `FileAnchors` (for resolver module)
-- `ProcessingStats` - Final statistics (files, images, links)
+- `LinkResolutionResult` - Result of link resolution attempt
+- `ProcessingStats` - Final statistics (files, images, links, duration)
 
 ### Project Structure
 
@@ -392,12 +478,12 @@ src/
 │   ├── fs.ts                # Filesystem utilities (fileExists)
 │   └── string.ts            # String utilities (filenameToTitle)
 ├── types/
-│   ├── config.ts            # Configuration types
-│   ├── files.ts             # File-related types (includes template types)
-│   ├── pipeline.ts          # Pipeline data types
-│   ├── context.ts           # ConversionContext
+│   ├── config.ts            # Configuration types with Zod schemas
+│   ├── files.ts             # File-related types with Zod schemas
+│   ├── context.ts           # ConversionContext, ErrorStats, ProcessingStats
+│   ├── resolver.ts          # Resolver module types
 │   ├── turndown.ts          # Turndown types (TurndownNode)
-│   └── index.ts
+│   └── index.ts             # Re-exports all types and schemas
 └── config/
     └── default.json
 ```
@@ -407,7 +493,8 @@ src/
 - **Modules**: Simple functions with context-based signature `async fn(ctx: ConversionContext): Promise<void>`
 - **Pipeline**: Orchestrated directly in convert command (no separate orchestrator class)
 - **Context**: Shared object flows through all modules
-- **Types**: Organized by domain (config, files, pipeline, context)
+- **Types**: Organized by domain with Zod schemas for validation
+- **Validation**: All user inputs validated with Zod, errors tracked in context
 
 ### Build System
 
@@ -479,9 +566,13 @@ The config loader (`src/utils/config.ts`) uses:
 - Used by scanner (sourcebook titles) and processor (navigation links, file titles)
 - Eliminates duplicate title formatting code across modules
 
-**`src/utils/mapping.ts`** - JSON mapping persistence:
-- `loadMapping(dir, filename)` - Load JSON mapping from output directory
-- `saveMapping(dir, filename, mapping)` - Save JSON mapping with pretty formatting
+**`src/utils/mapping.ts`** - JSON mapping persistence with validation:
+- `loadMapping(filepath)` - Load JSON mapping from file path
+  - Validates with Zod (`MappingSchema`)
+  - Automatically deletes corrupted files
+  - Returns empty mapping if file doesn't exist or is invalid
+- `saveMapping(filepath, mapping)` - Save JSON mapping with pretty formatting
+- Uses `FileMapping` type consistently
 - Used for `files.json` (HTML→MD mapping) and `images.json` (URL→filename mapping)
 
 ## Example Files

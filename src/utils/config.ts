@@ -9,6 +9,11 @@ import { existsSync } from "fs";
 import { fileURLToPath } from "url";
 import envPaths from "env-paths";
 import type { ConversionConfig } from "../types";
+import {
+  ConversionConfigSchema,
+  PartialConversionConfigSchema,
+} from "../types/config";
+import { ErrorStats } from "../types/context";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -27,16 +32,18 @@ function getConfigDirectory(): string {
 }
 
 /**
- * Load default configuration
+ * Load default configuration with Zod validation
  */
-async function loadDefaultConfig(): Promise<ConversionConfig> {
+export async function loadDefaultConfig(): Promise<ConversionConfig> {
   const defaultConfigPath = join(__dirname, "..", "config", "default.json");
   const content = await readFile(defaultConfigPath, "utf-8");
-  return JSON.parse(content) as ConversionConfig;
+  const parsed = JSON.parse(content);
+  return ConversionConfigSchema.parse(parsed);
 }
 
 /**
- * Load user configuration from OS-specific directory
+ * Load user configuration from OS-specific directory with Zod validation
+ * Throws error if config exists but is invalid
  */
 async function loadUserConfig(): Promise<Partial<ConversionConfig> | null> {
   const configDir = getConfigDirectory();
@@ -46,23 +53,25 @@ async function loadUserConfig(): Promise<Partial<ConversionConfig> | null> {
     return null;
   }
 
-  try {
-    const content = await readFile(userConfigPath, "utf-8");
-    return JSON.parse(content) as Partial<ConversionConfig>;
-  } catch (error) {
-    console.warn(`Failed to load user config from ${userConfigPath}:`, error);
-    return null;
-  }
+  const content = await readFile(userConfigPath, "utf-8");
+  const parsed = JSON.parse(content);
+
+  PartialConversionConfigSchema.parse(parsed);
+  return parsed as Partial<ConversionConfig>;
 }
 
 /**
- * Load configuration from custom path
+ * Load configuration from custom path with Zod validation
+ * Throws error if config is invalid
  */
 async function loadCustomConfig(
   configPath: string,
 ): Promise<Partial<ConversionConfig>> {
   const content = await readFile(configPath, "utf-8");
-  return JSON.parse(content) as Partial<ConversionConfig>;
+  const parsed = JSON.parse(content);
+
+  PartialConversionConfigSchema.parse(parsed);
+  return parsed as Partial<ConversionConfig>;
 }
 
 /**
@@ -94,29 +103,40 @@ function mergeConfig(
   };
 }
 
+interface LoadConfigResult {
+  config: ConversionConfig;
+  errors: ErrorStats[];
+}
+
 /**
  * Load and merge configuration
  * Priority: custom path > user config > default config
+ * Returns default config if any of the config files fail to load or validate
  */
-export async function loadConfig(
-  customConfigPath?: string,
-): Promise<ConversionConfig> {
+export async function loadConfig(custom?: string): Promise<LoadConfigResult> {
   // Load default config
   let config = await loadDefaultConfig();
+  let errors: ErrorStats[] = [];
 
-  // Merge with user config from OS-specific directory
-  const userConfig = await loadUserConfig();
-  if (userConfig) {
-    config = mergeConfig(config, userConfig);
+  try {
+    // Merge with user config from OS-specific directory
+    const userConfig = await loadUserConfig();
+    if (userConfig) config = mergeConfig(config, userConfig);
+  } catch (error) {
+    errors.push({ path: getUserConfigPath(), error: error as Error });
   }
 
   // Merge with custom config if provided
-  if (customConfigPath) {
-    const customConfig = await loadCustomConfig(customConfigPath);
-    config = mergeConfig(config, customConfig);
+  if (custom) {
+    try {
+      const customConfig = await loadCustomConfig(custom);
+      config = mergeConfig(config, customConfig);
+    } catch (error) {
+      errors.push({ path: custom, error: error as Error });
+    }
   }
 
-  return config;
+  return { config, errors };
 }
 
 /**

@@ -3,63 +3,63 @@
  * Shared functions for loading/saving JSON mapping files
  */
 
-import { readFile, writeFile, mkdir } from "fs/promises";
-import { dirname, join } from "node:path";
+import { readFile, writeFile, mkdir, unlink } from "fs/promises";
+import { dirname } from "node:path";
+import { z } from "zod";
 import { fileExists } from "./fs";
+import type { FileMapping } from "../types";
+
+// Schema for mapping files (validates FileMapping)
+const MappingSchema = z.record(z.string(), z.string());
 
 /**
- * Load mapping from JSON file in output directory
- * Returns empty mapping if file doesn't exist
+ * Load mapping from JSON file
+ * Returns empty mapping if file doesn't exist or is invalid
+ * Automatically deletes corrupted mapping files
  *
- * @param outputDirectory - Output directory path
- * @param filename - Mapping filename (e.g., "images.json", "files.json")
- * @returns Mapping object (empty if file doesn't exist)
+ * @param filepath - Full path to mapping file (e.g., "output/images.json")
+ * @returns Mapping object (empty if file doesn't exist or is invalid)
  */
-export async function loadMapping(
-  outputDirectory: string,
-  filename: string,
-): Promise<Record<string, string>> {
-  const mappingPath = join(outputDirectory, filename);
-
-  try {
-    const exists = await fileExists(mappingPath);
-    if (!exists) {
-      return {};
-    }
-
-    const content = await readFile(mappingPath, "utf-8");
-    return JSON.parse(content) as Record<string, string>;
-  } catch (error) {
-    console.warn(
-      `Warning: Failed to load mapping from ${mappingPath}:`,
-      error,
-    );
+export async function loadMapping(filepath: string): Promise<FileMapping> {
+  const exists = await fileExists(filepath);
+  if (!exists) {
     return {};
   }
+
+  const content = await readFile(filepath, "utf-8");
+  const { error, data } = MappingSchema.safeParse(JSON.parse(content));
+
+  if (!error) {
+    return data;
+  }
+
+  try {
+    await unlink(filepath).catch();
+  } catch (err) {
+    console.error(err);
+  }
+
+  return {};
 }
 
 /**
- * Save mapping to JSON file in output directory
+ * Save mapping to JSON file
  * Creates directory if it doesn't exist
  *
- * @param outputDirectory - Output directory path
- * @param filename - Mapping filename (e.g., "images.json", "files.json")
+ * @param filepath - Full path to mapping file (e.g., "output/images.json")
  * @param mapping - Mapping object to save
  */
 export async function saveMapping(
-  outputDirectory: string,
-  filename: string,
-  mapping: Record<string, string>,
+  filepath: string,
+  mapping: FileMapping,
 ): Promise<void> {
-  const mappingPath = join(outputDirectory, filename);
-
   try {
     // Ensure output directory exists
-    await mkdir(dirname(mappingPath), { recursive: true });
+    await mkdir(dirname(filepath), { recursive: true });
 
     // Write mapping with pretty formatting for readability
-    await writeFile(mappingPath, JSON.stringify(mapping, null, 2), "utf-8");
+    await writeFile(filepath, JSON.stringify(mapping, null, 2), "utf-8");
   } catch (error) {
-    console.error(`Failed to save mapping to ${mappingPath}:`, error);
+    console.error(`Failed to save mapping to ${filepath}:`, error);
   }
 }

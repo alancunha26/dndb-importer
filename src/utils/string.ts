@@ -3,6 +3,26 @@
  * Shared string manipulation helper functions
  */
 
+import path from "node:path";
+
+/**
+ * Extract unique ID from a filename
+ * Removes the file extension to get the base ID
+ *
+ * @param filename - Filename with extension (e.g., "a3f9.md", "image.v2.png")
+ * @returns ID without extension (e.g., "a3f9", "image.v2")
+ *
+ * @example
+ * extractIdFromFilename("a3f9.md") // "a3f9"
+ * extractIdFromFilename("image.png") // "image"
+ * extractIdFromFilename("image.v2.png") // "image.v2" (handles multi-dot correctly)
+ */
+export function extractIdFromFilename(filename: string): string {
+  // Remove extension using path utilities (handles multiple dots correctly)
+  const parsed = path.parse(filename);
+  return parsed.name;
+}
+
 /**
  * Check if a URL points to an image file
  * Tests for common image file extensions

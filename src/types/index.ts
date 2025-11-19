@@ -14,6 +14,10 @@ export type {
   LinksConfig,
   LoggingConfig,
 } from "./config";
+export {
+  ConversionConfigSchema,
+  PartialConversionConfigSchema,
+} from "./config";
 
 // Files
 export type {
@@ -21,27 +25,22 @@ export type {
   SourcebookInfo,
   SourcebookMetadata,
   TemplateSet,
-  ImageDescriptor,
-  DocumentMetadata,
-  NavigationLinks,
   FileAnchors,
-  ImageMapping,
   FileMapping,
   IndexTemplateContext,
   FileTemplateContext,
 } from "./files";
-
-// Pipeline
-export type {
-  ProcessedFile,
-  WrittenFile,
-  LinkResolutionIndex,
-  LinkResolutionResult,
-  ProcessingStats,
-} from "./pipeline";
+export { SourcebookMetadataSchema } from "./files";
 
 // Context
-export type { ConversionContext } from "./context";
+export type {
+  ConversionContext,
+  ErrorStats,
+  ProcessingStats,
+} from "./context";
+
+// Resolver
+export type { LinkResolutionIndex, LinkResolutionResult } from "./resolver";
 
 // Turndown
 export type { TurndownNode } from "./turndown";
