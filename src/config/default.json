@@ -55,7 +55,68 @@
       "/sources/dnd/free-rules/spell-descriptions": "/sources/dnd/phb-2024/spell-descriptions",
       "/sources/dnd/free-rules/spells": "/sources/dnd/phb-2024/spells",
       "/sources/dnd/free-rules/the-multiverse": "/sources/dnd/phb-2024/the-multiverse",
-      "/sources/dnd/free-rules/welcome-to-adventure": "/sources/dnd/phb-2024/welcome-to-adventure"
+      "/sources/dnd/free-rules/welcome-to-adventure": "/sources/dnd/phb-2024/welcome-to-adventure",
+
+      "/magic-items/4585-belt-of-hill-giant-strength": "/magic-items/5372-belt-of-giant-strength",
+      "/magic-items/4826-belt-of-stone-giant-strength": "/magic-items/5372-belt-of-giant-strength",
+      "/magic-items/4827-belt-of-frost-giant-strength": "/magic-items/5372-belt-of-giant-strength",
+      "/magic-items/4828-belt-of-fire-giant-strength": "/magic-items/5372-belt-of-giant-strength",
+      "/magic-items/4829-belt-of-cloud-giant-strength": "/magic-items/5372-belt-of-giant-strength",
+      "/magic-items/4830-belt-of-storm-giant-strength": "/magic-items/5372-belt-of-giant-strength",
+
+      "/magic-items/4676-manual-of-clay-golems": "/magic-items/5416-manual-of-golems",
+      "/magic-items/4948-manual-of-flesh-golems": "/magic-items/5416-manual-of-golems",
+      "/magic-items/4949-manual-of-iron-golems": "/magic-items/5416-manual-of-golems",
+      "/magic-items/4950-manual-of-stone-golems": "/magic-items/5416-manual-of-golems",
+
+      "/magic-items/4719-ring-of-air-elemental-command": "/magic-items/9228964-ring-of-elemental-command",
+      "/magic-items/5145-ring-of-earth-elemental-command": "/magic-items/9228964-ring-of-elemental-command",
+      "/magic-items/5146-ring-of-fire-elemental-command": "/magic-items/9228964-ring-of-elemental-command",
+      "/magic-items/5147-ring-of-water-elemental-command": "/magic-items/9228964-ring-of-elemental-command",
+
+      "/magic-items/4798-wand-of-the-war-mage-1": "/magic-items/34712-wand-of-the-war-mage",
+      "/magic-items/5218-wand-of-the-war-mage-2": "/magic-items/34712-wand-of-the-war-mage",
+      "/magic-items/5219-wand-of-the-war-mage-3": "/magic-items/34712-wand-of-the-war-mage",
+
+      "/magic-items/8960642-spell-scroll-cantrip": "/magic-items/9229085-spell-scroll",
+      "/magic-items/8960643-spell-scroll-level-1": "/magic-items/9229085-spell-scroll",
+      "/magic-items/9229076-spell-scroll-level-2": "/magic-items/9229085-spell-scroll",
+      "/magic-items/9229077-spell-scroll-level-3": "/magic-items/9229085-spell-scroll",
+      "/magic-items/9229078-spell-scroll-level-4": "/magic-items/9229085-spell-scroll",
+      "/magic-items/9229079-spell-scroll-level-5": "/magic-items/9229085-spell-scroll",
+      "/magic-items/9229081-spell-scroll-level-6": "/magic-items/9229085-spell-scroll",
+      "/magic-items/9229082-spell-scroll-level-7": "/magic-items/9229085-spell-scroll",
+      "/magic-items/9229083-spell-scroll-level-8": "/magic-items/9229085-spell-scroll",
+      "/magic-items/9229084-spell-scroll-level-9": "/magic-items/9229085-spell-scroll",
+
+      "/magic-items/9228789-ioun-stone-of-absorption": "/magic-items/9228804-ioun-stone",
+      "/magic-items/9228790-ioun-stone-of-agility": "/magic-items/9228804-ioun-stone",
+      "/magic-items/9228791-ioun-stone-of-awareness": "/magic-items/9228804-ioun-stone",
+      "/magic-items/9228792-ioun-stone-of-fortitude": "/magic-items/9228804-ioun-stone",
+      "/magic-items/9228793-ioun-stone-of-greater-absorption": "/magic-items/9228804-ioun-stone",
+      "/magic-items/9228794-ioun-stone-of-insight": "/magic-items/9228804-ioun-stone",
+      "/magic-items/9228795-ioun-stone-of-intellect": "/magic-items/9228804-ioun-stone",
+      "/magic-items/9228796-ioun-stone-of-leadership": "/magic-items/9228804-ioun-stone",
+      "/magic-items/9228797-ioun-stone-of-mastery": "/magic-items/9228804-ioun-stone",
+      "/magic-items/9228798-ioun-stone-of-protection": "/magic-items/9228804-ioun-stone",
+      "/magic-items/9228799-ioun-stone-of-regeneration": "/magic-items/9228804-ioun-stone",
+      "/magic-items/9228800-ioun-stone-of-reserve": "/magic-items/9228804-ioun-stone",
+      "/magic-items/9228801-ioun-stone-of-strength": "/magic-items/9228804-ioun-stone",
+      "/magic-items/9228803-ioun-stone-of-sustenance": "/magic-items/9228804-ioun-stone",
+
+      "/magic-items/9228942-quaals-feather-token-anchor": "/magic-items/9228948-quaals-feather-token",
+      "/magic-items/9228943-quaals-feather-token-bird": "/magic-items/9228948-quaals-feather-token",
+      "/magic-items/9228944-quaals-feather-token-fan": "/magic-items/9228948-quaals-feather-token",
+      "/magic-items/9228945-quaals-feather-token-swan-boat": "/magic-items/9228948-quaals-feather-token",
+      "/magic-items/9228946-quaals-feather-token-tree": "/magic-items/9228948-quaals-feather-token",
+      "/magic-items/9228947-quaals-feather-token-whip": "/magic-items/9228948-quaals-feather-token",
+
+      "/magic-items/9228985-rod-of-the-pact-keeper-2": "/magic-items/9228987-rod-of-the-pact-keeper",
+      "/magic-items/9228986-rod-of-the-pact-keeper-3": "/magic-items/9228987-rod-of-the-pact-keeper",
+
+      "/magic-items/9229205-wraps-of-unarmed-power-1": "/magic-items/9229208-wraps-of-unarmed-power",
+      "/magic-items/9229206-wraps-of-unarmed-power-2": "/magic-items/9229208-wraps-of-unarmed-power",
+      "/magic-items/9229207-wraps-of-unarmed-power-3": "/magic-items/9229208-wraps-of-unarmed-power"
     }
   },
   "logging": {
