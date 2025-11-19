@@ -25,6 +25,7 @@ import {
   isImageUrl,
   extractIdFromFilename,
 } from "../utils/string";
+import { generateAnchor, generateAnchorVariants } from "../utils/anchor";
 import type {
   ConversionContext,
   FileDescriptor,
@@ -223,23 +224,11 @@ export async function process(ctx: ConversionContext): Promise<void> {
       }
 
       // Generate GitHub-style anchor from heading text
-      const anchor = text
-        .toLowerCase()
-        .replace(/[^\w\s-]/g, "") // Remove special chars except spaces and hyphens
-        .replace(/\s+/g, "-") // Replace spaces with hyphens
-        .replace(/-+/g, "-") // Replace multiple hyphens with single
-        .replace(/^-|-$/g, ""); // Remove leading/trailing hyphens
+      const anchor = generateAnchor(text);
 
       if (anchor) {
-        // Add base anchor
-        valid.push(anchor);
-
-        // Add plural/singular variants
-        if (anchor.endsWith("s")) {
-          valid.push(anchor.slice(0, -1)); // singular
-        } else {
-          valid.push(anchor + "s"); // plural
-        }
+        // Add base anchor and plural/singular variants
+        valid.push(...generateAnchorVariants(anchor));
 
         // Map HTML ID to markdown anchor
         if (htmlId) {

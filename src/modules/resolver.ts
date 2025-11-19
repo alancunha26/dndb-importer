@@ -14,6 +14,7 @@ import {
   applyAliases,
   isEntityUrl,
 } from "../utils/url";
+import { normalizeAnchor, findMatchingAnchor } from "../utils/anchor";
 
 // ============================================================================
 // Constants
@@ -352,15 +353,7 @@ function resolveSourceLink(
 
   // Priority 2: Use smart matching against valid anchors list
   if (!matchedAnchor) {
-    // Normalize URL anchor to markdown format for comparison
-    // Convert "OpportunityAttack" -> "opportunity-attack" to match against valid anchors
-    const normalizedAnchor = urlAnchor
-      .replace(/([a-z])([A-Z])/g, "$1-$2") // CamelCase -> kebab-case
-      .toLowerCase() // Convert to lowercase AFTER splitting camelCase
-      .replace(/[^a-z0-9-]/g, "-") // Replace special chars with hyphens
-      .replace(/-+/g, "-") // Replace multiple hyphens with single
-      .replace(/^-|-$/g, ""); // Remove leading/trailing hyphens
-
+    const normalizedAnchor = normalizeAnchor(urlAnchor);
     matchedAnchor = findMatchingAnchor(normalizedAnchor, fileAnchors.valid);
   }
 
@@ -371,33 +364,4 @@ function resolveSourceLink(
 
   // Build markdown link
   return `[${text}](${targetFile.uniqueId}.md#${matchedAnchor})`;
-}
-
-/**
- * Find matching anchor with smart matching:
- * 1. Exact match (including plural/singular variants in valid list)
- * 2. Prefix match for headers with suffixes
- */
-function findMatchingAnchor(
-  anchor: string,
-  validAnchors: string[],
-): string | null {
-  // 1. Try exact match (validAnchors already includes plural/singular variants)
-  if (validAnchors.includes(anchor)) {
-    return anchor;
-  }
-
-  // 2. Try prefix matching (e.g., "alchemists-fire" matches "alchemists-fire-50-gp")
-  const prefixMatches = validAnchors.filter((valid) =>
-    valid.startsWith(anchor + "-"),
-  );
-
-  if (prefixMatches.length === 0) {
-    return null; // No match found
-  }
-
-  // Return shortest match if multiple prefix matches
-  return prefixMatches.reduce((shortest, current) =>
-    current.length < shortest.length ? current : shortest,
-  );
 }
