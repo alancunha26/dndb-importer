@@ -15,6 +15,7 @@ export interface FileDescriptor {
   uniqueId: string; // 4-character unique ID (e.g., "a3f9")
 
   // Processor fills these fields (after processing):
+  canonicalUrl?: string; // Canonical URL extracted from HTML (e.g., "/sources/dnd/phb-2024/spells")
   title?: string; // Extracted from first H1 in document
   anchors?: FileAnchors; // Valid anchors and HTML ID mappings
   written?: boolean; // True after file has been written to disk

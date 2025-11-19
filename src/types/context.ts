@@ -53,12 +53,9 @@ export interface ConversionContext {
     resources: ErrorStats[];
   };
 
-  files?: FileDescriptor[]; // All files (flat list) - primary data structure
+  files?: FileDescriptor[]; // All files (flat list) - primary data structure (includes canonicalUrl per file)
   sourcebooks?: SourcebookInfo[]; // Sourcebook metadata only (no files array)
-  fileIndex?: Map<string, FileDescriptor>; // Fast lookup: uniqueId → FileDescriptor
-  pathIndex?: Map<string, string>; // Fast lookup: relativePath → uniqueId
   globalTemplates?: TemplateSet; // Global templates from input root
   entityIndex?: Map<string, EntityLocation[]>; // Entity URL → file locations (e.g., /spells/123 → [{fileId, anchor}])
-  urlMapping?: Map<string, string>; // Auto-discovered URL mapping: URL path → file ID (e.g., /sources/dnd/phb-2024/spells → "abc1")
   stats?: ProcessingStats;
 }

@@ -136,7 +136,7 @@ export async function process(ctx: ConversionContext): Promise<void> {
     title: string;
     anchors: FileAnchors;
     entities: string[]; // Entity URLs found in this file (e.g., /spells/123, /monsters/456)
-    canonicalUrl: string | null; // Canonical URL path extracted from <link rel="canonical">
+    url: string | null; // Canonical URL path extracted from <link rel="canonical">
     images: string[];
   }> {
     // 1. Read HTML file from disk
@@ -165,7 +165,7 @@ export async function process(ctx: ConversionContext): Promise<void> {
         title: "",
         anchors: { valid: [], htmlIdToAnchor: {} },
         entities: [],
-        canonicalUrl: null,
+        url: null,
         images: [],
       };
     }
@@ -246,7 +246,12 @@ export async function process(ctx: ConversionContext): Promise<void> {
       $links.each((_index, link) => {
         const href = $(link).attr("href");
         // Match entity URL patterns: /spells/123, /classes/456-paladin, /backgrounds/789-acolyte, etc.
-        if (href && /^\/(spells|monsters|magic-items|equipment|classes|feats|species|backgrounds)\/\d+/.test(href)) {
+        if (
+          href &&
+          /^\/(spells|monsters|magic-items|equipment|classes|feats|species|backgrounds)\/\d+/.test(
+            href,
+          )
+        ) {
           entityUrls.push(href);
         }
       });
@@ -276,7 +281,7 @@ export async function process(ctx: ConversionContext): Promise<void> {
       title,
       anchors: { valid, htmlIdToAnchor },
       entities: entityUrls,
-      canonicalUrl,
+      url: canonicalUrl,
       images: imageUrls,
     };
   }
@@ -547,9 +552,8 @@ export async function process(ctx: ConversionContext): Promise<void> {
   // Main Processing Logic
   // ============================================================================
 
-  // Initialize entity index and URL mapping (will be populated as we process files)
+  // Initialize entity index (will be populated as we process files)
   const entityIndex = new Map<string, EntityLocation[]>();
-  const urlMapping = new Map<string, string>(); // URL path → file ID
 
   // Process each file one at a time (memory-efficient)
   for (const file of files) {
@@ -559,15 +563,12 @@ export async function process(ctx: ConversionContext): Promise<void> {
 
     try {
       // 2. Parse HTML and extract content, title, anchors, entities, canonical URL, and image URLs (ONLY place Cheerio is used)
-      const { content, title, anchors, entities, canonicalUrl, images } =
+      const { content, title, anchors, entities, url, images } =
         await processHtml(file);
+
       file.anchors = anchors;
       file.title = title;
-
-      // 2a. Build URL mapping from canonical URL
-      if (canonicalUrl) {
-        urlMapping.set(canonicalUrl, file.uniqueId);
-      }
+      file.canonicalUrl = url ?? undefined;
 
       // 3. Build entity index from extracted entities
       for (const entityUrl of entities) {
@@ -606,11 +607,10 @@ export async function process(ctx: ConversionContext): Promise<void> {
     }
   }
 
-  // 7. Save entity index and URL mapping to context for resolver module
+  // 6. Save entity index to context for resolver module
   ctx.entityIndex = entityIndex;
-  ctx.urlMapping = urlMapping;
 
-  // 8. Save updated image mapping to images.json (includes cover images)
+  // 7. Save updated image mapping to images.json (includes cover images)
   await saveMapping(imageMappingPath, imageMapping);
 
   // 9. Generate index files

@@ -106,9 +106,7 @@ async function extractBookUrl(htmlFilePath: string): Promise<string | null> {
  *
  * Writes to context:
  * - files: All files (flat list) - primary data structure
- * - sourcebooks: Sourcebook metadata only (no files array)
- * - fileIndex: Map of uniqueId → FileDescriptor (for fast lookups)
- * - pathIndex: Map of relativePath → uniqueId (for URL mapping)
+ * - sourcebooks: Sourcebook metadata only (no files array, includes bookUrl)
  * - globalTemplates: Global templates from input root
  */
 export async function scan(ctx: ConversionContext): Promise<void> {
@@ -128,8 +126,6 @@ export async function scan(ctx: ConversionContext): Promise<void> {
   if (htmlFiles.length === 0) {
     ctx.files = [];
     ctx.sourcebooks = [];
-    ctx.fileIndex = new Map();
-    ctx.pathIndex = new Map();
     ctx.globalTemplates = globalTemplates;
     return;
   }
@@ -159,8 +155,6 @@ export async function scan(ctx: ConversionContext): Promise<void> {
 
   // 5. Single pass: Process files and create sourcebooks on-demand
   const files: FileDescriptor[] = [];
-  const fileIndex = new Map<string, FileDescriptor>();
-  const pathIndex = new Map<string, string>();
   const sourcebooks: SourcebookInfo[] = [];
   const sourcebookIdMap = new Map<string, string>(); // sourcebook dir name → ID
   const processedSourcebooks = new Set<string>(); // Track which sourcebooks we've seen
@@ -249,10 +243,8 @@ export async function scan(ctx: ConversionContext): Promise<void> {
       uniqueId,
     };
 
-    // Add to flat list and indices
+    // Add to flat list
     files.push(descriptor);
-    fileIndex.set(uniqueId, descriptor);
-    pathIndex.set(relativePath, uniqueId);
   }
 
   // 7. Save updated file mapping
@@ -261,7 +253,5 @@ export async function scan(ctx: ConversionContext): Promise<void> {
   // Write to context
   ctx.files = files;
   ctx.sourcebooks = sourcebooks;
-  ctx.fileIndex = fileIndex;
-  ctx.pathIndex = pathIndex;
   ctx.globalTemplates = globalTemplates;
 }

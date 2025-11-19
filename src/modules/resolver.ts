@@ -9,34 +9,99 @@
 import { readFile, writeFile } from "fs/promises";
 import type {
   ConversionContext,
-  LinkResolutionIndex,
   FallbackLink,
+  FileDescriptor,
 } from "../types";
+
+// ============================================================================
+// Constants
+// ============================================================================
+
+/**
+ * D&D Beyond entity types that can be linked
+ */
+const ENTITY_TYPES = [
+  "spells",
+  "monsters",
+  "magic-items",
+  "equipment",
+  "classes",
+  "feats",
+  "species",
+  "backgrounds",
+] as const;
+
+/**
+ * Regex pattern to match entity URLs with IDs
+ * Example: /spells/123, /monsters/456-fireball
+ */
+const ENTITY_URL_WITH_ID_PATTERN = new RegExp(
+  `^\\/(${ENTITY_TYPES.join("|")})\\/\\d+`,
+);
+
+/**
+ * Regex pattern to match entity path prefixes
+ * Example: /spells/, /monsters/
+ */
+const ENTITY_PATH_PATTERN = new RegExp(`^\\/(${ENTITY_TYPES.join("|")})\\/`);
+
+/**
+ * D&D Beyond domain URL patterns
+ */
+const DNDBEYOND_HTTPS = "https://www.dndbeyond.com/";
+const DNDBEYOND_HTTP = "http://www.dndbeyond.com/";
+
+/**
+ * Source book URL pattern
+ * Example: /sources/dnd/phb-2024
+ */
+const SOURCE_URL_PATTERN = /^\/sources\//;
+
+/**
+ * Regex to match markdown links: [text](url)
+ */
+const MARKDOWN_LINK_REGEX = /\[([^\]]+)\]\(([^)]+)\)/g;
+
+/**
+ * Regex to match image lines (start with whitespace + !)
+ */
+const IMAGE_LINE_PATTERN = /^\s*!/;
+
+/**
+ * Regex to match local markdown file links
+ * Example: page.md, a3f9.md
+ */
+const LOCAL_MD_FILE_PATTERN = /^[a-z0-9]{4}\.md/;
+
+// ============================================================================
+// Main Resolver Function
+// ============================================================================
 
 /**
  * Resolves cross-references in all written files
  *
  * Reads from context:
- * - files: Contains file descriptors with anchors (enriched by processor)
- * - urlMapping: Auto-discovered URL → file ID mapping from scanner
+ * - files: Contains file descriptors with anchors and canonicalUrl (enriched by processor)
+ * - sourcebooks: Contains bookUrl for book-level link resolution
  * - entityIndex: Entity URL → file locations mapping from processor
  * - config.links: urlAliases, resolveInternal, fallbackToBold
  *
  * Process:
- * 1. Build LinkResolutionIndex from files (has all anchors)
+ * 1. Build fileMap (ID → file) and urlMap (canonicalUrl → file) from files
  * 2. For each file, read markdown from disk
  * 3. Resolve D&D Beyond links:
  *    - Apply urlAliases to rewrite URLs to canonical form
  *    - Entity index for entity links (/spells/123, /monsters/456)
- *    - URL mapping + anchor validation for source links
+ *    - Book URLs from sourcebooks for book-level links
+ *    - Canonical URLs from files + anchor validation for page-level links
  * 4. Overwrite files with resolved links
  *
  * Memory efficient:
  * - Only one file's content in memory at a time
- * - FileDescriptor contains only lightweight metadata + anchors
+ * - Maps reference original FileDescriptor objects (no duplication)
  */
 export async function resolve(ctx: ConversionContext): Promise<void> {
-  if (!ctx.files || !ctx.pathIndex) {
+  if (!ctx.files) {
     throw new Error("Processor and scanner must run before resolver");
   }
 
@@ -47,15 +112,19 @@ export async function resolve(ctx: ConversionContext): Promise<void> {
 
   const writtenFiles = ctx.files.filter((f) => f.written);
 
-  // 1. Build LinkResolutionIndex from all file anchors
-  const index: LinkResolutionIndex = {};
-  for (const file of writtenFiles) {
-    if (file.anchors) {
-      index[file.uniqueId] = file.anchors;
-    }
-  }
+  // 1. Build fileMap for O(1) lookup of file descriptors by ID
+  // This references the original FileDescriptor objects (no duplication)
+  const fileMap = new Map(writtenFiles.map((f) => [f.uniqueId, f]));
 
-  // 2. Initialize fallback tracking
+  // 2. Build urlMap for O(1) lookup of files by canonical URL
+  // Only includes files that have a canonicalUrl
+  const urlMap = new Map(
+    writtenFiles
+      .filter((f) => f.canonicalUrl)
+      .map((f) => [f.canonicalUrl!, f]),
+  );
+
+  // 3. Initialize fallback tracking
   const fallbackLinks: FallbackLink[] = [];
 
   // 3. For each written file, resolve links
@@ -66,11 +135,12 @@ export async function resolve(ctx: ConversionContext): Promise<void> {
       const content = await readFile(file.outputPath, "utf-8");
 
       // b. Resolve all links in the content
-      const resolvedContent = await resolveLinksInContent(
+      const resolvedContent = resolveLinksInContent(
         content,
         file.uniqueId,
         ctx,
-        index,
+        fileMap,
+        urlMap,
         fallbackLinks,
       );
 
@@ -109,29 +179,27 @@ export async function resolve(ctx: ConversionContext): Promise<void> {
  * Resolve all markdown links in content
  * Only processes D&D Beyond links, preserves images and local navigation links
  */
-async function resolveLinksInContent(
+function resolveLinksInContent(
   content: string,
   currentFileId: string,
   ctx: ConversionContext,
-  index: LinkResolutionIndex,
+  fileMap: Map<string, FileDescriptor>,
+  urlMap: Map<string, FileDescriptor>,
   fallbackLinks: FallbackLink[],
-): Promise<string> {
+): string {
   // Split content into lines to handle images properly
   const lines = content.split("\n");
 
   return lines
     .map((line) => {
       // Skip image lines (start with whitespace + !)
-      if (/^\s*!/.test(line)) {
+      if (IMAGE_LINE_PATTERN.test(line)) {
         return line;
       }
 
-      // Regex to match markdown links: [text](url)
-      const linkRegex = /\[([^\]]+)\]\(([^)]+)\)/g;
-
-      return line.replace(linkRegex, (_match, text, url) => {
+      return line.replace(MARKDOWN_LINK_REGEX, (_match, text, url) => {
         // Skip links that are already local markdown files (navigation links)
-        if (url.endsWith(".md") || url.match(/^[a-z0-9]{4}\.md/)) {
+        if (url.endsWith(".md") || LOCAL_MD_FILE_PATTERN.test(url)) {
           return `[${text}](${url})`; // Keep as-is
         }
 
@@ -142,7 +210,8 @@ async function resolveLinksInContent(
             text,
             currentFileId,
             ctx,
-            index,
+            fileMap,
+            urlMap,
             fallbackLinks,
           );
           return resolved;
@@ -164,16 +233,13 @@ function shouldResolveLink(url: string): boolean {
   if (url.startsWith("#")) return true;
 
   // Full D&D Beyond URLs
-  if (
-    url.startsWith("https://www.dndbeyond.com/") ||
-    url.startsWith("http://www.dndbeyond.com/")
-  ) {
+  if (url.startsWith(DNDBEYOND_HTTPS) || url.startsWith(DNDBEYOND_HTTP)) {
     return true;
   }
 
   // D&D Beyond paths (sources or entities)
-  if (url.startsWith("/sources/")) return true;
-  if (/^\/(spells|monsters|magic-items|equipment|classes|feats|species|backgrounds)\//.test(url)) {
+  if (SOURCE_URL_PATTERN.test(url)) return true;
+  if (ENTITY_PATH_PATTERN.test(url)) {
     return true;
   }
 
@@ -189,15 +255,16 @@ function resolveLink(
   text: string,
   currentFileId: string,
   ctx: ConversionContext,
-  index: LinkResolutionIndex,
+  fileMap: Map<string, FileDescriptor>,
+  urlMap: Map<string, FileDescriptor>,
   fallbackLinks: FallbackLink[],
 ): string {
   const originalUrl = url; // Save for tracking
   // 1. Handle full D&D Beyond URLs - strip domain
-  if (url.startsWith("https://www.dndbeyond.com/")) {
-    url = url.replace("https://www.dndbeyond.com", "");
-  } else if (url.startsWith("http://www.dndbeyond.com/")) {
-    url = url.replace("http://www.dndbeyond.com", "");
+  if (url.startsWith(DNDBEYOND_HTTPS)) {
+    url = url.replace(DNDBEYOND_HTTPS, "");
+  } else if (url.startsWith(DNDBEYOND_HTTP)) {
+    url = url.replace(DNDBEYOND_HTTP, "");
   }
 
   // 2. Normalize URL - strip trailing slashes (before # or at end)
@@ -210,54 +277,61 @@ function resolveLink(
 
   // 3. Handle internal anchors (same-page links)
   if (url.startsWith("#")) {
-    return resolveInternalAnchor(url, text, currentFileId, index);
+    return resolveInternalAnchor(url, text, currentFileId, fileMap);
   }
 
   // 4. Split URL into path and anchor
-  let [urlPath, urlAnchor] = url.split("#");
+  const [initialPath, urlAnchor] = url.split("#");
 
-  // 5. Apply URL aliases (single point of URL rewriting)
+  // 5. Normalize relative paths - ensure leading slash
+  // Some links in HTML are relative (sources/...) but canonical URLs always have leading slash (/sources/...)
+  let urlPath = initialPath;
+  if (urlPath && !urlPath.startsWith("/")) {
+    urlPath = "/" + urlPath;
+  }
+
+  // 6. Apply URL aliases (single point of URL rewriting)
   // Rewrites urlPath to canonical URL while preserving anchor
   // Works for both entity links (/magic-items/123) and source links (/sources/...)
   if (ctx.config.links.urlAliases[urlPath]) {
     urlPath = ctx.config.links.urlAliases[urlPath];
   }
 
-  // 6. Check if it's an entity link (priority check)
+  // 7. Check if it's an entity link (priority check)
   if (ctx.entityIndex) {
     const entityResult = resolveEntityLink(
       urlPath,
       urlAnchor,
       text,
+      currentFileId,
       ctx,
       fallbackLinks,
-      currentFileId,
       originalUrl,
     );
     if (entityResult) return entityResult;
   }
 
-  // 7. Check if it's a source book link
+  // 8. Check if it's a source book link
   const sourceResult = resolveSourceLink(
     urlPath,
     urlAnchor,
     text,
-    ctx,
-    index,
-    fallbackLinks,
     currentFileId,
+    ctx,
+    urlMap,
+    fallbackLinks,
     originalUrl,
   );
   if (sourceResult) return sourceResult;
 
-  // 8. Fallback to bold text if configured
+  // 9. Fallback to bold text if configured
   if (ctx.config.links.fallbackToBold) {
     // Only track if not already tracked (entity/source functions track specific reasons)
     // This catches any remaining unresolved links
     return `**${text}**`;
   }
 
-  // 9. Leave link as-is if no fallback
+  // 10. Leave link as-is if no fallback
   return `[${text}](${url})`;
 }
 
@@ -268,10 +342,10 @@ function resolveInternalAnchor(
   url: string,
   text: string,
   currentFileId: string,
-  index: LinkResolutionIndex,
+  fileMap: Map<string, FileDescriptor>,
 ): string {
   const htmlId = url.slice(1); // Remove # prefix
-  const fileAnchors = index[currentFileId];
+  const fileAnchors = fileMap.get(currentFileId)?.anchors;
 
   if (!fileAnchors) {
     return `[${text}](${url})`; // Keep as-is if no anchors
@@ -295,13 +369,13 @@ function resolveEntityLink(
   urlPath: string,
   urlAnchor: string | undefined,
   text: string,
+  currentFileId: string,
   ctx: ConversionContext,
   fallbackLinks: FallbackLink[],
-  currentFileId: string,
   originalUrl: string,
 ): string | null {
   // Check if it's an entity link pattern: /spells/123, /monsters/456, /classes/789, etc.
-  if (!/^\/(spells|monsters|magic-items|equipment|classes|feats|species|backgrounds)\/\d+/.test(urlPath)) {
+  if (!ENTITY_URL_WITH_ID_PATTERN.test(urlPath)) {
     return null; // Not an entity link
   }
 
@@ -332,17 +406,17 @@ function resolveEntityLink(
 }
 
 /**
- * Resolve source book link using URL mapping
+ * Resolve source book link using canonical URLs from files
  * Returns resolved link or null if not a source link
  */
 function resolveSourceLink(
   urlPath: string,
   urlAnchor: string | undefined,
   text: string,
-  ctx: ConversionContext,
-  index: LinkResolutionIndex,
-  fallbackLinks: FallbackLink[],
   currentFileId: string,
+  ctx: ConversionContext,
+  urlMap: Map<string, FileDescriptor>,
+  fallbackLinks: FallbackLink[],
   originalUrl: string,
 ): string | null {
   // Check if there's no anchor - could be book-level or header link
@@ -355,8 +429,8 @@ function resolveSourceLink(
     }
 
     // Not a book-level URL, check if it's in the URL mapping (header link)
-    const fileId = ctx.urlMapping?.get(urlPath);
-    if (fileId) {
+    const targetFile = urlMap.get(urlPath);
+    if (targetFile) {
       // It's a header link (page-level URL with no anchor) - convert to bold
       if (ctx.config.links.fallbackToBold) {
         fallbackLinks.push({
@@ -382,8 +456,8 @@ function resolveSourceLink(
   }
 
   // Has anchor - look up in URL mapping
-  const fileId = ctx.urlMapping?.get(urlPath);
-  if (!fileId) {
+  const targetFile = urlMap.get(urlPath);
+  if (!targetFile) {
     // Track URL not in mapping
     if (ctx.config.links.fallbackToBold) {
       fallbackLinks.push({
@@ -397,14 +471,14 @@ function resolveSourceLink(
   }
 
   // Validate anchor exists in target file
-  const fileAnchors = index[fileId];
+  const fileAnchors = targetFile.anchors;
   if (!fileAnchors) {
     if (ctx.config.links.fallbackToBold) {
       fallbackLinks.push({
         url: originalUrl,
         text,
         file: currentFileId,
-        reason: `No anchors found in target file: ${fileId}`,
+        reason: `No anchors found in target file: ${targetFile.uniqueId}`,
       });
     }
     return null; // No anchors for this file
@@ -434,14 +508,14 @@ function resolveSourceLink(
         url: originalUrl,
         text,
         file: currentFileId,
-        reason: `Anchor not found in ${fileId}: #${urlAnchor}`,
+        reason: `Anchor not found in ${targetFile.uniqueId}: #${urlAnchor}`,
       });
     }
     return null; // Anchor not found
   }
 
   // Build markdown link
-  return `[${text}](${fileId}.md#${matchedAnchor})`;
+  return `[${text}](${targetFile.uniqueId}.md#${matchedAnchor})`;
 }
 
 /**

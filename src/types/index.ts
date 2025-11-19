@@ -42,7 +42,7 @@ export type {
 } from "./context";
 
 // Resolver
-export type { LinkResolutionIndex, LinkResolutionResult } from "./resolver";
+export type { LinkResolutionResult } from "./resolver";
 
 // Turndown
 export type { TurndownNode } from "./turndown";

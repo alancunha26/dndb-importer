@@ -10,23 +10,30 @@ The resolver module has grown to **474 lines** with significant complexity. This
 
 ## Current Problems
 
-### 1. Code Organization
+### 1. Data Structure Duplication ⭐ CRITICAL
+- ❌ **fileIndex** - Complete duplication of `ctx.files[]` array (never used)
+- ❌ **pathIndex** - Created but only checked, never accessed (dead code)
+- ❌ **LinkResolutionIndex** - Duplicates all `file.anchors` data from FileDescriptors
+- ❌ ~80% memory overhead from redundant data structures (~67 KB wasted)
+- ❌ See detailed analysis: `docs/data-structure-analysis.md`
+
+### 2. Code Organization
 - ❌ No clear separation of concerns (URL parsing, entity resolution, source resolution all mixed)
 - ❌ Inline logic scattered throughout functions
 - ❌ No utility functions for common operations
 
-### 2. Duplication
+### 3. Code Duplication
 - ❌ Fallback tracking code duplicated 6+ times
 - ❌ Regex patterns repeated (entity types, URL patterns)
 - ❌ URL normalization logic could be reused
 - ❌ Anchor normalization logic inline in multiple places
 
-### 3. Type Safety
+### 4. Type Safety
 - ❌ `async` function that doesn't await anything (resolveLinksInContent)
 - ❌ Unused dependencies (`pathIndex` checked but never used)
 - ❌ Parameter ordering inconsistent across functions
 
-### 4. Testability
+### 5. Testability
 - ❌ Hard to unit test individual pieces (too much coupling)
 - ❌ No clear interfaces for mocking
 - ❌ Side effects mixed with pure logic
@@ -56,6 +63,65 @@ src/
 **Alternative (Simpler):** Keep as single file but extract utilities to `src/utils/`.
 
 ## Refactoring Phases
+
+---
+
+## Phase 0: Remove Data Duplication ⭐ NEW - HIGHEST PRIORITY
+
+**Goal:** Eliminate unused and duplicated data structures (80% memory reduction in redundant data).
+
+See detailed analysis: `docs/data-structure-analysis.md`
+
+### Tasks
+
+1. **Remove fileIndex** (COMPLETE DUPLICATION)
+   - Delete from `ConversionContext` type (src/types/context.ts)
+   - Remove creation in scanner.ts (lines 162, 254, 264)
+   - Remove empty initialization (line 131)
+   - Update scanner JSDoc comments (line 110)
+
+2. **Remove pathIndex** (UNUSED - only checked, never accessed)
+   - Delete from `ConversionContext` type (src/types/context.ts)
+   - Remove creation in scanner.ts (lines 163, 255, 265)
+   - Remove empty initialization (line 132)
+   - Remove dependency check in resolver.ts (line 39)
+   - Update scanner JSDoc comments (line 111)
+
+3. **Refactor LinkResolutionIndex** (DUPLICATES file.anchors)
+   - Replace with `Map<string, FileDescriptor>` in resolver
+   - Build fileMap: `new Map(writtenFiles.map(f => [f.uniqueId, f]))`
+   - Update `resolveInternalAnchor()` to use `fileMap.get(id)?.anchors`
+   - Update `resolveSourceLink()` to use `fileMap.get(id)?.anchors`
+   - Remove LinkResolutionIndex type from `src/types/resolver.ts` (optional)
+   - Update resolver JSDoc comments
+
+**Files Changed:**
+- `src/types/context.ts`
+- `src/types/resolver.ts` (optional - type cleanup)
+- `src/modules/scanner.ts`
+- `src/modules/resolver.ts`
+- `docs/rfcs/0001-dndbeyond-html-markdown-converter.md`
+- `CLAUDE.md`
+
+**Estimated Time:** 2-3 hours
+
+**Testing:**
+- Run full conversion
+- Verify fallback count: 1,495 (unchanged)
+- Verify file count: 59 (unchanged)
+- Verify no regression
+
+**Impact:**
+- ✅ ~80% reduction in redundant data structures (~67 KB saved)
+- ✅ Simpler codebase (removes 3 data structures)
+- ✅ Single source of truth for file data
+- ✅ No performance loss (maintains O(1) lookups)
+
+**Why First:**
+- Quick win with immediate benefits
+- Simplifies subsequent refactoring phases
+- No dependencies on other phases
+- Low risk (removing unused code)
 
 ---
 
@@ -409,8 +475,12 @@ src/
 
 ## Rollout Plan
 
-### Week 1: Foundation
-- **Day 1-2:** Phase 1 (Constants & Fixes)
+### Week 1: Foundation & Cleanup
+- **Day 1:** ⭐ **Phase 0 (Data Duplication)** - QUICK WIN!
+  - Remove fileIndex, pathIndex, LinkResolutionIndex
+  - 2-3 hours, ~80% memory reduction in redundant structures
+  - Low risk, high impact
+- **Day 2:** Phase 1 (Constants & Fixes)
 - **Day 3-4:** Phase 2 (URL Utilities)
 - **Day 5:** Phase 3 (Fallback Tracker)
 
@@ -423,7 +493,10 @@ src/
 - **Day 1-3:** Phase 5 (Modularization) - Only if needed
 - **Day 4-5:** Documentation and cleanup
 
-**Note:** Phases can be done incrementally with PR reviews between each phase.
+**Note:**
+- Phases can be done incrementally with PR reviews between each phase
+- **Phase 0 is highest priority** - should be done first as it simplifies all subsequent work
+- Phase 0 can be done independently in ~half day
 
 ---
 
