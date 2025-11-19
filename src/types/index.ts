@@ -46,7 +46,6 @@ export type {
   ResourceIssueReason,
   LinkIssueReason,
   ProcessingStats,
-  EntityLocation,
 } from "./context";
 
 // Tracker

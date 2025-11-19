@@ -3,6 +3,7 @@
  */
 
 import { z } from "zod";
+import type { ParsedEntityUrl } from "../utils/entity";
 
 export interface FileDescriptor {
   // Scanner fills these fields:
@@ -18,6 +19,7 @@ export interface FileDescriptor {
   canonicalUrl?: string; // Canonical URL extracted from HTML (e.g., "/sources/dnd/phb-2024/spells")
   title?: string; // Extracted from first H1 in document
   anchors?: FileAnchors; // Valid anchors and HTML ID mappings
+  entities?: ParsedEntityUrl[]; // Entity URLs found in headings (for resolver to index)
   written?: boolean; // True after file has been written to disk
 }
 

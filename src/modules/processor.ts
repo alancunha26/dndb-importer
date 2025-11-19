@@ -18,6 +18,7 @@ import {
   extractIdFromFilename,
 } from "../utils/string";
 import { generateAnchor, generateAnchorVariants } from "../utils/anchor";
+import { parseEntityUrl, type ParsedEntityUrl } from "../utils/entity";
 import type {
   ConversionContext,
   FileDescriptor,
@@ -25,7 +26,6 @@ import type {
   IndexTemplateContext,
   FileTemplateContext,
   SourcebookInfo,
-  EntityLocation,
 } from "../types";
 
 // ============================================================================
@@ -45,7 +45,6 @@ export async function process(ctx: ConversionContext): Promise<void> {
   const imageMappingPath = join(config.output.directory, "images.json");
   const imageMapping = await loadMapping(imageMappingPath);
   const idGenerator = IdGenerator.fromMapping(imageMapping);
-  const entityIndex = new Map<string, EntityLocation[]>();
 
   // ============================================================================
   // Helper Functions
@@ -92,7 +91,7 @@ export async function process(ctx: ConversionContext): Promise<void> {
     content: string;
     title: string;
     anchors: FileAnchors;
-    entities: string[];
+    entities: ParsedEntityUrl[];
     url: string | null;
     bookUrl: string | null;
     images: string[];
@@ -150,7 +149,7 @@ export async function process(ctx: ConversionContext): Promise<void> {
     let title = "";
     const valid: string[] = [];
     const htmlIdToAnchor: Record<string, string> = {};
-    const entities: string[] = [];
+    const entities: ParsedEntityUrl[] = [];
 
     content.find("h1, h2, h3, h4, h5, h6").each((_index, element) => {
       const $heading = $(element);
@@ -172,13 +171,9 @@ export async function process(ctx: ConversionContext): Promise<void> {
       // Extract entity URLs
       $heading.find("a[href]").each((_i, link) => {
         const href = $(link).attr("href");
-        if (
-          href &&
-          /^\/(spells|monsters|magic-items|equipment|classes|feats|species|backgrounds)\/\d+/.test(
-            href,
-          )
-        ) {
-          entities.push(href);
+        if (href) {
+          const parsed = parseEntityUrl(href);
+          if (parsed) entities.push(parsed);
         }
       });
     });
@@ -393,30 +388,19 @@ export async function process(ctx: ConversionContext): Promise<void> {
       file.anchors = anchors;
       file.title = title;
       file.canonicalUrl = url ?? undefined;
+      file.entities = entities;
 
       if (!sourcebook.bookUrl && bookUrl) {
         sourcebook.bookUrl = bookUrl;
       }
 
-      // 2. Build entity index
-      for (const entityUrl of entities) {
-        const match = entityUrl.match(/\/[^/]+\/\d+-(.+)$/);
-        if (!match) continue;
-
-        const anchor = match[1];
-        if (!entityIndex.has(entityUrl)) {
-          entityIndex.set(entityUrl, []);
-        }
-        entityIndex.get(entityUrl)!.push({ fileId: file.uniqueId, anchor });
-      }
-
-      // 3. Download images
+      // 2. Download images
       await downloadImages(file, images);
 
-      // 4. Convert to markdown
+      // 3. Convert to markdown
       const markdown = convertToMarkdown(content);
 
-      // 5. Write document
+      // 4. Write document
       await writeDocument(file, markdown, sourcebook);
       file.written = true;
       tracker.incrementSuccessful();
@@ -427,7 +411,6 @@ export async function process(ctx: ConversionContext): Promise<void> {
   }
 
   // Save state and generate indexes
-  ctx.entityIndex = entityIndex;
   tracker.setIndexesCreated(sourcebooks.length);
   await saveMapping(imageMappingPath, imageMapping);
   await writeIndexes();

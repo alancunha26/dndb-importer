@@ -14,6 +14,7 @@ import {
   applyAliases,
   isEntityUrl,
 } from "../utils/url";
+import { parseEntityUrl } from "../utils/entity";
 import { normalizeAnchor, findMatchingAnchor } from "../utils/anchor";
 
 // ============================================================================
@@ -53,7 +54,26 @@ export async function resolve(ctx: ConversionContext): Promise<void> {
   const urlMap = new Map(
     writtenFiles.filter((f) => f.canonicalUrl).map((f) => [f.canonicalUrl!, f]),
   );
-  const { tracker, config, sourcebooks, entityIndex } = ctx;
+  const { tracker, config, sourcebooks } = ctx;
+
+  // Build entity index from file.entities
+  const entityIndex = new Map<string, string[]>();
+  for (const file of writtenFiles) {
+    if (!file.entities) continue;
+
+    for (const entity of file.entities) {
+      // Skip entities without anchors (no slug in URL)
+      if (!entity.anchor) {
+        tracker.trackLinkIssue(entity.url, entity.type, "entity-not-found");
+        continue;
+      }
+
+      if (!entityIndex.has(entity.url)) {
+        entityIndex.set(entity.url, []);
+      }
+      entityIndex.get(entity.url)!.push(file.uniqueId);
+    }
+  }
 
   // ============================================================================
   // Resolution Functions
@@ -85,17 +105,24 @@ export async function resolve(ctx: ConversionContext): Promise<void> {
    * Resolve entity link using entity index
    */
   function resolveEntityLink(link: LinkInfo): string | null {
-    if (!isEntityUrl(link.path) || !entityIndex) return null;
+    if (!isEntityUrl(link.path)) return null;
 
-    const locations = entityIndex.get(link.path);
-    if (!locations || locations.length === 0) {
+    const fileIds = entityIndex.get(link.path);
+    if (!fileIds || fileIds.length === 0) {
       tracker.trackLinkIssue(link.original, link.text, "entity-not-found");
       return null;
     }
 
-    const location = locations[0];
-    const targetAnchor = link.anchor || location.anchor;
-    return `[${link.text}](${location.fileId}.md#${targetAnchor})`;
+    const fileId = fileIds[0];
+    const parsed = parseEntityUrl(link.path);
+    const targetAnchor = link.anchor || parsed?.anchor;
+
+    if (!targetAnchor) {
+      tracker.trackLinkIssue(link.original, link.text, "anchor-not-found");
+      return null;
+    }
+
+    return `[${link.text}](${fileId}.md#${targetAnchor})`;
   }
 
   /**
