@@ -6,7 +6,6 @@
 import glob from "fast-glob";
 import path from "node:path";
 import { readFile } from "fs/promises";
-import { load } from "cheerio";
 import { IdGenerator } from "../utils/id-generator";
 import { loadMapping, saveMapping } from "../utils/mapping";
 import { fileExists } from "../utils/fs";
@@ -61,43 +60,6 @@ async function loadSourcebookMetadata(
     // Track error silently - don't interrupt spinner
     ctx.errors?.resources.push({ path: metadataPath, error: error as Error });
     return {};
-  }
-}
-
-/**
- * Extract book-level URL from an HTML file's canonical URL
- * Returns null if canonical URL not found or extraction fails
- *
- * Example: https://www.dndbeyond.com/sources/dnd/phb-2024/welcome-to-adventure
- *          → /sources/dnd/phb-2024
- */
-async function extractBookUrl(htmlFilePath: string): Promise<string | null> {
-  try {
-    const html = await readFile(htmlFilePath, "utf-8");
-    const $ = load(html);
-    const canonical = $('link[rel="canonical"]').attr("href");
-
-    if (!canonical) {
-      return null;
-    }
-
-    // Extract path from full URL: https://www.dndbeyond.com/sources/dnd/phb-2024/spells → /sources/dnd/phb-2024/spells
-    const match = canonical.match(/dndbeyond\.com(\/.*)$/);
-    if (!match) {
-      return null;
-    }
-
-    const fullPath = match[1];
-    // Remove last segment to get book-level URL: /sources/dnd/phb-2024/spells → /sources/dnd/phb-2024
-    const segments = fullPath.split('/').filter(s => s.length > 0);
-    if (segments.length <= 1) {
-      return null;
-    }
-
-    // Return all segments except the last one
-    return '/' + segments.slice(0, -1).join('/');
-  } catch (error) {
-    return null;
   }
 }
 
@@ -196,10 +158,7 @@ export async function scan(ctx: ConversionContext): Promise<void> {
         `${indexId}${ctx.config.output.extension}`,
       );
 
-      // Extract book-level URL from first file
-      // Example: /sources/dnd/phb-2024
-      const bookUrl = await extractBookUrl(sourcePath);
-
+      // bookUrl will be derived from first file's canonicalUrl in processor
       sourcebooks.push({
         id: indexId,
         title,
@@ -207,7 +166,7 @@ export async function scan(ctx: ConversionContext): Promise<void> {
         outputPath,
         metadata,
         templates: sourcebookTemplates,
-        bookUrl: bookUrl ?? undefined,
+        bookUrl: undefined,
       });
 
       sourcebookIdMap.set(sourcebook, indexId);

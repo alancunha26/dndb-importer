@@ -137,6 +137,7 @@ export async function process(ctx: ConversionContext): Promise<void> {
     anchors: FileAnchors;
     entities: string[]; // Entity URLs found in this file (e.g., /spells/123, /monsters/456)
     url: string | null; // Canonical URL path extracted from <link rel="canonical">
+    bookUrl: string | null; // Book-level URL derived from canonical (e.g., /sources/dnd/phb-2024)
     images: string[];
   }> {
     // 1. Read HTML file from disk
@@ -147,12 +148,18 @@ export async function process(ctx: ConversionContext): Promise<void> {
 
     // 3. Extract canonical URL from <head> for auto-discovery of URL mappings
     let canonicalUrl: string | null = null;
+    let bookUrl: string | null = null;
     const canonical = $('link[rel="canonical"]').attr("href");
     if (canonical) {
       // Extract path from full URL: https://www.dndbeyond.com/sources/dnd/phb-2024/spells → /sources/dnd/phb-2024/spells
       const match = canonical.match(/dndbeyond\.com(\/.*)$/);
       if (match) {
         canonicalUrl = match[1];
+        // Derive book-level URL by stripping last segment: /sources/dnd/phb-2024/spells → /sources/dnd/phb-2024
+        const segments = canonicalUrl.split("/").filter((s) => s.length > 0);
+        if (segments.length > 1) {
+          bookUrl = "/" + segments.slice(0, -1).join("/");
+        }
       }
     }
 
@@ -166,6 +173,7 @@ export async function process(ctx: ConversionContext): Promise<void> {
         anchors: { valid: [], htmlIdToAnchor: {} },
         entities: [],
         url: null,
+        bookUrl: null,
         images: [],
       };
     }
@@ -282,6 +290,7 @@ export async function process(ctx: ConversionContext): Promise<void> {
       anchors: { valid, htmlIdToAnchor },
       entities: entityUrls,
       url: canonicalUrl,
+      bookUrl,
       images: imageUrls,
     };
   }
@@ -563,12 +572,13 @@ export async function process(ctx: ConversionContext): Promise<void> {
 
     try {
       // 2. Parse HTML and extract content, title, anchors, entities, canonical URL, and image URLs (ONLY place Cheerio is used)
-      const { content, title, anchors, entities, url, images } =
+      const { content, title, anchors, entities, url, bookUrl, images } =
         await processHtml(file);
 
       file.anchors = anchors;
       file.title = title;
       file.canonicalUrl = url ?? undefined;
+      sourcebook.bookUrl = bookUrl ?? "";
 
       // 3. Build entity index from extracted entities
       for (const entityUrl of entities) {

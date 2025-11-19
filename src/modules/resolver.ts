@@ -7,55 +7,17 @@
  */
 
 import { readFile, writeFile } from "fs/promises";
-import type {
-  ConversionContext,
-  FallbackLink,
-  FileDescriptor,
-} from "../types";
+import type { ConversionContext, FallbackLink, FileDescriptor } from "../types";
+import {
+  normalizeDnDBeyondUrl,
+  shouldResolveUrl,
+  applyAliases,
+  isEntityUrl,
+} from "../utils/url";
 
 // ============================================================================
 // Constants
 // ============================================================================
-
-/**
- * D&D Beyond entity types that can be linked
- */
-const ENTITY_TYPES = [
-  "spells",
-  "monsters",
-  "magic-items",
-  "equipment",
-  "classes",
-  "feats",
-  "species",
-  "backgrounds",
-] as const;
-
-/**
- * Regex pattern to match entity URLs with IDs
- * Example: /spells/123, /monsters/456-fireball
- */
-const ENTITY_URL_WITH_ID_PATTERN = new RegExp(
-  `^\\/(${ENTITY_TYPES.join("|")})\\/\\d+`,
-);
-
-/**
- * Regex pattern to match entity path prefixes
- * Example: /spells/, /monsters/
- */
-const ENTITY_PATH_PATTERN = new RegExp(`^\\/(${ENTITY_TYPES.join("|")})\\/`);
-
-/**
- * D&D Beyond domain URL patterns
- */
-const DNDBEYOND_HTTPS = "https://www.dndbeyond.com/";
-const DNDBEYOND_HTTP = "http://www.dndbeyond.com/";
-
-/**
- * Source book URL pattern
- * Example: /sources/dnd/phb-2024
- */
-const SOURCE_URL_PATTERN = /^\/sources\//;
 
 /**
  * Regex to match markdown links: [text](url)
@@ -119,9 +81,7 @@ export async function resolve(ctx: ConversionContext): Promise<void> {
   // 2. Build urlMap for O(1) lookup of files by canonical URL
   // Only includes files that have a canonicalUrl
   const urlMap = new Map(
-    writtenFiles
-      .filter((f) => f.canonicalUrl)
-      .map((f) => [f.canonicalUrl!, f]),
+    writtenFiles.filter((f) => f.canonicalUrl).map((f) => [f.canonicalUrl!, f]),
   );
 
   // 3. Initialize fallback tracking
@@ -204,7 +164,7 @@ function resolveLinksInContent(
         }
 
         // Only process D&D Beyond links
-        if (shouldResolveLink(url)) {
+        if (shouldResolveUrl(url)) {
           const resolved = resolveLink(
             url,
             text,
@@ -225,29 +185,6 @@ function resolveLinksInContent(
 }
 
 /**
- * Determine if a link should be resolved
- * Returns true only for D&D Beyond links
- */
-function shouldResolveLink(url: string): boolean {
-  // Internal anchors (same-page)
-  if (url.startsWith("#")) return true;
-
-  // Full D&D Beyond URLs
-  if (url.startsWith(DNDBEYOND_HTTPS) || url.startsWith(DNDBEYOND_HTTP)) {
-    return true;
-  }
-
-  // D&D Beyond paths (sources or entities)
-  if (SOURCE_URL_PATTERN.test(url)) return true;
-  if (ENTITY_PATH_PATTERN.test(url)) {
-    return true;
-  }
-
-  // Not a D&D Beyond link
-  return false;
-}
-
-/**
  * Resolve a single link
  */
 function resolveLink(
@@ -260,44 +197,24 @@ function resolveLink(
   fallbackLinks: FallbackLink[],
 ): string {
   const originalUrl = url; // Save for tracking
-  // 1. Handle full D&D Beyond URLs - strip domain
-  if (url.startsWith(DNDBEYOND_HTTPS)) {
-    url = url.replace(DNDBEYOND_HTTPS, "");
-  } else if (url.startsWith(DNDBEYOND_HTTP)) {
-    url = url.replace(DNDBEYOND_HTTP, "");
-  }
 
-  // 2. Normalize URL - strip trailing slashes (before # or at end)
-  // Handles: "/sources/.../spells/" -> "/sources/.../spells"
-  // Handles: "/sources/.../spells/#anchor" -> "/sources/.../spells#anchor"
-  url = url.replace(/\/(?=#)/, ""); // Remove / before #
-  if (url.length > 1 && url.endsWith("/")) {
-    url = url.slice(0, -1); // Remove trailing / at end
-  }
+  // 1. Normalize URL (strips domain, trailing slashes, ensures leading slash)
+  url = normalizeDnDBeyondUrl(url);
 
-  // 3. Handle internal anchors (same-page links)
+  // 2. Handle internal anchors (same-page links)
   if (url.startsWith("#")) {
     return resolveInternalAnchor(url, text, currentFileId, fileMap);
   }
 
-  // 4. Split URL into path and anchor
+  // 3. Split URL into path and anchor
   const [initialPath, urlAnchor] = url.split("#");
 
-  // 5. Normalize relative paths - ensure leading slash
-  // Some links in HTML are relative (sources/...) but canonical URLs always have leading slash (/sources/...)
-  let urlPath = initialPath;
-  if (urlPath && !urlPath.startsWith("/")) {
-    urlPath = "/" + urlPath;
-  }
-
-  // 6. Apply URL aliases (single point of URL rewriting)
+  // 4. Apply URL aliases (single point of URL rewriting)
   // Rewrites urlPath to canonical URL while preserving anchor
   // Works for both entity links (/magic-items/123) and source links (/sources/...)
-  if (ctx.config.links.urlAliases[urlPath]) {
-    urlPath = ctx.config.links.urlAliases[urlPath];
-  }
+  const urlPath = applyAliases(initialPath, ctx.config.links.urlAliases);
 
-  // 7. Check if it's an entity link (priority check)
+  // 5. Check if it's an entity link (priority check)
   if (ctx.entityIndex) {
     const entityResult = resolveEntityLink(
       urlPath,
@@ -311,7 +228,7 @@ function resolveLink(
     if (entityResult) return entityResult;
   }
 
-  // 8. Check if it's a source book link
+  // 6. Check if it's a source book link
   const sourceResult = resolveSourceLink(
     urlPath,
     urlAnchor,
@@ -324,14 +241,14 @@ function resolveLink(
   );
   if (sourceResult) return sourceResult;
 
-  // 9. Fallback to bold text if configured
+  // 7. Fallback to bold text if configured
   if (ctx.config.links.fallbackToBold) {
     // Only track if not already tracked (entity/source functions track specific reasons)
     // This catches any remaining unresolved links
     return `**${text}**`;
   }
 
-  // 10. Leave link as-is if no fallback
+  // 8. Leave link as-is if no fallback
   return `[${text}](${url})`;
 }
 
@@ -375,7 +292,7 @@ function resolveEntityLink(
   originalUrl: string,
 ): string | null {
   // Check if it's an entity link pattern: /spells/123, /monsters/456, /classes/789, etc.
-  if (!ENTITY_URL_WITH_ID_PATTERN.test(urlPath)) {
+  if (!isEntityUrl(urlPath)) {
     return null; // Not an entity link
   }
 
@@ -486,7 +403,8 @@ function resolveSourceLink(
 
   // Try to find matching anchor
   // Priority 1: Check if HTML ID exists in htmlIdToAnchor mapping (e.g., "FlySpeed" -> "fly-speed")
-  let matchedAnchor: string | null | undefined = fileAnchors.htmlIdToAnchor[urlAnchor];
+  let matchedAnchor: string | null | undefined =
+    fileAnchors.htmlIdToAnchor[urlAnchor];
 
   // Priority 2: Use smart matching against valid anchors list
   if (!matchedAnchor) {
