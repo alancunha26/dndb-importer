@@ -18,14 +18,15 @@ import type {
  *
  * Reads from context:
  * - files: Contains file descriptors with anchors (enriched by processor)
- * - pathIndex: relativePath → uniqueId mapping from scanner
+ * - urlMapping: Auto-discovered URL → file ID mapping from scanner
  * - entityIndex: Entity URL → file locations mapping from processor
  * - config.links: urlAliases, resolveInternal, fallbackToBold
  *
  * Process:
  * 1. Build LinkResolutionIndex from files (has all anchors)
  * 2. For each file, read markdown from disk
- * 3. Resolve D&D Beyond links using:
+ * 3. Resolve D&D Beyond links:
+ *    - Apply urlAliases to rewrite URLs to canonical form
  *    - Entity index for entity links (/spells/123, /monsters/456)
  *    - URL mapping + anchor validation for source links
  * 4. Overwrite files with resolved links
@@ -54,46 +55,11 @@ export async function resolve(ctx: ConversionContext): Promise<void> {
     }
   }
 
-  // 2. Build combined URL mapping (auto-discovered + manual config)
-  // Manual config supports both URL aliases and file path mappings
-  const combinedUrlMapping = new Map<string, string>();
-
-  // Start with auto-discovered mappings (URL path → file ID)
-  if (ctx.urlMapping) {
-    for (const [urlPath, fileId] of ctx.urlMapping) {
-      combinedUrlMapping.set(urlPath, fileId);
-    }
-  }
-
-  // Apply manual config overrides
-  // Supports two formats:
-  // 1. URL aliasing: "/free-rules/foo" → "/phb-2024/foo" (canonical URL)
-  // 2. File path mapping: "/sources/foo" → "book/file.html" (legacy)
-  for (const [urlPath, target] of Object.entries(
-    ctx.config.links.urlAliases,
-  )) {
-    let fileId: string | undefined;
-
-    if (target.startsWith("/sources/")) {
-      // URL aliasing: target is a canonical URL, look it up in auto-discovered mapping
-      fileId = ctx.urlMapping?.get(target);
-    } else {
-      // File path mapping: target is an HTML file path, look it up in pathIndex
-      fileId = ctx.pathIndex?.get(target);
-    }
-
-    if (fileId) {
-      combinedUrlMapping.set(urlPath, fileId);
-    }
-  }
-
-  // Store combined mapping in context for resolution functions
-  ctx.urlMapping = combinedUrlMapping;
-
-  // Initialize fallback tracking
+  // 2. Initialize fallback tracking
   const fallbackLinks: FallbackLink[] = [];
 
   // 3. For each written file, resolve links
+  // Note: URL aliases are applied in resolveLink() before entity/source resolution
   for (const file of writtenFiles) {
     try {
       // a. Read markdown content from disk
@@ -248,9 +214,16 @@ function resolveLink(
   }
 
   // 4. Split URL into path and anchor
-  const [urlPath, urlAnchor] = url.split("#");
+  let [urlPath, urlAnchor] = url.split("#");
 
-  // 5. Check if it's an entity link (priority check)
+  // 5. Apply URL aliases (single point of URL rewriting)
+  // Rewrites urlPath to canonical URL while preserving anchor
+  // Works for both entity links (/magic-items/123) and source links (/sources/...)
+  if (ctx.config.links.urlAliases[urlPath]) {
+    urlPath = ctx.config.links.urlAliases[urlPath];
+  }
+
+  // 6. Check if it's an entity link (priority check)
   if (ctx.entityIndex) {
     const entityResult = resolveEntityLink(
       urlPath,
@@ -264,7 +237,7 @@ function resolveLink(
     if (entityResult) return entityResult;
   }
 
-  // 6. Check if it's a source book link
+  // 7. Check if it's a source book link
   const sourceResult = resolveSourceLink(
     urlPath,
     urlAnchor,
@@ -277,14 +250,14 @@ function resolveLink(
   );
   if (sourceResult) return sourceResult;
 
-  // 7. Fallback to bold text if configured
+  // 8. Fallback to bold text if configured
   if (ctx.config.links.fallbackToBold) {
     // Only track if not already tracked (entity/source functions track specific reasons)
     // This catches any remaining unresolved links
     return `**${text}**`;
   }
 
-  // 8. Leave link as-is if no fallback
+  // 9. Leave link as-is if no fallback
   return `[${text}](${url})`;
 }
 
