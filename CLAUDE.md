@@ -180,7 +180,9 @@ console.log(`Files processed: ${ctx.stats.successful}/${ctx.stats.totalFiles}`);
   - `links` - Link resolution configuration
   - `logging` - Logging level and progress display
 - HTML Parser: Uses `.p-article-content` selector to extract main content from D&D Beyond HTML
-- URL Mapping: `links.urlMapping` maps D&D Beyond URLs to HTML file paths (relative to input directory)
+- URL Aliases: `links.urlAliases` maps D&D Beyond URLs to canonical URLs or HTML file paths
+  - Primary use: URL aliasing (e.g., `/sources/dnd/free-rules/foo` → `/sources/dnd/phb-2024/foo`)
+  - Legacy support: File path mapping (e.g., `/sources/dnd/phb-2024/foo` → `phb/file.html`)
 - Fallback: `links.fallbackToBold` converts unresolvable links to bold text (default: true)
 
 **Input Validation and Error Tracking:**
@@ -249,7 +251,7 @@ See RFC 0001 "Link Resolution Strategy" section for complete architecture.
 - **Link resolution is optional** (`links.resolveInternal`):
   - If `true`: Resolver module resolves links with full validation (default)
   - If `false`: Resolver module skipped
-- User configures URL mapping in `links.urlMapping`:
+- User configures URL aliases in `links.urlAliases`:
   - Source paths: `/sources/dnd/phb-2024/equipment` → `players-handbook/08-chapter-6-equipment.html`
   - Entity paths: `/spells` → `players-handbook/10-spell-descriptions.html`
 - Supports both source book links and entity links (e.g., `https://www.dndbeyond.com/spells/2619022-magic-missile`)

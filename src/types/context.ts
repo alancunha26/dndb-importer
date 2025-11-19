@@ -19,6 +19,13 @@ export interface EntityLocation {
   anchor: string; // Markdown anchor (e.g., "ape", "arcane-vigor")
 }
 
+export interface FallbackLink {
+  url: string; // Original URL
+  text: string; // Link text
+  file: string; // File where link was found (relative path or ID)
+  reason: string; // Why it fell back (e.g., "Entity not found", "Anchor not found", "URL not in mapping")
+}
+
 export interface ProcessingStats {
   totalFiles: number;
   successful: number;
@@ -29,6 +36,7 @@ export interface ProcessingStats {
   imagesFailed: number;
   linksResolved: number;
   linksFailed: number;
+  fallbackLinks: FallbackLink[]; // Links that fell back to bold text
   startTime: Date;
   endTime?: Date;
   duration?: number;
@@ -51,5 +59,6 @@ export interface ConversionContext {
   pathIndex?: Map<string, string>; // Fast lookup: relativePath → uniqueId
   globalTemplates?: TemplateSet; // Global templates from input root
   entityIndex?: Map<string, EntityLocation[]>; // Entity URL → file locations (e.g., /spells/123 → [{fileId, anchor}])
+  urlMapping?: Map<string, string>; // Auto-discovered URL mapping: URL path → file ID (e.g., /sources/dnd/phb-2024/spells → "abc1")
   stats?: ProcessingStats;
 }

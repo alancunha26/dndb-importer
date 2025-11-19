@@ -76,8 +76,50 @@ export async function convertCommand(opts: Options): Promise<void> {
     );
     console.log(`Images downloaded: ${ctx.stats.imagesDownloaded}`);
     console.log(`Links resolved: ${ctx.stats.linksResolved}`);
+
+    // Display fallback link statistics
+    if (ctx.stats.fallbackLinks && ctx.stats.fallbackLinks.length > 0) {
+      console.log(
+        `\n⚠️  ${ctx.stats.fallbackLinks.length} link(s) fell back to bold text:`,
+      );
+
+      // Group fallback links by reason
+      const reasonCounts = new Map<string, number>();
+      for (const fallback of ctx.stats.fallbackLinks) {
+        const count = reasonCounts.get(fallback.reason) || 0;
+        reasonCounts.set(fallback.reason, count + 1);
+      }
+
+      // Sort by count (descending)
+      const sortedReasons = Array.from(reasonCounts.entries()).sort(
+        (a, b) => b[1] - a[1],
+      );
+
+      // Display breakdown by reason
+      console.log("\nBreakdown by reason:");
+      for (const [reason, count] of sortedReasons) {
+        console.log(`  - ${reason}: ${count}`);
+      }
+
+      // Display examples (top 10 most common)
+      if (options.verbose) {
+        console.log("\nExamples (first 10):");
+        ctx.stats.fallbackLinks.slice(0, 10).forEach((fallback) => {
+          console.log(`  - [${fallback.text}](${fallback.url})`);
+          console.log(`    File: ${fallback.file}`);
+          console.log(`    Reason: ${fallback.reason}`);
+        });
+
+        if (ctx.stats.fallbackLinks.length > 10) {
+          console.log(
+            `  ... and ${ctx.stats.fallbackLinks.length - 10} more`,
+          );
+        }
+      }
+    }
+
     if (ctx.stats.duration) {
-      console.log(`Duration: ${(ctx.stats.duration / 1000).toFixed(2)}s`);
+      console.log(`\nDuration: ${(ctx.stats.duration / 1000).toFixed(2)}s`);
     }
 
     // Display errors if any

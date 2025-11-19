@@ -42,6 +42,7 @@ export async function stats(ctx: ConversionContext): Promise<void> {
     imagesFailed: 0,
     linksResolved: 0,
     linksFailed: 0,
+    fallbackLinks: ctx.stats?.fallbackLinks || [],
     startTime: new Date(),
     endTime: new Date(),
     duration: 0,

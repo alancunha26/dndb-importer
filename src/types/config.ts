@@ -53,12 +53,11 @@ export const ImagesConfigSchema = z.object({
 export const LinksConfigSchema = z.object({
   resolveInternal: z.boolean(),
   fallbackToBold: z.boolean(),
-  // Maps D&D Beyond URL paths to HTML file paths (relative to input directory)
+  // Maps D&D Beyond URL paths to target URLs or file paths
   // Supports two types of mappings:
-  // 1. Source book paths: "/sources/dnd/phb-2024/equipment" -> "players-handbook/08-equipment.html"
-  // 2. Entity type paths: "/spells" -> "players-handbook/10-spell-descriptions.html"
-  //    (for entity links like https://www.dndbeyond.com/spells/2619022-magic-missile)
-  urlMapping: z.record(z.string(), z.string()),
+  // 1. URL aliases: "/sources/dnd/free-rules/foo" -> "/sources/dnd/phb-2024/foo" (canonical URL)
+  // 2. File path mappings: "/sources/dnd/phb-2024/equipment" -> "players-handbook/08-equipment.html" (legacy)
+  urlAliases: z.record(z.string(), z.string()),
 });
 
 export const LoggingConfigSchema = z.object({

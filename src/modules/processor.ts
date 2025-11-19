@@ -136,6 +136,7 @@ export async function process(ctx: ConversionContext): Promise<void> {
     title: string;
     anchors: FileAnchors;
     entities: string[]; // Entity URLs found in this file (e.g., /spells/123, /monsters/456)
+    canonicalUrl: string | null; // Canonical URL path extracted from <link rel="canonical">
     images: string[];
   }> {
     // 1. Read HTML file from disk
@@ -144,7 +145,18 @@ export async function process(ctx: ConversionContext): Promise<void> {
     // 2. Parse with Cheerio (ONLY place we use Cheerio)
     const $ = load(html);
 
-    // 3. Extract main content using configured selector
+    // 3. Extract canonical URL from <head> for auto-discovery of URL mappings
+    let canonicalUrl: string | null = null;
+    const canonical = $('link[rel="canonical"]').attr("href");
+    if (canonical) {
+      // Extract path from full URL: https://www.dndbeyond.com/sources/dnd/phb-2024/spells → /sources/dnd/phb-2024/spells
+      const match = canonical.match(/dndbeyond\.com(\/.*)$/);
+      if (match) {
+        canonicalUrl = match[1];
+      }
+    }
+
+    // 4. Extract main content using configured selector
     const content = $(config.html.contentSelector);
 
     if (content.length === 0) {
@@ -153,18 +165,19 @@ export async function process(ctx: ConversionContext): Promise<void> {
         title: "",
         anchors: { valid: [], htmlIdToAnchor: {} },
         entities: [],
+        canonicalUrl: null,
         images: [],
       };
     }
 
-    // 4. Remove unwanted elements if configured
+    // 5. Remove unwanted elements if configured
     if (config.html.removeSelectors.length > 0) {
       config.html.removeSelectors.forEach((selector) => {
         content.find(selector).remove();
       });
     }
 
-    // 5. Preprocess HTML structure for D&D Beyond patterns
+    // 6. Preprocess HTML structure for D&D Beyond patterns
     // Fix nested lists BEFORE Turndown conversion (not as a Turndown rule)
     // This is preprocessing because:
     // - D&D Beyond uses a specific HTML pattern (lists as siblings, not children)
@@ -185,7 +198,7 @@ export async function process(ctx: ConversionContext): Promise<void> {
         $previousLi.append($nestedList);
       });
 
-    // 6. Extract title from first H1, anchors from all headings, and entities
+    // 7. Extract title from first H1, anchors from all headings, and entities
     let title = "";
     const valid: string[] = [];
     const htmlIdToAnchor: Record<string, string> = {};
@@ -240,7 +253,7 @@ export async function process(ctx: ConversionContext): Promise<void> {
       }
     });
 
-    // 7. Extract image URLs from <img> tags
+    // 8. Extract image URLs from <img> tags
     const imageUrls: string[] = [];
     content.find("img").each((_index, element) => {
       const src = $(element).attr("src");
@@ -249,7 +262,7 @@ export async function process(ctx: ConversionContext): Promise<void> {
       }
     });
 
-    // 8. Extract alternate image URLs from figcaption links (generic pattern)
+    // 9. Extract alternate image URLs from figcaption links (generic pattern)
     // Finds any <a> in <figcaption> that links to an image file
     content.find("figcaption a").each((_index, element) => {
       const href = $(element).attr("href");
@@ -258,12 +271,13 @@ export async function process(ctx: ConversionContext): Promise<void> {
       }
     });
 
-    // 9. Return extracted data
+    // 10. Return extracted data
     return {
       content: content.html() || "",
       title,
       anchors: { valid, htmlIdToAnchor },
       entities: entityUrls,
+      canonicalUrl,
       images: imageUrls,
     };
   }
@@ -534,8 +548,9 @@ export async function process(ctx: ConversionContext): Promise<void> {
   // Main Processing Logic
   // ============================================================================
 
-  // Initialize entity index (will be populated as we process files)
+  // Initialize entity index and URL mapping (will be populated as we process files)
   const entityIndex = new Map<string, EntityLocation[]>();
+  const urlMapping = new Map<string, string>(); // URL path → file ID
 
   // Process each file one at a time (memory-efficient)
   for (const file of files) {
@@ -544,11 +559,16 @@ export async function process(ctx: ConversionContext): Promise<void> {
     if (!sourcebook) continue;
 
     try {
-      // 2. Parse HTML and extract content, title, anchors, entities, and image URLs (ONLY place Cheerio is used)
-      const { content, title, anchors, entities, images } =
+      // 2. Parse HTML and extract content, title, anchors, entities, canonical URL, and image URLs (ONLY place Cheerio is used)
+      const { content, title, anchors, entities, canonicalUrl, images } =
         await processHtml(file);
       file.anchors = anchors;
       file.title = title;
+
+      // 2a. Build URL mapping from canonical URL
+      if (canonicalUrl) {
+        urlMapping.set(canonicalUrl, file.uniqueId);
+      }
 
       // 3. Build entity index from extracted entities
       for (const entityUrl of entities) {
@@ -587,8 +607,9 @@ export async function process(ctx: ConversionContext): Promise<void> {
     }
   }
 
-  // 7. Save entity index to context for resolver module
+  // 7. Save entity index and URL mapping to context for resolver module
   ctx.entityIndex = entityIndex;
+  ctx.urlMapping = urlMapping;
 
   // 8. Save updated image mapping to images.json (includes cover images)
   await saveMapping(imageMappingPath, imageMapping);

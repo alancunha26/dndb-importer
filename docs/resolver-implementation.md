@@ -95,7 +95,7 @@ Uses: First location (abc1.md#ape)
 
 **Source paths** (e.g., `/sources/dnd/phb-2024/spells#fireball`)
 
-- Uses `urlMapping` from config (67 mappings)
+- Uses `urlAliases` from config (supports URL aliasing and file path mapping)
 - Validates anchor exists in target file with **smart matching**:
   1. **Exact match** (includes plural/singular variants)
   2. **Prefix match** for headers with suffixes
@@ -197,7 +197,7 @@ Record<string, FileAnchors>
   "links": {
     "resolveInternal": true,
     "fallbackToBold": true,
-    "urlMapping": {
+    "urlAliases": {
       // PHB (12 pages)
       "/sources/dnd/phb-2024/playing-the-game": "players-handbook/02-chapter-1-playing-the-game.html",
       "/sources/dnd/phb-2024/creating-a-character": "players-handbook/03-chapter-2-creating-a-character.html",

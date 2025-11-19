@@ -371,7 +371,7 @@ The link resolution system spans three pipeline stages:
   "links": {
     "resolveInternal": true,
     "fallbackToBold": true,
-    "urlMapping": {
+    "urlAliases": {
       "/sources/dnd/phb-2024/equipment": "players-handbook/08-equipment.html",
       "/spells": "players-handbook/10-spell-descriptions.html"
     }

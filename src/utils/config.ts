@@ -93,10 +93,10 @@ function mergeConfig(
     links: {
       ...base.links,
       ...override.links,
-      // Deep merge urlMapping separately to allow adding/overriding individual mappings
-      urlMapping: {
-        ...base.links.urlMapping,
-        ...override.links?.urlMapping,
+      // Deep merge urlAliases separately to allow adding/overriding individual aliases
+      urlAliases: {
+        ...base.links.urlAliases,
+        ...override.links?.urlAliases,
       },
     },
     logging: { ...base.logging, ...override.logging },

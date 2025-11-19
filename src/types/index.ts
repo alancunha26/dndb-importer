@@ -37,6 +37,7 @@ export type {
   ConversionContext,
   ErrorStats,
   ProcessingStats,
+  FallbackLink,
   EntityLocation,
 } from "./context";
 
