@@ -58,6 +58,7 @@ export interface SourcebookInfo {
   outputPath: string; // Path to index markdown file
   metadata: SourcebookMetadata; // Metadata from sourcebook.json (or empty)
   templates: TemplateSet; // Sourcebook-specific templates (or null for global/default)
+  bookUrl?: string; // Book-level URL extracted from first file (e.g., /sources/dnd/phb-2024)
   // Files are stored separately in ConversionContext.files with sourcebookId reference
 }
 

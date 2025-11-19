@@ -105,9 +105,15 @@ function extractHeaderRow(thead: TurndownNode): TurndownNode | null {
 }
 
 /**
- * Extract cell text content
+ * Extract cell content and process through Turndown to preserve links
  */
-function getCellContent(cell: TurndownNode): string {
+function getCellContent(cell: TurndownNode, service: TurndownService): string {
+  // Use innerHTML to get the HTML content, then process through Turndown
+  // This preserves links and other markdown-able elements
+  if (cell.innerHTML) {
+    return service.turndown(cell.innerHTML).trim();
+  }
+  // Fallback to textContent if innerHTML not available
   return (cell.textContent || "").trim();
 }
 
@@ -180,7 +186,8 @@ function extractBodyRows(tbodies: TurndownNode[]): TurndownNode[] {
 function processRow(
   row: TurndownNode,
   rowspanTracker: CellSpan[],
-  columnCount: number
+  columnCount: number,
+  service: TurndownService
 ): string[] | null {
   const cells: string[] = [];
   let colIndex = 0;
@@ -221,7 +228,7 @@ function processRow(
       const cellElement = cellElements[cellElementIndex];
       cellElementIndex++;
 
-      const content = getCellContent(cellElement);
+      const content = getCellContent(cellElement, service);
       const colspan = getColspan(cellElement);
       const rowspan = getRowspan(cellElement);
 
@@ -377,7 +384,7 @@ export function tableRule(config: MarkdownConfig) {
         // Process header
         let headerCells: string[] = [];
         if (headerRow) {
-          const cells = processRow(headerRow, rowspanTracker, columnCount);
+          const cells = processRow(headerRow, rowspanTracker, columnCount, service);
           headerCells = cells || new Array(columnCount).fill("");
         } else {
           // No header, create empty header
@@ -387,7 +394,7 @@ export function tableRule(config: MarkdownConfig) {
         // Process body rows
         const bodyCells: string[][] = [];
         for (const row of bodyRows) {
-          const cells = processRow(row, rowspanTracker, columnCount);
+          const cells = processRow(row, rowspanTracker, columnCount, service);
           if (cells !== null) {
             // Only add rows that aren't merged with next
             bodyCells.push(cells);

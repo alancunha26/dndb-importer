@@ -267,7 +267,12 @@ See RFC 0001 "Link Resolution Strategy" section for complete architecture.
   1. Exact match (including plural/singular variants)
   2. Prefix match for headers with suffixes (e.g., "Alchemist's Fire" matches "Alchemist's Fire (50 GP)")
   3. Uses shortest match if multiple prefix matches
-- **Header links** (no anchor): Links without specific anchors (e.g., `[Equipment](/sources/.../equipment)`) are **removed entirely**
+- **Book-level links** (no anchor): Links to sourcebooks automatically resolve to index files
+  - Scanner extracts book URL from first file and stores in `SourcebookInfo.bookUrl`
+  - Resolver searches `ctx.sourcebooks` array to find matching book URL
+  - Example: `[Player's Handbook](/sources/dnd/phb-2024)` → `[Player's Handbook](ksmc.md)` (links to index)
+- **Header links** (no anchor): Links to specific pages without anchors are converted to bold text
+  - Example: `[Equipment](/sources/.../equipment)` → `**Equipment**` (page link, no specific anchor)
 - **Internal links** (same-page): Resolved using `LinkResolutionIndex`
   - Processor builds `htmlIdToAnchor` mapping using Cheerio
     - Example: `<h2 id="Bell1GP">Bell (1 GP)</h2>` → stores `{ "Bell1GP": "bell-1-gp" }`
@@ -279,7 +284,8 @@ See RFC 0001 "Link Resolution Strategy" section for complete architecture.
 - Example 3: `[Magic Missile](https://www.dndbeyond.com/spells/2619022-magic-missile)` → `[Magic Missile](b4x8.md#magic-missile)` (entity)
 - Example 4: `[Fireballs](/sources/...)` → matches heading "Fireball" (singular/plural handled)
 - Example 5: `[Alchemist's Fire](/.../equipment#alchemists-fire)` → matches "Alchemist's Fire (50 GP)" (prefix matching)
-- Example 6: `[Equipment](/.../equipment)` → removed entirely (no anchor)
+- Example 6: `[Player's Handbook](/sources/dnd/phb-2024)` → `[Player's Handbook](ksmc.md)` (book-level → index file)
+- Example 7: `[Equipment](/.../equipment)` → `**Equipment**` (page-level header link, no anchor)
 - Anchors generated from link text using GitHub markdown format (lowercase, hyphens)
 - **Fallback**: When `links.resolveInternal: true` and `links.fallbackToBold: true`, converts to bold text (`**Fireball**`) if:
   - URL not in mapping
@@ -433,6 +439,7 @@ Key types:
 - `SourcebookInfo` - Sourcebook metadata with templates:
   - `metadata`: SourcebookMetadata (from sourcebook.json - validated with Zod)
   - `templates`: TemplateSet (sourcebook-specific template paths)
+  - `bookUrl?`: string - Book-level URL extracted from first file (e.g., `/sources/dnd/phb-2024`)
   - `id`, `title`, `sourcebook`, `outputPath`
 - `SourcebookMetadata` - Optional metadata from sourcebook.json (validated with Zod):
   - `title?`, `edition?`, `description?`, `author?`, `coverImage?`

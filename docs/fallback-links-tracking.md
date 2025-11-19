@@ -1,7 +1,7 @@
 # Fallback Links Tracking
 
-**Status:** Initial Analysis (2025-11-18)
-**Total Fallback Links:** 9,403
+**Status:** In Progress (2025-11-19)
+**Total Fallback Links:** 1,447 (reduced from 9,403 - **84.6% improvement**)
 **Conversion Run:** PHB 2024, DMG 2024, MM 2024
 
 This document tracks unresolved links that fall back to bold text during conversion. Each issue includes analysis, potential solutions, and implementation status.
@@ -13,12 +13,13 @@ This document tracks unresolved links that fall back to bold text during convers
 | Category                 | Count  | % of Total | Priority | Status                 |
 | ------------------------ | ------ | ---------- | -------- | ---------------------- |
 | Free Rules References    | ~5,800 | 62%        | High     | ✅ Resolved            |
-| Anchor Mismatches        | ~7,000 | 75%        | High     | ✅ Resolved            |
-| Equipment Entity Links   | ~1,000 | 59%        | Medium   | 🔴 Not Started         |
+| Anchor Mismatches        | ~7,700 | 82%        | High     | ✅ Resolved            |
+| Equipment Entity Links   | ~1,000 | 69%        | Medium   | 🔴 Not Started         |
 | Missing Entity Types     | TBD    | TBD        | High     | 🔴 Not Started         |
-| Header Links (No Anchor) | ~250   | 3%         | Low      | ✅ Working as Designed |
-| Missing URL Mappings     | ~250   | 3%         | Medium   | 🔴 Not Started         |
-| External Book References | ~600   | 6%         | Low      | 🔴 Not Started         |
+| Header Links (No Anchor) | ~250   | 17%        | Low      | ✅ Working as Designed |
+| Trailing Slashes         | ~50    | 3%         | Low      | ✅ Resolved            |
+| Book-Level URLs          | ~150   | 10%        | Low      | ✅ Resolved            |
+| External Book References | ~600   | 41%        | Low      | ✅ Working as Designed |
 
 ---
 
@@ -273,23 +274,26 @@ Low to Medium - mostly affects navigation and cross-book references.
 
 ### For Book-Level URLs:
 
-- **Option A:** Map to index file for that sourcebook
-- **Option B:** Convert to bold text (current behavior)
-- **Recommendation:** Option B - book-level references are too vague
+- **Option A:** Map to index file for that sourcebook ✅ **IMPLEMENTED**
+- **Option B:** Convert to bold text (previous behavior)
+- **Decision:** Option A - provides useful cross-book navigation
 
 ### For Trailing Slashes:
 
-- **Option A:** Normalize URLs in resolver (strip trailing slashes)
+- **Option A:** Normalize URLs in resolver (strip trailing slashes) ✅ **IMPLEMENTED**
   ```typescript
   // In resolveLink(), before splitting anchor:
-  url = url.replace(/\/$/, ""); // Remove trailing slash
+  url = url.replace(/\/(?=#)/, ""); // Remove / before #
+  if (url.length > 1 && url.endsWith("/")) {
+    url = url.slice(0, -1); // Remove trailing / at end
+  }
   ```
 - **Option B:** Normalize during canonical URL extraction
-- **Recommendation:** Option A - handle in resolver for consistency
+- **Decision:** Option A - handled in resolver for consistency
 
-**Status:** 🔴 Not Started
-**Assigned:** TBD
-**Target:** TBD
+**Status:** ✅ **RESOLVED** (2025-11-19)
+**Solution:** Both trailing slashes and book-level URLs resolved
+**Implementation:** See Change Log below
 
 ---
 
@@ -316,7 +320,7 @@ Low - relatively few links, unavoidable without downloading all D&D content.
 
 **Potential Solutions:**
 
-### Option A: Accept as External References (Recommended)
+### Option A: Accept as External References ✅ **ACCEPTED**
 
 - **Pros:** No changes needed, these are genuinely external
 - **Cons:** Links remain as bold text
@@ -326,9 +330,9 @@ Low - relatively few links, unavoidable without downloading all D&D content.
 
 - **Pros:** Complete reference resolution
 - **Cons:** Requires purchasing/downloading many additional books
-- **Decision:** Out of scope for MVP
+- **Decision:** Out of scope - user can download additional books if desired
 
-### Option C: Add External Link Support
+### Option C: Add External Link Support (Future Enhancement)
 
 - **Pros:** Could link to D&D Beyond directly
 - **Cons:** Requires online access, breaks local-only workflow
@@ -336,12 +340,17 @@ Low - relatively few links, unavoidable without downloading all D&D content.
   1. Add config option `links.preserveExternal`
   2. Keep external book links as D&D Beyond URLs
   3. Don't convert to bold text
+- **Decision:** Future enhancement, not required for MVP
 
-**Status:** 🔴 Not Started
-**Assigned:** TBD
-**Target:** TBD
+**Status:** ✅ **RESOLVED** - Working as Designed (2025-11-19)
 
-**Decision:** Accept as external references for now. Option C could be future enhancement.
+**Solution:** Accept fallback to bold text for external book references
+
+**Rationale:**
+- If HTML files for external books aren't in the input directory, there's nothing to link to
+- Converting to bold text is the correct behavior - preserves the reference without creating broken links
+- Users who want these links resolved can download the additional book HTML files
+- No code changes needed - current behavior is correct
 
 ---
 
@@ -627,6 +636,181 @@ The `--verbose` flag is extremely helpful for debugging:
   - 0 feat links
 - Updated implementation approach to detect all entity links, not just tooltip links
 - Added to Phase 1 roadmap as high-priority item
+
+### 2025-11-18: RESOLVED Issue 5 - Trailing Slashes ✅
+
+**Implementation: URL Normalization**
+
+D&D Beyond uses trailing slashes inconsistently in URLs, which prevented matching with canonical URLs.
+
+**Root Cause:**
+- Canonical URLs: `/sources/dnd/phb-2024/character-classes-continued` (no slash)
+- Link URLs: `/sources/dnd/phb-2024/character-classes-continued/#OathofDevotion` (slash before #)
+- Simple `endsWith("/")` check didn't catch slashes before `#`
+
+**Changes Made:**
+
+Updated `src/modules/resolver.ts` to normalize URLs:
+```typescript
+// Remove trailing slash before # or at end
+url = url.replace(/\/(?=#)/, ""); // /spells/#anchor -> /spells#anchor
+if (url.length > 1 && url.endsWith("/")) {
+  url = url.slice(0, -1); // /spells/ -> /spells
+}
+```
+
+**Results:**
+
+- ✅ **Reduced fallbacks from 1,688 to 1,664** (24 links resolved)
+- ✅ All trailing slash URLs now resolving correctly
+- Examples fixed:
+  - `/sources/dnd/phb-2024/character-classes-continued/` (24 links)
+  - `/sources/dnd/phb-2024/spells/#anchor` patterns
+
+---
+
+### 2025-11-19: RESOLVED Issue 6 - External Book References ✅
+
+**Decision:** Working as Designed
+
+External book references (links to books not in the input directory) are correctly handled by the fallback system.
+
+**Root Cause:**
+- Links reference books like Curse of Strahd, Tomb of Annihilation, older editions
+- These HTML files aren't in the user's input directory
+- No way to resolve links without the source files
+
+**Solution:**
+- Accept the current fallback behavior (convert to bold text)
+- This is the correct behavior - preserves the reference without creating broken links
+- Users who want these resolved can download the additional book HTML files
+- No code changes needed
+
+**Examples:**
+- `[Curse of Strahd](/sources/dnd/cos)` → `**Curse of Strahd**` ✅
+- `[Tomb of Annihilation](/sources/dnd/toa)` → `**Tomb of Annihilation**` ✅
+- `[2014 PHB](/sources/dnd/phb-2014)` → `**2014 PHB**` ✅
+
+**Future Enhancement:**
+Option C (preserve external links) could be added as a config option for users who want to keep D&D Beyond URLs instead of converting to bold text. This would require adding `links.preserveExternal` config setting.
+
+---
+
+### 2025-11-19: RESOLVED Issue 2.1 - CamelCase Anchor Normalization ✅
+
+**Implementation: Normalize URL Anchors Before Smart Matching**
+
+After the initial Issue #2 fix, there were still 64 "OpportunityAttack" anchor mismatches. This was a subtle bug in the smart matching logic.
+
+**Root Cause:**
+- HTML has `<h3 id="OpportunityAttacks">` (plural, CamelCase)
+- Links reference `#OpportunityAttack` (singular, CamelCase)
+- `htmlIdToAnchor` only has `"OpportunityAttacks"` → `"opportunity-attacks"` mapping
+- Smart matching was comparing CamelCase `"OpportunityAttack"` against lowercase-hyphenated `["opportunity-attacks", "opportunity-attack"]`
+- No match found!
+
+**Changes Made:**
+
+Updated `src/modules/resolver.ts` to normalize URL anchors before smart matching:
+```typescript
+// Priority 2: Use smart matching against valid anchors list
+if (!matchedAnchor) {
+  // Normalize URL anchor to markdown format for comparison
+  // Convert "OpportunityAttack" -> "opportunity-attack" to match against valid anchors
+  const normalizedAnchor = urlAnchor
+    .replace(/([a-z])([A-Z])/g, "$1-$2") // CamelCase -> kebab-case
+    .toLowerCase() // Convert to lowercase AFTER splitting camelCase
+    .replace(/[^a-z0-9-]/g, "-") // Replace special chars with hyphens
+    .replace(/-+/g, "-") // Replace multiple hyphens with single
+    .replace(/^-|-$/g, ""); // Remove leading/trailing hyphens
+
+  matchedAnchor = findMatchingAnchor(normalizedAnchor, fileAnchors.valid);
+}
+```
+
+**Results:**
+
+- ✅ **Reduced fallbacks from 1,664 to 1,598** (66 links resolved)
+- ✅ **All OpportunityAttack links now resolving correctly** (64 instances)
+- ✅ Other CamelCase anchor variants also working
+- Remaining 12 "Anchor not found" are genuine mismatches (content doesn't exist)
+
+**Example:**
+- Link: `[Opportunity Attacks](#OpportunityAttack)` (singular, CamelCase)
+- Normalized: `"opportunity-attack"` (lowercase-hyphenated)
+- Matched against: `["opportunity-attacks", "opportunity-attack"]` ✅
+- Resolved: `[Opportunity Attacks](#opportunity-attack)`
+
+---
+
+### 2025-11-19: RESOLVED Issue 5 - Book-Level URL Mapping ✅
+
+**Implementation: Auto-Discover Book URLs and Map to Index Files**
+
+Book-level URLs (e.g., `/sources/dnd/phb-2024`) were being converted to bold text. Now they automatically link to the sourcebook index file.
+
+**Root Cause:**
+- Links reference book-level URLs without specific chapters
+- These URLs weren't in the `urlMapping` (which only contains page-level URLs)
+- Resolver returned "URL not in mapping" error
+
+**Changes Made:**
+
+1. **Updated `src/types/files.ts`:**
+   - Added `bookUrl?: string` property to `SourcebookInfo` interface
+   - Stores book-level URL as part of sourcebook metadata
+
+2. **Updated `src/modules/scanner.ts`:**
+   - Added `extractBookUrl()` helper function to extract book-level URL from canonical URL
+   - When processing first file of each sourcebook, extract and store book URL in `SourcebookInfo`
+   - Example: `SourcebookInfo.bookUrl = "/sources/dnd/phb-2024"`
+
+3. **Updated `src/modules/resolver.ts`:**
+   - Restructured `resolveSourceLink()` to check book-level URLs FIRST (before URL mapping)
+   - Searches through `ctx.sourcebooks` array to find matching `bookUrl`
+   - If URL has no anchor and matches a book-level URL → link to index file
+   - Otherwise proceed with normal header link handling
+
+**Results:**
+
+- ✅ **Reduced fallbacks from 1,598 to 1,447** (151 links resolved)
+- ✅ **All book-level URLs now link to index files**
+- ✅ Zero configuration required - fully automatic
+- Examples:
+  - `[Player's Handbook](/sources/dnd/phb-2024)` → `[Player's Handbook](ksmc.md)` ✅
+  - `[Dungeon Master's Guide](/sources/dnd/dmg-2024)` → `[Dungeon Master's Guide](e61i.md)` ✅
+  - `[Monster Manual](/sources/dnd/mm-2024)` → `[Monster Manual](8ipf.md)` ✅
+
+**Code Example (scanner.ts):**
+```typescript
+// Extract book-level URL from first file and store in SourcebookInfo
+const bookUrl = await extractBookUrl(sourcePath);
+
+sourcebooks.push({
+  id: indexId,
+  title,
+  sourcebook,
+  outputPath,
+  metadata,
+  templates: sourcebookTemplates,
+  bookUrl: bookUrl ?? undefined, // Store as part of sourcebook metadata
+});
+```
+
+**Code Example (resolver.ts):**
+```typescript
+// Check if there's no anchor - could be book-level or header link
+if (!urlAnchor) {
+  // First check if this is a book-level URL that maps to an index file
+  const sourcebook = ctx.sourcebooks?.find((sb) => sb.bookUrl === urlPath);
+  if (sourcebook) {
+    return `[${text}](${sourcebook.id}.md)`;
+  }
+  // ... rest of header link handling
+}
+```
+
+---
 
 ### 2025-11-18: RESOLVED Issue 2 - Anchor Mismatches ✅
 

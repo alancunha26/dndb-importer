@@ -207,7 +207,7 @@ function shouldResolveLink(url: string): boolean {
 
   // D&D Beyond paths (sources or entities)
   if (url.startsWith("/sources/")) return true;
-  if (/^\/(spells|monsters|magic-items|equipment|conditions|senses|skills|actions|lore-glossary|rules-glossary)\//.test(url)) {
+  if (/^\/(spells|monsters|magic-items|equipment|classes|feats|species|backgrounds)\//.test(url)) {
     return true;
   }
 
@@ -234,15 +234,23 @@ function resolveLink(
     url = url.replace("http://www.dndbeyond.com", "");
   }
 
-  // 2. Handle internal anchors (same-page links)
+  // 2. Normalize URL - strip trailing slashes (before # or at end)
+  // Handles: "/sources/.../spells/" -> "/sources/.../spells"
+  // Handles: "/sources/.../spells/#anchor" -> "/sources/.../spells#anchor"
+  url = url.replace(/\/(?=#)/, ""); // Remove / before #
+  if (url.length > 1 && url.endsWith("/")) {
+    url = url.slice(0, -1); // Remove trailing / at end
+  }
+
+  // 3. Handle internal anchors (same-page links)
   if (url.startsWith("#")) {
     return resolveInternalAnchor(url, text, currentFileId, index);
   }
 
-  // 3. Split URL into path and anchor
+  // 4. Split URL into path and anchor
   const [urlPath, urlAnchor] = url.split("#");
 
-  // 4. Check if it's an entity link (priority check)
+  // 5. Check if it's an entity link (priority check)
   if (ctx.entityIndex) {
     const entityResult = resolveEntityLink(
       urlPath,
@@ -256,7 +264,7 @@ function resolveLink(
     if (entityResult) return entityResult;
   }
 
-  // 5. Check if it's a source book link
+  // 6. Check if it's a source book link
   const sourceResult = resolveSourceLink(
     urlPath,
     urlAnchor,
@@ -269,14 +277,14 @@ function resolveLink(
   );
   if (sourceResult) return sourceResult;
 
-  // 6. Fallback to bold text if configured
+  // 7. Fallback to bold text if configured
   if (ctx.config.links.fallbackToBold) {
     // Only track if not already tracked (entity/source functions track specific reasons)
     // This catches any remaining unresolved links
     return `**${text}**`;
   }
 
-  // 7. Leave link as-is if no fallback
+  // 8. Leave link as-is if no fallback
   return `[${text}](${url})`;
 }
 
@@ -319,8 +327,8 @@ function resolveEntityLink(
   currentFileId: string,
   originalUrl: string,
 ): string | null {
-  // Check if it's an entity link pattern: /spells/123, /monsters/456, etc.
-  if (!/^\/(spells|monsters|magic-items|equipment)\/\d+/.test(urlPath)) {
+  // Check if it's an entity link pattern: /spells/123, /monsters/456, /classes/789, etc.
+  if (!/^\/(spells|monsters|magic-items|equipment|classes|feats|species|backgrounds)\/\d+/.test(urlPath)) {
     return null; // Not an entity link
   }
 
@@ -364,7 +372,43 @@ function resolveSourceLink(
   currentFileId: string,
   originalUrl: string,
 ): string | null {
-  // Look up URL path in auto-discovered mapping (or manual config override)
+  // Check if there's no anchor - could be book-level or header link
+  if (!urlAnchor) {
+    // First check if this is a book-level URL that maps to an index file
+    const sourcebook = ctx.sourcebooks?.find((sb) => sb.bookUrl === urlPath);
+    if (sourcebook) {
+      // Link to index file
+      return `[${text}](${sourcebook.id}.md)`;
+    }
+
+    // Not a book-level URL, check if it's in the URL mapping (header link)
+    const fileId = ctx.urlMapping?.get(urlPath);
+    if (fileId) {
+      // It's a header link (page-level URL with no anchor) - convert to bold
+      if (ctx.config.links.fallbackToBold) {
+        fallbackLinks.push({
+          url: originalUrl,
+          text,
+          file: currentFileId,
+          reason: `Header link (no anchor): ${urlPath}`,
+        });
+      }
+      return `**${text}**`; // Convert to bold text
+    }
+
+    // URL not in any mapping
+    if (ctx.config.links.fallbackToBold) {
+      fallbackLinks.push({
+        url: originalUrl,
+        text,
+        file: currentFileId,
+        reason: `URL not in mapping: ${urlPath}`,
+      });
+    }
+    return null; // Not in URL mapping
+  }
+
+  // Has anchor - look up in URL mapping
   const fileId = ctx.urlMapping?.get(urlPath);
   if (!fileId) {
     // Track URL not in mapping
@@ -377,19 +421,6 @@ function resolveSourceLink(
       });
     }
     return null; // Not in URL mapping
-  }
-
-  // If no anchor, it's a header link - convert to bold
-  if (!urlAnchor) {
-    if (ctx.config.links.fallbackToBold) {
-      fallbackLinks.push({
-        url: originalUrl,
-        text,
-        file: currentFileId,
-        reason: `Header link (no anchor): ${urlPath}`,
-      });
-    }
-    return `**${text}**`; // Convert to bold text
   }
 
   // Validate anchor exists in target file
@@ -408,11 +439,20 @@ function resolveSourceLink(
 
   // Try to find matching anchor
   // Priority 1: Check if HTML ID exists in htmlIdToAnchor mapping (e.g., "FlySpeed" -> "fly-speed")
-  let matchedAnchor = fileAnchors.htmlIdToAnchor[urlAnchor];
+  let matchedAnchor: string | null | undefined = fileAnchors.htmlIdToAnchor[urlAnchor];
 
   // Priority 2: Use smart matching against valid anchors list
   if (!matchedAnchor) {
-    matchedAnchor = findMatchingAnchor(urlAnchor, fileAnchors.valid);
+    // Normalize URL anchor to markdown format for comparison
+    // Convert "OpportunityAttack" -> "opportunity-attack" to match against valid anchors
+    const normalizedAnchor = urlAnchor
+      .replace(/([a-z])([A-Z])/g, "$1-$2") // CamelCase -> kebab-case
+      .toLowerCase() // Convert to lowercase AFTER splitting camelCase
+      .replace(/[^a-z0-9-]/g, "-") // Replace special chars with hyphens
+      .replace(/-+/g, "-") // Replace multiple hyphens with single
+      .replace(/^-|-$/g, ""); // Remove leading/trailing hyphens
+
+    matchedAnchor = findMatchingAnchor(normalizedAnchor, fileAnchors.valid);
   }
 
   if (!matchedAnchor) {

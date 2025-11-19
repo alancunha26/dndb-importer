@@ -239,18 +239,17 @@ export async function process(ctx: ConversionContext): Promise<void> {
         }
       }
 
-      // Extract entity URLs from tooltip links in headings
-      // Pattern: <h2><a class="tooltip-hover spell-tooltip" href="/spells/123-name">...</a></h2>
-      const $entityLink = $heading.find(
-        "a.spell-tooltip, a.monster-tooltip, a.magic-item-tooltip, a.equipment-tooltip",
-      );
-      if ($entityLink.length > 0) {
-        const href = $entityLink.attr("href");
-        // Entity URLs match pattern: /spells/123, /monsters/456, /magic-items/789, /equipment/123
-        if (href && /^\/(spells|monsters|magic-items|equipment)\/\d+/.test(href)) {
+      // Extract entity URLs from links in headings
+      // Check ALL links (not just tooltip links) since some entity types don't use tooltip classes
+      // Entity URL pattern: /{type}/{id} or /{type}/{id}-{slug}
+      const $links = $heading.find("a[href]");
+      $links.each((_index, link) => {
+        const href = $(link).attr("href");
+        // Match entity URL patterns: /spells/123, /classes/456-paladin, /backgrounds/789-acolyte, etc.
+        if (href && /^\/(spells|monsters|magic-items|equipment|classes|feats|species|backgrounds)\/\d+/.test(href)) {
           entityUrls.push(href);
         }
-      }
+      });
     });
 
     // 8. Extract image URLs from <img> tags

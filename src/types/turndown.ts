@@ -11,4 +11,5 @@ export interface TurndownNode {
   childNodes: TurndownNode[];
   getAttribute?(name: string): string | null;
   textContent?: string;
+  innerHTML?: string;
 }
