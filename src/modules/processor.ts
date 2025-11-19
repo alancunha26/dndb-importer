@@ -32,6 +32,7 @@ import type {
   IndexTemplateContext,
   FileTemplateContext,
   SourcebookInfo,
+  EntityLocation,
 } from "../types";
 
 // ============================================================================
@@ -127,13 +128,14 @@ export async function process(ctx: ConversionContext): Promise<void> {
   // ============================================================================
 
   /**
-   * Parse HTML file and extract content, anchors, and images using Cheerio
+   * Parse HTML file and extract content, anchors, entities, and images using Cheerio
    * This is the ONLY place Cheerio is used - all extraction happens here
    */
   async function processHtml(file: FileDescriptor): Promise<{
     content: string;
     title: string;
     anchors: FileAnchors;
+    entities: string[]; // Entity URLs found in this file (e.g., /spells/123, /monsters/456)
     images: string[];
   }> {
     // 1. Read HTML file from disk
@@ -150,6 +152,7 @@ export async function process(ctx: ConversionContext): Promise<void> {
         content: "",
         title: "",
         anchors: { valid: [], htmlIdToAnchor: {} },
+        entities: [],
         images: [],
       };
     }
@@ -182,10 +185,11 @@ export async function process(ctx: ConversionContext): Promise<void> {
         $previousLi.append($nestedList);
       });
 
-    // 6. Extract title from first H1 and anchors from all headings
+    // 6. Extract title from first H1, anchors from all headings, and entities
     let title = "";
     const valid: string[] = [];
     const htmlIdToAnchor: Record<string, string> = {};
+    const entityUrls: string[] = [];
 
     content.find("h1, h2, h3, h4, h5, h6").each((_index, element) => {
       const $heading = $(element);
@@ -221,6 +225,19 @@ export async function process(ctx: ConversionContext): Promise<void> {
           htmlIdToAnchor[htmlId] = anchor;
         }
       }
+
+      // Extract entity URLs from tooltip links in headings
+      // Pattern: <h2><a class="tooltip-hover spell-tooltip" href="/spells/123-name">...</a></h2>
+      const $entityLink = $heading.find(
+        "a.spell-tooltip, a.monster-tooltip, a.magic-item-tooltip, a.equipment-tooltip",
+      );
+      if ($entityLink.length > 0) {
+        const href = $entityLink.attr("href");
+        // Entity URLs match pattern: /spells/123, /monsters/456, /magic-items/789, /equipment/123
+        if (href && /^\/(spells|monsters|magic-items|equipment)\/\d+/.test(href)) {
+          entityUrls.push(href);
+        }
+      }
     });
 
     // 7. Extract image URLs from <img> tags
@@ -246,6 +263,7 @@ export async function process(ctx: ConversionContext): Promise<void> {
       content: content.html() || "",
       title,
       anchors: { valid, htmlIdToAnchor },
+      entities: entityUrls,
       images: imageUrls,
     };
   }
@@ -516,6 +534,9 @@ export async function process(ctx: ConversionContext): Promise<void> {
   // Main Processing Logic
   // ============================================================================
 
+  // Initialize entity index (will be populated as we process files)
+  const entityIndex = new Map<string, EntityLocation[]>();
+
   // Process each file one at a time (memory-efficient)
   for (const file of files) {
     // 1. Find sourcebook for this file
@@ -523,18 +544,39 @@ export async function process(ctx: ConversionContext): Promise<void> {
     if (!sourcebook) continue;
 
     try {
-      // 2. Parse HTML and extract content, title, anchors, and image URLs (ONLY place Cheerio is used)
-      const { content, title, anchors, images } = await processHtml(file);
+      // 2. Parse HTML and extract content, title, anchors, entities, and image URLs (ONLY place Cheerio is used)
+      const { content, title, anchors, entities, images } =
+        await processHtml(file);
       file.anchors = anchors;
       file.title = title;
 
-      // 3. Download images and build URL mapping (original URL -> local path)
+      // 3. Build entity index from extracted entities
+      for (const entityUrl of entities) {
+        // Extract anchor from the entity URL slug (e.g., /spells/123-arcane-vigor -> arcane-vigor)
+        const match = entityUrl.match(/\/[^/]+\/\d+-(.+)$/);
+        if (!match) continue;
+
+        const slug = match[1]; // e.g., "arcane-vigor", "ape"
+        // Entity anchors use lowercase with hyphens (already in correct format from slug)
+        const anchor = slug;
+
+        // Add to entity index (file may contain multiple entities)
+        if (!entityIndex.has(entityUrl)) {
+          entityIndex.set(entityUrl, []);
+        }
+        entityIndex.get(entityUrl)!.push({
+          fileId: file.uniqueId,
+          anchor,
+        });
+      }
+
+      // 4. Download images and build URL mapping (original URL -> local path)
       await processImages(file, images);
 
-      // 4. Convert HTML to Markdown using Turndown with image URL mapping
+      // 5. Convert HTML to Markdown using Turndown with image URL mapping
       const markdown = await processMarkdown(content);
 
-      // 5. Assemble and write document using template (enriches FileDescriptor)
+      // 6. Assemble and write document using template (enriches FileDescriptor)
       await processDocument(file, markdown, sourcebook);
       file.written = true;
     } catch (error) {
@@ -545,9 +587,12 @@ export async function process(ctx: ConversionContext): Promise<void> {
     }
   }
 
-  // 6. Save updated image mapping to images.json (includes cover images)
+  // 7. Save entity index to context for resolver module
+  ctx.entityIndex = entityIndex;
+
+  // 8. Save updated image mapping to images.json (includes cover images)
   await saveMapping(imageMappingPath, imageMapping);
 
-  // 7. Generate index files
+  // 9. Generate index files
   await processIndexes();
 }

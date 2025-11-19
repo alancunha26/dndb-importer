@@ -11,6 +11,14 @@ export interface ErrorStats {
   error: Error;
 }
 
+/**
+ * Entity location - where an entity (spell, monster, etc.) can be found
+ */
+export interface EntityLocation {
+  fileId: string; // Unique file ID (e.g., "a3f9")
+  anchor: string; // Markdown anchor (e.g., "ape", "arcane-vigor")
+}
+
 export interface ProcessingStats {
   totalFiles: number;
   successful: number;
@@ -42,5 +50,6 @@ export interface ConversionContext {
   fileIndex?: Map<string, FileDescriptor>; // Fast lookup: uniqueId → FileDescriptor
   pathIndex?: Map<string, string>; // Fast lookup: relativePath → uniqueId
   globalTemplates?: TemplateSet; // Global templates from input root
+  entityIndex?: Map<string, EntityLocation[]>; // Entity URL → file locations (e.g., /spells/123 → [{fileId, anchor}])
   stats?: ProcessingStats;
 }
