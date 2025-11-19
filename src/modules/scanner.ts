@@ -58,7 +58,7 @@ async function loadSourcebookMetadata(
     return metadata as SourcebookMetadata;
   } catch (error) {
     // Track error silently - don't interrupt spinner
-    ctx.errors?.resources.push({ path: metadataPath, error: error as Error });
+    ctx.tracker.trackError(metadataPath, error, "resource");
     return {};
   }
 }

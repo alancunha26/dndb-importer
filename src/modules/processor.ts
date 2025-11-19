@@ -342,9 +342,11 @@ export async function process(ctx: ConversionContext): Promise<void> {
             config.images.retries,
             config.images.timeout,
           );
+          ctx.tracker.incrementImagesDownloaded();
         } catch (error) {
           // Track error silently - don't interrupt spinner
-          ctx.errors?.images.push({ path: src, error: error as Error });
+          ctx.tracker.trackError(src, error, "image");
+          ctx.tracker.incrementImagesFailed();
         }
       }
 
@@ -503,7 +505,7 @@ export async function process(ctx: ConversionContext): Promise<void> {
       return localFilename;
     } catch (error) {
       // Track error silently - don't interrupt spinner
-      ctx.errors?.images.push({ path: inputPath, error: error as Error });
+      ctx.tracker.trackError(inputPath, error, "image");
       return undefined;
     }
   }
@@ -564,6 +566,9 @@ export async function process(ctx: ConversionContext): Promise<void> {
   // Initialize entity index (will be populated as we process files)
   const entityIndex = new Map<string, EntityLocation[]>();
 
+  // Track total files
+  ctx.tracker.setTotalFiles(files.length);
+
   // Process each file one at a time (memory-efficient)
   for (const file of files) {
     // 1. Find sourcebook for this file
@@ -578,7 +583,11 @@ export async function process(ctx: ConversionContext): Promise<void> {
       file.anchors = anchors;
       file.title = title;
       file.canonicalUrl = url ?? undefined;
-      sourcebook.bookUrl = bookUrl ?? "";
+
+      // Set bookUrl on sourcebook from first file only (all files share same book URL)
+      if (!sourcebook.bookUrl && bookUrl) {
+        sourcebook.bookUrl = bookUrl;
+      }
 
       // 3. Build entity index from extracted entities
       for (const entityUrl of entities) {
@@ -609,11 +618,10 @@ export async function process(ctx: ConversionContext): Promise<void> {
       // 6. Assemble and write document using template (enriches FileDescriptor)
       await processDocument(file, markdown, sourcebook);
       file.written = true;
+      ctx.tracker.incrementSuccessful();
     } catch (error) {
-      ctx.errors.files.push({
-        path: file.relativePath,
-        error: error as Error,
-      });
+      ctx.tracker.trackError(file.relativePath, error, "file");
+      ctx.tracker.incrementFailed();
     }
   }
 
@@ -625,4 +633,7 @@ export async function process(ctx: ConversionContext): Promise<void> {
 
   // 9. Generate index files
   await processIndexes();
+
+  // Track indexes created
+  ctx.tracker.setIndexesCreated(sourcebooks.length);
 }

@@ -13,7 +13,12 @@ import {
   ConversionConfigSchema,
   PartialConversionConfigSchema,
 } from "../types/config";
-import { ErrorStats } from "../types/context";
+
+// Local type for config loading errors
+export interface ConfigError {
+  path: string;
+  error: unknown;
+}
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -105,7 +110,7 @@ function mergeConfig(
 
 interface LoadConfigResult {
   config: ConversionConfig;
-  errors: ErrorStats[];
+  errors: ConfigError[];
 }
 
 /**
@@ -116,14 +121,14 @@ interface LoadConfigResult {
 export async function loadConfig(custom?: string): Promise<LoadConfigResult> {
   // Load default config
   let config = await loadDefaultConfig();
-  let errors: ErrorStats[] = [];
+  let errors: ConfigError[] = [];
 
   try {
     // Merge with user config from OS-specific directory
     const userConfig = await loadUserConfig();
     if (userConfig) config = mergeConfig(config, userConfig);
   } catch (error) {
-    errors.push({ path: getUserConfigPath(), error: error as Error });
+    errors.push({ path: getUserConfigPath(), error });
   }
 
   // Merge with custom config if provided
@@ -132,7 +137,7 @@ export async function loadConfig(custom?: string): Promise<LoadConfigResult> {
       const customConfig = await loadCustomConfig(custom);
       config = mergeConfig(config, customConfig);
     } catch (error) {
-      errors.push({ path: custom, error: error as Error });
+      errors.push({ path: custom, error });
     }
   }
 

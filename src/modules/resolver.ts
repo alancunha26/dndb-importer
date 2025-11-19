@@ -7,7 +7,7 @@
  */
 
 import { readFile, writeFile } from "fs/promises";
-import type { ConversionContext, FallbackLink, FileDescriptor } from "../types";
+import type { ConversionContext, FileDescriptor } from "../types";
 import {
   normalizeDnDBeyondUrl,
   shouldResolveUrl,
@@ -84,9 +84,6 @@ export async function resolve(ctx: ConversionContext): Promise<void> {
     writtenFiles.filter((f) => f.canonicalUrl).map((f) => [f.canonicalUrl!, f]),
   );
 
-  // 3. Initialize fallback tracking
-  const fallbackLinks: FallbackLink[] = [];
-
   // 3. For each written file, resolve links
   // Note: URL aliases are applied in resolveLink() before entity/source resolution
   for (const file of writtenFiles) {
@@ -101,38 +98,16 @@ export async function resolve(ctx: ConversionContext): Promise<void> {
         ctx,
         fileMap,
         urlMap,
-        fallbackLinks,
       );
 
-      // c. Overwrite file with resolved content
+      // d. Overwrite file with resolved content
       if (resolvedContent !== content) {
         await writeFile(file.outputPath, resolvedContent, "utf-8");
       }
     } catch (error) {
-      ctx.errors.files.push({
-        path: file.outputPath,
-        error: error as Error,
-      });
+      ctx.tracker.trackError(file.outputPath, error, "file", "read");
     }
   }
-
-  // 4. Store fallback links in stats
-  if (!ctx.stats) {
-    ctx.stats = {
-      totalFiles: 0,
-      successful: 0,
-      failed: 0,
-      skipped: 0,
-      indexesCreated: 0,
-      imagesDownloaded: 0,
-      imagesFailed: 0,
-      linksResolved: 0,
-      linksFailed: 0,
-      fallbackLinks: [],
-      startTime: new Date(),
-    };
-  }
-  ctx.stats.fallbackLinks = fallbackLinks;
 }
 
 /**
@@ -145,7 +120,6 @@ function resolveLinksInContent(
   ctx: ConversionContext,
   fileMap: Map<string, FileDescriptor>,
   urlMap: Map<string, FileDescriptor>,
-  fallbackLinks: FallbackLink[],
 ): string {
   // Split content into lines to handle images properly
   const lines = content.split("\n");
@@ -172,7 +146,6 @@ function resolveLinksInContent(
             ctx,
             fileMap,
             urlMap,
-            fallbackLinks,
           );
           return resolved;
         }
@@ -194,7 +167,6 @@ function resolveLink(
   ctx: ConversionContext,
   fileMap: Map<string, FileDescriptor>,
   urlMap: Map<string, FileDescriptor>,
-  fallbackLinks: FallbackLink[],
 ): string {
   const originalUrl = url; // Save for tracking
 
@@ -203,7 +175,12 @@ function resolveLink(
 
   // 2. Handle internal anchors (same-page links)
   if (url.startsWith("#")) {
-    return resolveInternalAnchor(url, text, currentFileId, fileMap);
+    const result = resolveInternalAnchor(url, text, currentFileId, fileMap);
+    // Check if anchor was successfully resolved (different from input)
+    if (result !== `[${text}](${url})`) {
+      ctx.tracker.incrementLinksResolved();
+    }
+    return result;
   }
 
   // 3. Split URL into path and anchor
@@ -220,12 +197,13 @@ function resolveLink(
       urlPath,
       urlAnchor,
       text,
-      currentFileId,
       ctx,
-      fallbackLinks,
       originalUrl,
     );
-    if (entityResult) return entityResult;
+    if (entityResult) {
+      ctx.tracker.incrementLinksResolved();
+      return entityResult;
+    }
   }
 
   // 6. Check if it's a source book link
@@ -233,13 +211,18 @@ function resolveLink(
     urlPath,
     urlAnchor,
     text,
-    currentFileId,
     ctx,
     urlMap,
-    fallbackLinks,
     originalUrl,
   );
-  if (sourceResult) return sourceResult;
+  if (sourceResult) {
+    // Check if it's a resolved link (ends with .md) or a fallback (bold text)
+    if (sourceResult.endsWith(".md)") || sourceResult.includes(".md#")) {
+      ctx.tracker.incrementLinksResolved();
+    }
+    // Bold fallbacks are already tracked as issues in resolveSourceLink
+    return sourceResult;
+  }
 
   // 7. Fallback to bold text if configured
   if (ctx.config.links.fallbackToBold) {
@@ -286,9 +269,7 @@ function resolveEntityLink(
   urlPath: string,
   urlAnchor: string | undefined,
   text: string,
-  currentFileId: string,
   ctx: ConversionContext,
-  fallbackLinks: FallbackLink[],
   originalUrl: string,
 ): string | null {
   // Check if it's an entity link pattern: /spells/123, /monsters/456, /classes/789, etc.
@@ -303,14 +284,7 @@ function resolveEntityLink(
   const locations = entityIndex.get(urlPath);
   if (!locations || locations.length === 0) {
     // Track entity not found
-    if (ctx.config.links.fallbackToBold) {
-      fallbackLinks.push({
-        url: originalUrl,
-        text,
-        file: currentFileId,
-        reason: `Entity not found: ${urlPath}`,
-      });
-    }
+    ctx.tracker.trackLinkIssue(originalUrl, text, "entity-not-found");
     return null; // Entity not found in our files
   }
 
@@ -330,10 +304,8 @@ function resolveSourceLink(
   urlPath: string,
   urlAnchor: string | undefined,
   text: string,
-  currentFileId: string,
   ctx: ConversionContext,
   urlMap: Map<string, FileDescriptor>,
-  fallbackLinks: FallbackLink[],
   originalUrl: string,
 ): string | null {
   // Check if there's no anchor - could be book-level or header link
@@ -349,26 +321,12 @@ function resolveSourceLink(
     const targetFile = urlMap.get(urlPath);
     if (targetFile) {
       // It's a header link (page-level URL with no anchor) - convert to bold
-      if (ctx.config.links.fallbackToBold) {
-        fallbackLinks.push({
-          url: originalUrl,
-          text,
-          file: currentFileId,
-          reason: `Header link (no anchor): ${urlPath}`,
-        });
-      }
+      ctx.tracker.trackLinkIssue(originalUrl, text, "header-link");
       return `**${text}**`; // Convert to bold text
     }
 
     // URL not in any mapping
-    if (ctx.config.links.fallbackToBold) {
-      fallbackLinks.push({
-        url: originalUrl,
-        text,
-        file: currentFileId,
-        reason: `URL not in mapping: ${urlPath}`,
-      });
-    }
+    ctx.tracker.trackLinkIssue(originalUrl, text, "url-not-in-mapping");
     return null; // Not in URL mapping
   }
 
@@ -376,28 +334,14 @@ function resolveSourceLink(
   const targetFile = urlMap.get(urlPath);
   if (!targetFile) {
     // Track URL not in mapping
-    if (ctx.config.links.fallbackToBold) {
-      fallbackLinks.push({
-        url: originalUrl,
-        text,
-        file: currentFileId,
-        reason: `URL not in mapping: ${urlPath}`,
-      });
-    }
+    ctx.tracker.trackLinkIssue(originalUrl, text, "url-not-in-mapping");
     return null; // Not in URL mapping
   }
 
   // Validate anchor exists in target file
   const fileAnchors = targetFile.anchors;
   if (!fileAnchors) {
-    if (ctx.config.links.fallbackToBold) {
-      fallbackLinks.push({
-        url: originalUrl,
-        text,
-        file: currentFileId,
-        reason: `No anchors found in target file: ${targetFile.uniqueId}`,
-      });
-    }
+    ctx.tracker.trackLinkIssue(originalUrl, text, "no-anchors");
     return null; // No anchors for this file
   }
 
@@ -421,14 +365,7 @@ function resolveSourceLink(
   }
 
   if (!matchedAnchor) {
-    if (ctx.config.links.fallbackToBold) {
-      fallbackLinks.push({
-        url: originalUrl,
-        text,
-        file: currentFileId,
-        reason: `Anchor not found in ${targetFile.uniqueId}: #${urlAnchor}`,
-      });
-    }
+    ctx.tracker.trackLinkIssue(originalUrl, text, "anchor-not-found");
     return null; // Anchor not found
   }
 

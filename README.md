@@ -195,6 +195,74 @@ Configs are deep-merged with this priority order (lowest to highest):
 2. User config (OS-specific location)
 3. Custom config (via `--config` flag)
 
+## Issue Tracking
+
+The converter tracks issues silently during processing and displays a summary at the end. Issues are categorized by type and reason for easier debugging.
+
+### Issue Types
+
+| Type | Description |
+|------|-------------|
+| `file` | Problems processing source HTML files |
+| `image` | Problems downloading or copying images |
+| `resource` | Problems loading config, metadata, or mapping files |
+| `link` | Links that couldn't be resolved and fell back to bold text |
+
+### Issue Reasons
+
+#### File Issues
+
+| Reason | Description |
+|--------|-------------|
+| `parse-error` | HTML parsing or Markdown conversion failed |
+| `read-error` | Could not read the source file (permissions, not found) |
+| `write-error` | Could not write the output file (permissions, disk full) |
+
+#### Image Issues
+
+| Reason | Description |
+|--------|-------------|
+| `download-failed` | Network error while downloading image from D&D Beyond |
+| `timeout` | Image download exceeded the configured timeout |
+| `not-found` | Local image file not found (for cover images) |
+| `invalid-response` | Server returned an error status (4xx, 5xx) |
+
+#### Resource Issues
+
+| Reason | Description |
+|--------|-------------|
+| `invalid-json` | JSON file has syntax errors |
+| `schema-validation` | JSON file doesn't match expected schema |
+| `read-error` | Could not read the resource file |
+
+#### Link Issues
+
+| Reason | Description |
+|--------|-------------|
+| `url-not-in-mapping` | URL path not found in any converted file |
+| `entity-not-found` | Entity (spell, monster, etc.) not found in index |
+| `anchor-not-found` | Target anchor doesn't exist in the target file |
+| `header-link` | Page-level link without anchor (converted to bold) |
+| `no-anchors` | Target file has no anchor data |
+
+### Example Output
+
+```
+Files processed: 59/59
+Images downloaded: 0
+Links resolved: 15107
+
+⚠️  1495 link(s) fell back to bold text:
+
+Breakdown by reason:
+  - url-not-in-mapping: 633
+  - entity-not-found: 595
+  - header-link: 255
+  - anchor-not-found: 12
+
+Duration: 4.48s
+```
+
 ## Templates
 
 The converter supports customizable Handlebars templates for both index pages and individual file pages. Templates can be defined globally or per-sourcebook.

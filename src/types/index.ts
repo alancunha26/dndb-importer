@@ -35,11 +35,22 @@ export { SourcebookMetadataSchema } from "./files";
 // Context
 export type {
   ConversionContext,
-  ErrorStats,
+  Issue,
+  IssueType,
+  FileIssue,
+  ImageIssue,
+  ResourceIssue,
+  LinkIssue,
+  FileIssueReason,
+  ImageIssueReason,
+  ResourceIssueReason,
+  LinkIssueReason,
   ProcessingStats,
-  FallbackLink,
   EntityLocation,
 } from "./context";
+
+// Tracker
+export { ConversionTracker } from "../utils/conversion-tracker";
 
 // Resolver
 export type { LinkResolutionResult } from "./resolver";
