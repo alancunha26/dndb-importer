@@ -82,8 +82,24 @@ export function findMatchingAnchor(
     return null; // No match found
   }
 
+  // When multiple prefix matches, prefer original anchors over generated variants.
+  // Variants differ by just 's' at the end. Between "arcane-focus-varies" and "arcane-focus-varie",
+  // prefer "arcane-focus-varies" because "arcane-focus-varie" is a generated singular variant.
+
+  // Filter out variants - a match is a variant if its base form (adding or removing 's') exists
+  const primaryMatches = prefixMatches.filter((match) => {
+    // Check if this is a singular variant (adding 's' gives another match)
+    const isPluralExists = prefixMatches.includes(match + "s");
+
+    // Keep if it's not a singular variant (where plural exists)
+    // This means: keep "arcane-focus-varies", discard "arcane-focus-varie"
+    return !isPluralExists;
+  });
+
+  const matchesToUse = primaryMatches.length > 0 ? primaryMatches : prefixMatches;
+
   // Return shortest match if multiple prefix matches
-  return prefixMatches.reduce((shortest, current) =>
+  return matchesToUse.reduce((shortest, current) =>
     current.length < shortest.length ? current : shortest,
   );
 }

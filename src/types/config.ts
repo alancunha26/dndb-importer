@@ -52,12 +52,17 @@ export const ImagesConfigSchema = z.object({
 
 export const LinksConfigSchema = z.object({
   resolveInternal: z.boolean(),
-  fallbackToBold: z.boolean(),
+  // Fallback style for unresolved links: "bold", "italic", "plain", or "none" (keep original link)
+  fallbackStyle: z.enum(["bold", "italic", "plain", "none"]),
   // Maps D&D Beyond URL paths to target URLs or file paths
   // Supports two types of mappings:
   // 1. URL aliases: "/sources/dnd/free-rules/foo" -> "/sources/dnd/phb-2024/foo" (canonical URL)
   // 2. File path mappings: "/sources/dnd/phb-2024/equipment" -> "players-handbook/08-equipment.html" (legacy)
   urlAliases: z.record(z.string(), z.string()),
+  // Maps entity types to canonical URL paths where they are located
+  // Example: { "equipment": ["/sources/dnd/phb-2024/equipment"] }
+  // If not specified for an entity type, searches all files
+  entityLocations: z.record(z.string(), z.array(z.string())),
 });
 
 export const LoggingConfigSchema = z.object({

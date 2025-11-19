@@ -7,15 +7,83 @@
  */
 
 import { readFile, writeFile } from "fs/promises";
-import type { ConversionContext } from "../types";
+import type { ConversionContext, FileDescriptor } from "../types";
+import type { ConversionTracker } from "../utils/conversion-tracker";
 import {
   normalizeDnDBeyondUrl,
   shouldResolveUrl,
   applyAliases,
   isEntityUrl,
 } from "../utils/url";
-import { parseEntityUrl } from "../utils/entity";
 import { normalizeAnchor, findMatchingAnchor } from "../utils/anchor";
+
+// ============================================================================
+// Entity Index Builder
+// ============================================================================
+
+/**
+ * Entity location with matched anchor
+ */
+interface EntityMatch {
+  fileId: string;
+  anchor: string;
+}
+
+/**
+ * Build entity index by matching entity slugs to file anchors
+ */
+function buildEntityIndex(
+  files: FileDescriptor[],
+  tracker: ConversionTracker,
+  entityLocations: Record<string, string[]>,
+  urlAliases: Record<string, string>,
+): Map<string, EntityMatch> {
+  const entityIndex = new Map<string, EntityMatch>();
+  const seenUrls = new Set<string>();
+
+  for (const file of files) {
+    if (!file.entities) continue;
+
+    for (const entity of file.entities) {
+      if (!entity.slug || seenUrls.has(entity.url)) continue;
+      seenUrls.add(entity.url);
+
+      // Filter target files by entity type if configured
+      const allowedPages = entityLocations[entity.type];
+      const targetFiles = allowedPages
+        ? files.filter((f) => {
+            if (!f.url) return false;
+            // Apply aliases to get canonical form of the URL
+            const canonicalUrl = applyAliases(f.url, urlAliases);
+            return allowedPages.some((page) => canonicalUrl.startsWith(page));
+          })
+        : files;
+
+      for (const targetFile of targetFiles) {
+        if (!targetFile.anchors) continue;
+
+        const matchedAnchor = findMatchingAnchor(
+          entity.slug,
+          targetFile.anchors.valid,
+        );
+
+        if (matchedAnchor) {
+          entityIndex.set(entity.url, {
+            fileId: targetFile.uniqueId,
+            anchor: matchedAnchor,
+          });
+          break;
+        }
+      }
+
+      if (!entityIndex.has(entity.url)) {
+        tracker.trackLinkIssue(entity.url, entity.type, "entity-not-found");
+      }
+    }
+  }
+
+  return entityIndex;
+}
 
 // ============================================================================
 // Constants
@@ -44,34 +112,37 @@ export async function resolve(ctx: ConversionContext): Promise<void> {
     return;
   }
 
-  const writtenFiles = ctx.files.filter((f) => f.written);
-
   // ============================================================================
   // Shared State (closure variables)
   // ============================================================================
 
-  const fileMap = new Map(writtenFiles.map((f) => [f.uniqueId, f]));
-  const urlMap = new Map(
-    writtenFiles.filter((f) => f.canonicalUrl).map((f) => [f.canonicalUrl!, f]),
-  );
   const { tracker, config, sourcebooks } = ctx;
+  const files = ctx.files.filter((f) => f.written);
+  const fileMap = new Map(files.map((f) => [f.uniqueId, f]));
+  const urlMap = new Map(files.filter((f) => f.url).map((f) => [f.url!, f]));
 
-  // Build entity index from file.entities
-  const entityIndex = new Map<string, string[]>();
-  for (const file of writtenFiles) {
-    if (!file.entities) continue;
+  const entityIndex = buildEntityIndex(
+    files,
+    tracker,
+    config.links.entityLocations,
+    config.links.urlAliases,
+  );
 
-    for (const entity of file.entities) {
-      // Skip entities without anchors (no slug in URL)
-      if (!entity.anchor) {
-        tracker.trackLinkIssue(entity.url, entity.type, "entity-not-found");
-        continue;
-      }
-
-      if (!entityIndex.has(entity.url)) {
-        entityIndex.set(entity.url, []);
-      }
-      entityIndex.get(entity.url)!.push(file.uniqueId);
+  /**
+   * Format text using the configured fallback style
+   */
+  function formatFallback(text: string): string {
+    switch (config.links.fallbackStyle) {
+      case "bold":
+        return `${config.markdown.strong}${text}${config.markdown.strong}`;
+      case "italic":
+        return `${config.markdown.emphasis}${text}${config.markdown.emphasis}`;
+      case "plain":
+        return text;
+      case "none":
+        return ""; // Signal to keep original link
+      default:
+        return `${config.markdown.strong}${text}${config.markdown.strong}`;
     }
   }
 
@@ -107,22 +178,15 @@ export async function resolve(ctx: ConversionContext): Promise<void> {
   function resolveEntityLink(link: LinkInfo): string | null {
     if (!isEntityUrl(link.path)) return null;
 
-    const fileIds = entityIndex.get(link.path);
-    if (!fileIds || fileIds.length === 0) {
+    const match = entityIndex.get(link.path);
+    if (!match) {
       tracker.trackLinkIssue(link.original, link.text, "entity-not-found");
       return null;
     }
 
-    const fileId = fileIds[0];
-    const parsed = parseEntityUrl(link.path);
-    const targetAnchor = link.anchor || parsed?.anchor;
-
-    if (!targetAnchor) {
-      tracker.trackLinkIssue(link.original, link.text, "anchor-not-found");
-      return null;
-    }
-
-    return `[${link.text}](${fileId}.md#${targetAnchor})`;
+    // Use link's anchor if specified, otherwise use the matched anchor
+    const targetAnchor = link.anchor || match.anchor;
+    return `[${link.text}](${match.fileId}.md#${targetAnchor})`;
   }
 
   /**
@@ -139,7 +203,8 @@ export async function resolve(ctx: ConversionContext): Promise<void> {
       const targetFile = urlMap.get(link.path);
       if (targetFile) {
         tracker.trackLinkIssue(link.original, link.text, "header-link");
-        return `**${link.text}**`;
+        const fallback = formatFallback(link.text);
+        return fallback || `[${link.text}](${link.original})`;
       }
 
       tracker.trackLinkIssue(link.original, link.text, "url-not-in-mapping");
@@ -218,11 +283,8 @@ export async function resolve(ctx: ConversionContext): Promise<void> {
     }
 
     // Fallback
-    if (config.links.fallbackToBold) {
-      return `**${text}**`;
-    }
-
-    return `[${text}](${url})`;
+    const fallback = formatFallback(text);
+    return fallback || `[${text}](${url})`;
   }
 
   /**
@@ -251,7 +313,7 @@ export async function resolve(ctx: ConversionContext): Promise<void> {
   // Main Orchestration
   // ============================================================================
 
-  for (const file of writtenFiles) {
+  for (const file of files) {
     try {
       const content = await readFile(file.outputPath, "utf-8");
       const resolvedContent = resolveLinksInContent(content, file.uniqueId);

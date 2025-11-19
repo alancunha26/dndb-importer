@@ -40,7 +40,7 @@
   },
   "links": {
     "resolveInternal": true,
-    "fallbackToBold": true,
+    "fallbackStyle": "bold",
     "urlAliases": {
       "/sources/dnd/free-rules/character-classes": "/sources/dnd/phb-2024/character-classes",
       "/sources/dnd/free-rules/character-classes-continued": "/sources/dnd/phb-2024/character-classes-continued",
@@ -117,6 +117,48 @@
       "/magic-items/9229205-wraps-of-unarmed-power-1": "/magic-items/9229208-wraps-of-unarmed-power",
       "/magic-items/9229206-wraps-of-unarmed-power-2": "/magic-items/9229208-wraps-of-unarmed-power",
       "/magic-items/9229207-wraps-of-unarmed-power-3": "/magic-items/9229208-wraps-of-unarmed-power"
+    },
+    "entityLocations": {
+      "spells": ["/sources/dnd/phb-2024/spell-descriptions"],
+      "magic-items": ["/sources/dnd/dmg-2024/magic-items"],
+      "equipment": ["/sources/dnd/phb-2024/equipment"],
+      "backgrounds": ["/sources/dnd/phb-2024/character-origins"],
+      "feats": ["/sources/dnd/phb-2024/feats"],
+      "species": ["/sources/dnd/phb-2024/character-origins"],
+      "classes": [
+        "/sources/dnd/phb-2024/character-classes",
+        "/sources/dnd/phb-2024/character-classes-continued"
+      ],
+      "monsters": [
+        "/sources/dnd/phb-2024/creature-stat-blocks",
+        "/sources/dnd/mm-2024/monsters-a",
+        "/sources/dnd/mm-2024/monsters-b",
+        "/sources/dnd/mm-2024/monsters-c",
+        "/sources/dnd/mm-2024/monsters-d",
+        "/sources/dnd/mm-2024/monsters-e",
+        "/sources/dnd/mm-2024/monsters-f",
+        "/sources/dnd/mm-2024/monsters-g",
+        "/sources/dnd/mm-2024/monsters-h",
+        "/sources/dnd/mm-2024/monsters-i",
+        "/sources/dnd/mm-2024/monsters-j",
+        "/sources/dnd/mm-2024/monsters-k",
+        "/sources/dnd/mm-2024/monsters-l",
+        "/sources/dnd/mm-2024/monsters-m",
+        "/sources/dnd/mm-2024/monsters-n",
+        "/sources/dnd/mm-2024/monsters-o",
+        "/sources/dnd/mm-2024/monsters-p",
+        "/sources/dnd/mm-2024/monsters-q",
+        "/sources/dnd/mm-2024/monsters-r",
+        "/sources/dnd/mm-2024/monsters-s",
+        "/sources/dnd/mm-2024/monsters-t",
+        "/sources/dnd/mm-2024/monsters-u",
+        "/sources/dnd/mm-2024/monsters-v",
+        "/sources/dnd/mm-2024/monsters-w",
+        "/sources/dnd/mm-2024/monsters-x",
+        "/sources/dnd/mm-2024/monsters-y",
+        "/sources/dnd/mm-2024/monsters-z",
+        "/sources/dnd/mm-2024/animals"
+      ]
     }
   },
   "logging": {

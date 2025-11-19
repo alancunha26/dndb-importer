@@ -269,10 +269,10 @@ export class ConversionTracker {
   }
 
   /**
-   * Track a link issue (only tracked when fallbackToBold is enabled)
+   * Track a link issue (only tracked when fallback is enabled)
    */
   trackLinkIssue(path: string, text: string, reason: LinkIssueReason): void {
-    if (!this.config.links.fallbackToBold) return;
+    if (this.config.links.fallbackStyle === "none") return;
     this.issues.push({ type: "link", path, reason, text });
   }
 

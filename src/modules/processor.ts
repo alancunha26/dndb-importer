@@ -145,11 +145,10 @@ export async function process(ctx: ConversionContext): Promise<void> {
         }
       });
 
-    // Extract title, anchors, and entities from headings
+    // Extract title and anchors from headings
     let title = "";
     const valid: string[] = [];
     const htmlIdToAnchor: Record<string, string> = {};
-    const entities: ParsedEntityUrl[] = [];
 
     content.find("h1, h2, h3, h4, h5, h6").each((_index, element) => {
       const $heading = $(element);
@@ -167,15 +166,21 @@ export async function process(ctx: ConversionContext): Promise<void> {
           htmlIdToAnchor[htmlId] = anchor;
         }
       }
+    });
 
-      // Extract entity URLs
-      $heading.find("a[href]").each((_i, link) => {
-        const href = $(link).attr("href");
-        if (href) {
-          const parsed = parseEntityUrl(href);
-          if (parsed) entities.push(parsed);
+    // Extract entity URLs from all links (deduplicated)
+    const entities: ParsedEntityUrl[] = [];
+    const seenUrls = new Set<string>();
+
+    content.find("a[href]").each((_i, link) => {
+      const href = $(link).attr("href");
+      if (href) {
+        const parsed = parseEntityUrl(href);
+        if (parsed && !seenUrls.has(parsed.url)) {
+          seenUrls.add(parsed.url);
+          entities.push(parsed);
         }
-      });
+      }
     });
 
     // Extract images
@@ -387,7 +392,7 @@ export async function process(ctx: ConversionContext): Promise<void> {
 
       file.anchors = anchors;
       file.title = title;
-      file.canonicalUrl = url ?? undefined;
+      file.url = url ?? undefined;
       file.entities = entities;
 
       if (!sourcebook.bookUrl && bookUrl) {

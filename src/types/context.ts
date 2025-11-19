@@ -29,7 +29,7 @@ export interface ConversionContext {
   // Unified tracking for stats, errors, and fallback links
   tracker: ConversionTracker;
 
-  files?: FileDescriptor[]; // All files (flat list) - primary data structure (includes canonicalUrl per file)
+  files?: FileDescriptor[]; // All files (flat list) - primary data structure
   sourcebooks?: SourcebookInfo[]; // Sourcebook metadata only (no files array)
   globalTemplates?: TemplateSet; // Global templates from input root
 }
