@@ -5,7 +5,7 @@
 
 import type { ConversionConfig } from "./config";
 import type { FileDescriptor, SourcebookInfo, TemplateSet } from "./files";
-import type { ConversionTracker } from "../utils/conversion-tracker";
+import type { Tracker } from "../utils/conversion-tracker";
 
 // Re-export types from conversion-tracker
 export type {
@@ -27,7 +27,7 @@ export interface ConversionContext {
   config: ConversionConfig;
 
   // Unified tracking for stats, errors, and fallback links
-  tracker: ConversionTracker;
+  tracker: Tracker;
 
   files?: FileDescriptor[]; // All files (flat list) - primary data structure
   sourcebooks?: SourcebookInfo[]; // Sourcebook metadata only (no files array)

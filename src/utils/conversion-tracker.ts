@@ -178,10 +178,10 @@ function mapFileError(
 }
 
 // ============================================================================
-// ConversionTracker - Main tracker class
+// Tracker - Main tracker class
 // ============================================================================
 
-export class ConversionTracker {
+export class Tracker {
   private totalFiles = 0;
   private successfulFiles = 0;
   private failedFiles = 0;

@@ -49,7 +49,7 @@ export type {
 } from "./context";
 
 // Tracker
-export { ConversionTracker } from "../utils/conversion-tracker";
+export { Tracker } from "../utils/conversion-tracker";
 
 // Resolver
 export type { LinkResolutionResult } from "./resolver";

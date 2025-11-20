@@ -5,7 +5,7 @@
 
 import chalk from "chalk";
 import type {
-  ConversionTracker,
+  Tracker,
   LinkIssue,
   ImageIssue,
   FileIssue,
@@ -76,7 +76,7 @@ function sectionHeader(title: string): string {
 /**
  * Display processing statistics to console with beautiful formatting
  */
-export function stats(tracker: ConversionTracker, verbose: boolean): void {
+export function stats(tracker: Tracker, verbose: boolean): void {
   const stats = tracker.getStats();
   const linkIssues = tracker.getIssues("link") as LinkIssue[];
   const hasWarnings = linkIssues.length > 0 || stats.failedImages > 0;
@@ -167,7 +167,7 @@ function displayImagesSection(stats: ProcessingStats): void {
 
 function displayLinksSection(
   stats: ProcessingStats,
-  tracker: ConversionTracker,
+  tracker: Tracker,
   verbose: boolean,
 ): void {
   const linkIssues = tracker.getIssues("link") as LinkIssue[];
@@ -243,7 +243,7 @@ function displayLinkIssueBreakdown(
 }
 
 function displayIssuesSection(
-  tracker: ConversionTracker,
+  tracker: Tracker,
   verbose: boolean,
 ): void {
   const fileIssues = tracker.getIssues("file") as FileIssue[];

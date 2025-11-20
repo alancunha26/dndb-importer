@@ -6,7 +6,7 @@ import ora from "ora";
 import { z } from "zod";
 import { loadConfig } from "../../utils/config";
 import * as modules from "../../modules";
-import { ConversionTracker } from "../../utils/conversion-tracker";
+import { Tracker } from "../../utils/conversion-tracker";
 import type { ConversionContext } from "../../types";
 
 const ConvertOptionsSchema = z.object({
@@ -41,7 +41,7 @@ export async function convertCommand(opts: Options): Promise<void> {
     }
 
     // Initialize tracker and context
-    const tracker = new ConversionTracker(config);
+    const tracker = new Tracker(config);
 
     // Add any config loading errors to tracker
     for (const err of errors) {
