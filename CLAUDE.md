@@ -327,6 +327,10 @@ The resolver transforms D&D Beyond links into local markdown links, enabling sea
 
 - `FileAnchors.valid: string[]` - All markdown anchors from headings
 - `FileAnchors.htmlIdToAnchor: Record<string, string>` - HTML element IDs → markdown anchors
+- **Duplicate anchor handling**: Per GitHub markdown spec, duplicate headings get suffixed with `-1`, `-2`, etc.
+  - First occurrence: `#ability-score-improvement`
+  - Second occurrence: `#ability-score-improvement-1`
+  - Third occurrence: `#ability-score-improvement-2`
 - Example: `<h2 id="Bell1GP">Bell (1 GP)</h2>` → `{ "Bell1GP": "bell-1-gp" }`
 
 **Special Cases:**
