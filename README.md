@@ -26,9 +26,9 @@ This CLI tool converts locally downloaded D&D Beyond HTML pages into Markdown fo
 
 ## Project Status
 
-🚧 **In Development** - Project structure is set up, implementation in progress.
+**Feature Complete** - Core converter with link resolution implemented and tested.
 
-See [docs/rfcs/0001-dndbeyond-html-markdown-converter.md](docs/rfcs/0001-dndbeyond-html-markdown-converter.md) for the complete architecture specification.
+See [docs/rfcs/0001-dndbeyond-html-markdown-converter.md](docs/rfcs/0001-dndbeyond-html-markdown-converter.md) for the architecture specification.
 
 ## Installation
 
@@ -164,12 +164,17 @@ Here's the complete default configuration with explanations for each option:
   // === Link Resolution ===
   "links": {
     "resolveInternal": true,         // Enable/disable link resolution
-    "fallbackToBold": true,          // Convert unresolvable links to bold text
-    "urlMapping": {                  // Map D&D Beyond URLs to local HTML files
-      // Format: "URL_PATH": "relative/path/to/file.html"
-      "/sources/dnd/phb-2024/playing-the-game": "players-handbook/02-chapter-1-playing-the-game.html",
-      "/spells": "players-handbook/10-chapter-7-spell-descriptions.html"
-      // Add more mappings as needed...
+    "fallbackStyle": "bold",         // How to format unresolved links: "bold", "italic", "plain", "none"
+    "urlAliases": {                  // Map URLs to canonical forms
+      // Source aliasing (Free Rules → PHB)
+      "/sources/dnd/free-rules/equipment": "/sources/dnd/phb-2024/equipment",
+      // Entity aliasing (variant items → base items)
+      "/magic-items/4585-belt-of-hill-giant-strength": "/magic-items/5372-belt-of-giant-strength"
+    },
+    "entityLocations": {             // Map entity types to allowed source pages
+      "spells": ["/sources/dnd/phb-2024/spell-descriptions"],
+      "monsters": ["/sources/dnd/mm-2024/monsters-a", "/sources/dnd/mm-2024/monsters-b"],
+      "magic-items": ["/sources/dnd/dmg-2024/magic-items"]
     }
   },
 
@@ -362,7 +367,8 @@ All fields are optional. Any custom fields you add will be available in template
 
 ## Documentation
 
-- **[RFC 0001](docs/rfcs/0001-dndbeyond-html-markdown-converter.md)** - Complete architecture specification
+- **[RFC 0001](docs/rfcs/0001-dndbeyond-html-markdown-converter.md)** - Architecture specification
+- **[Link Resolver](docs/resolver.md)** - Detailed resolver implementation documentation
 - **[CLAUDE.md](CLAUDE.md)** - Development guide for Claude Code
 
 ## Contributing
