@@ -63,8 +63,11 @@ export async function convertCommand(opts: Options): Promise<void> {
     spinner.text = "Resolving links...";
     await modules.resolve(ctx);
 
-    // Complete spinner
+    // Complete spinner and display stats
     spinner.succeed("Conversion complete!");
+
+    // Small delay to ensure spinner output is flushed before stats
+    await new Promise((resolve) => setTimeout(resolve, 10));
 
     // Display stats
     modules.stats(tracker, options.verbose ?? false);

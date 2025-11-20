@@ -69,11 +69,11 @@ export interface ProcessingStats {
 
   // Image counts
   downloadedImages: number;
+  cachedImages: number;
   failedImages: number;
 
   // Link counts
   resolvedLinks: number;
-  unresolvedLinks: number;
 
   // Other counts
   createdIndexes: number;
@@ -187,9 +187,9 @@ export class ConversionTracker {
   private failedFiles = 0;
   private skippedFiles = 0;
   private downloadedImages = 0;
+  private cachedImages = 0;
   private failedImages = 0;
   private resolvedLinks = 0;
-  private unresolvedLinks = 0;
   private createdIndexes = 0;
   private issues: Issue[] = [];
   private startTime = new Date();
@@ -224,16 +224,16 @@ export class ConversionTracker {
     this.downloadedImages++;
   }
 
+  incrementImagesCached(): void {
+    this.cachedImages++;
+  }
+
   incrementImagesFailed(): void {
     this.failedImages++;
   }
 
   incrementLinksResolved(): void {
     this.resolvedLinks++;
-  }
-
-  incrementLinksUnresolved(): void {
-    this.unresolvedLinks++;
   }
 
   // ============================================================================
@@ -306,9 +306,9 @@ export class ConversionTracker {
       failedFiles: this.failedFiles,
       skippedFiles: this.skippedFiles,
       downloadedImages: this.downloadedImages,
+      cachedImages: this.cachedImages,
       failedImages: this.failedImages,
       resolvedLinks: this.resolvedLinks,
-      unresolvedLinks: this.unresolvedLinks,
       createdIndexes: this.createdIndexes,
       issues: this.issues,
       duration,

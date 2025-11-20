@@ -236,6 +236,8 @@ export async function process(ctx: ConversionContext): Promise<void> {
           tracker.trackError(src, error, "image");
           tracker.incrementImagesFailed();
         }
+      } else {
+        tracker.incrementImagesCached();
       }
 
       imageMapping[src] = path;
