@@ -152,6 +152,7 @@ export async function process(ctx: ConversionContext): Promise<void> {
     let title = "";
     const valid: string[] = [];
     const htmlIdToAnchor: Record<string, string> = {};
+    const anchorCounts = new Map<string, number>();
 
     content.find("h1, h2, h3, h4, h5, h6").each((_index, element) => {
       const $heading = $(element);
@@ -162,8 +163,13 @@ export async function process(ctx: ConversionContext): Promise<void> {
         title = text;
       }
 
-      const anchor = generateAnchor(text);
-      if (anchor) {
+      const baseAnchor = generateAnchor(text);
+      if (baseAnchor) {
+        // Handle duplicate anchors per GitHub markdown spec
+        const count = anchorCounts.get(baseAnchor) || 0;
+        const anchor = count === 0 ? baseAnchor : `${baseAnchor}-${count}`;
+        anchorCounts.set(baseAnchor, count + 1);
+
         valid.push(anchor);
         if (htmlId) {
           htmlIdToAnchor[htmlId] = anchor;
@@ -317,11 +323,7 @@ export async function process(ctx: ConversionContext): Promise<void> {
     const { coverImage } = sourcebook.metadata;
     if (!coverImage) return undefined;
 
-    const inputPath = join(
-      config.input,
-      sourcebook.sourcebook,
-      coverImage,
-    );
+    const inputPath = join(config.input, sourcebook.sourcebook, coverImage);
 
     if (!(await fileExists(inputPath))) return undefined;
 
@@ -333,6 +335,12 @@ export async function process(ctx: ConversionContext): Promise<void> {
     const extension = extname(coverImage);
     const localFilename = `${uniqueId}${extension}`;
     const outputPath = join(config.output, localFilename);
+
+    // Check if file already exists (use cache)
+    if (await fileExists(outputPath)) {
+      imageMapping[mappingKey] = localFilename;
+      return localFilename;
+    }
 
     try {
       await mkdir(dirname(outputPath), { recursive: true });
@@ -418,8 +426,8 @@ export async function process(ctx: ConversionContext): Promise<void> {
     }
   }
 
-  // Save state and generate indexes
-  tracker.setIndexesCreated(sourcebooks.length);
-  await saveMapping(imageMappingPath, imageMapping);
+  // Generate indexes and save state
   await writeIndexes();
+  await saveMapping(imageMappingPath, imageMapping);
+  tracker.setIndexesCreated(sourcebooks.length);
 }

@@ -260,10 +260,10 @@ interface FileAnchors {
 
 1. **Extract heading text** from HTML
 2. **Generate GitHub-style anchor** (lowercase, hyphens)
-3. **Generate variants** (plural/singular)
+3. **Handle duplicate anchors** - Per GitHub markdown spec, duplicate headings get suffixed with `-1`, `-2`, etc.
 4. **Map HTML IDs** to markdown anchors
 
-**Example:**
+**Example (single heading):**
 
 ```html
 <h2 id="Bell1GP">Bell (1 GP)</h2>
@@ -273,8 +273,31 @@ Results in:
 
 ```typescript
 {
-  valid: ["bell-1-gp", "bells-1-gp"],
+  valid: ["bell-1-gp"],
   htmlIdToAnchor: { "Bell1GP": "bell-1-gp" }
+}
+```
+
+**Example (duplicate headings):**
+
+```html
+<h3 id="Level4AbilityScoreImprovement">Ability Score Improvement</h3>
+<!-- ... other content ... -->
+<h3 id="Level8AbilityScoreImprovement">Ability Score Improvement</h3>
+<!-- ... other content ... -->
+<h3 id="Level12AbilityScoreImprovement">Ability Score Improvement</h3>
+```
+
+Results in:
+
+```typescript
+{
+  valid: ["ability-score-improvement", "ability-score-improvement-1", "ability-score-improvement-2"],
+  htmlIdToAnchor: {
+    "Level4AbilityScoreImprovement": "ability-score-improvement",
+    "Level8AbilityScoreImprovement": "ability-score-improvement-1",
+    "Level12AbilityScoreImprovement": "ability-score-improvement-2"
+  }
 }
 ```
 
