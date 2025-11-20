@@ -176,6 +176,20 @@ Here are all available configuration options with explanations:
 }
 ```
 
+**Entity Matching Note:**
+
+Entity link resolution (for spells, monsters, equipment, etc.) uses smart anchor matching with plural/singular handling and prefix matching. This covers most cases but is **best-effort** - some edge cases may resolve to nearby but incorrect anchors. You can fix specific cases using `urlAliases`:
+
+```json
+{
+  "links": {
+    "urlAliases": {
+      "/equipment/544-arcane-focus": "/sources/dnd/phb-2024/equipment#arcane-focus-varies"
+    }
+  }
+}
+```
+
 **Markdown Configuration Notes:**
 
 All markdown settings are respected throughout the conversion:
