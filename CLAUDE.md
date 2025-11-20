@@ -409,6 +409,7 @@ The converter handles D&D Beyond HTML in two stages:
 - `aside.ts` - Convert aside elements to Obsidian/GitHub callouts or blockquotes
 - `flexible-columns.ts` - Convert D&D Beyond flexible column layouts to lists
 - `table.ts` - Custom table handling for complex D&D Beyond table patterns
+- `stat-block.ts` - Monster stat-block formatting (italic type/alignment, section headings)
 
 **Decision criteria:**
 - Use **preprocessing** if: Fixing invalid HTML structure that breaks Turndown
