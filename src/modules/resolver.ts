@@ -92,13 +92,6 @@ function buildEntityIndex(
 }
 
 // ============================================================================
-// Constants
-// ============================================================================
-
-const MARKDOWN_LINK_REGEX = /\[([^\]]+)\]\(([^)]+)\)/g;
-const IMAGE_LINE_PATTERN = /^\s*!/;
-
-// ============================================================================
 // Main Resolver Function
 // ============================================================================
 
@@ -253,13 +246,13 @@ export async function resolve(ctx: ConversionContext): Promise<void> {
    */
   function resolveLink(link: LinkInfo, file: FileDescriptor): string {
     // Handle internal anchors
-    if (link.path.startsWith("#")) {
-      const result = resolveInternalAnchor(link.path.slice(1), link.text, file);
+    if (link.original.startsWith("#") && link.anchor) {
+      const result = resolveInternalAnchor(link.anchor, link.text, file);
       if (result) {
         tracker.incrementLinksResolved();
         return result;
       } else {
-        return `[${link.text}](${link.path})`;
+        return `[${link.text}](#${link.anchor})`;
       }
     }
 
@@ -275,9 +268,8 @@ export async function resolve(ctx: ConversionContext): Promise<void> {
     if (sourceResult) {
       if (sourceResult.endsWith(".md)") || sourceResult.includes(".md#")) {
         tracker.incrementLinksResolved();
-      } else {
-        return sourceResult;
       }
+      return sourceResult;
     }
 
     // Fallback
@@ -292,15 +284,14 @@ export async function resolve(ctx: ConversionContext): Promise<void> {
     return content
       .split("\n")
       .map((line) => {
-        if (IMAGE_LINE_PATTERN.test(line)) return line;
-
-        return line.replace(MARKDOWN_LINK_REGEX, (_match, text, url) => {
+        // Find all markdown links
+        return line.replace(/\[([^\]]+)\]\(([^)]+)\)/g, (_match, text, url) => {
           if (shouldResolveUrl(url)) {
             const link = parseLink(url, text);
             return resolveLink(link, file);
+          } else {
+            return `[${text}](${url})`;
           }
-
-          return `[${text}](${url})`;
         });
       })
       .join("\n");

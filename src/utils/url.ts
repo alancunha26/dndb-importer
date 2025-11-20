@@ -3,6 +3,8 @@
  * Reusable functions for URL manipulation and validation
  */
 
+import { isImageUrl } from "./string";
+
 // ============================================================================
 // Constants
 // ============================================================================
@@ -117,6 +119,10 @@ export function shouldResolveUrl(url: string): boolean {
   }
 
   if (url.endsWith(".md") || LOCAL_MD_FILE_PATTERN.test(url)) {
+    return false;
+  }
+
+  if (isImageUrl(url)) {
     return false;
   }
 
