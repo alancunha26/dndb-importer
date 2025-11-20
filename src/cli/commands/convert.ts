@@ -37,7 +37,7 @@ export async function convertCommand(opts: Options): Promise<void> {
     }
 
     // Initialize tracker and context
-    const tracker = new Tracker(config);
+    const tracker = new Tracker();
 
     // Add any config loading errors to tracker
     for (const err of errors) {

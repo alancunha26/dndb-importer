@@ -198,12 +198,6 @@ export type ResourceIssueReason =
   | "invalid-json"
   | "schema-validation"
   | "read-error";
-export type LinkIssueReason =
-  | "url-not-in-mapping"
-  | "entity-not-found"
-  | "anchor-not-found"
-  | "header-link"
-  | "no-anchors";
 
 export interface FileIssue {
   type: "file";
@@ -226,15 +220,13 @@ export interface ResourceIssue {
   details?: string;
 }
 
-export interface LinkIssue {
-  type: "link";
+export type Issue = FileIssue | ImageIssue | ResourceIssue;
+export type IssueType = Issue["type"];
+
+export interface UnresolvedLink {
   path: string;
-  reason: LinkIssueReason;
   text: string;
 }
-
-export type Issue = FileIssue | ImageIssue | ResourceIssue | LinkIssue;
-export type IssueType = Issue["type"];
 
 export interface ProcessingStats {
   totalFiles: number;
@@ -245,6 +237,7 @@ export interface ProcessingStats {
   cachedImages: number;
   failedImages: number;
   resolvedLinks: number;
+  unresolvedLinks: number;
   createdIndexes: number;
   issues: Issue[];
   duration: number;

@@ -44,7 +44,10 @@ function buildEntityIndex(
   const seenUrls = new Set<string>();
 
   // Helper: Find first matching anchor in a list of files
-  function findMatch(slug: string, targetFiles: FileDescriptor[]): EntityMatch | null {
+  function findMatch(
+    slug: string,
+    targetFiles: FileDescriptor[],
+  ): EntityMatch | null {
     for (const file of targetFiles) {
       if (!file.anchors) continue;
       const anchor = findMatchingAnchor(slug, file.anchors.valid);
@@ -80,7 +83,12 @@ function buildEntityIndex(
     for (const entity of file.entities) {
       // Apply aliases to get canonical URL for indexing
       const aliasedUrl = applyAliases(entity.url, urlAliases);
-      const slug = aliasedUrl.split("/").pop()?.replace(/^\d+-/, "") || entity.slug;
+
+      // Skip if aliased to a non-entity URL (e.g., source URL)
+      if (!isEntityUrl(aliasedUrl)) continue;
+
+      const slug =
+        aliasedUrl.split("/").pop()?.replace(/^\d+-/, "") || entity.slug;
 
       if (!slug || seenUrls.has(aliasedUrl)) continue;
       seenUrls.add(aliasedUrl);
@@ -90,8 +98,6 @@ function buildEntityIndex(
 
       if (match) {
         entityIndex.set(aliasedUrl, match);
-      } else {
-        ctx.tracker.trackLinkIssue(aliasedUrl, entity.type, "entity-not-found");
       }
     }
   }
@@ -155,6 +161,14 @@ export async function resolve(ctx: ConversionContext): Promise<void> {
     const normalized = normalizeUrl(url);
     let [path, anchor] = normalized.split("#");
     path = applyAliases(path, config.links.urlAliases);
+
+    // Re-split in case alias value contains an anchor
+    if (path.includes("#")) {
+      const [newPath, newAnchor] = path.split("#");
+      path = newPath;
+      anchor = newAnchor;
+    }
+
     return { path, anchor, text, original };
   }
 
@@ -180,24 +194,35 @@ export async function resolve(ctx: ConversionContext): Promise<void> {
   /**
    * Resolve entity link using entity index
    */
-  function resolveEntityLink(link: LinkInfo): string | null {
+  function resolveEntityLink(
+    link: LinkInfo,
+    file: FileDescriptor,
+  ): string | null {
     if (!isEntityUrl(link.path)) return null;
 
     const match = entityIndex.get(link.path);
     if (!match) {
-      tracker.trackLinkIssue(link.original, link.text, "entity-not-found");
       return null;
     }
 
     // Use link's anchor if specified, otherwise use the matched anchor
     const targetAnchor = link.anchor || match.anchor;
+
+    // If linking to same file, use just the anchor
+    if (match.fileId === file.uniqueId) {
+      return `[${link.text}](#${targetAnchor})`;
+    }
+
     return `[${link.text}](${match.fileId}.md#${targetAnchor})`;
   }
 
   /**
    * Resolve source book link using canonical URLs
    */
-  function resolveSourceLink(link: LinkInfo): string | null {
+  function resolveSourceLink(
+    link: LinkInfo,
+    file: FileDescriptor,
+  ): string | null {
     // No anchor - could be book-level or header link
     if (!link.anchor) {
       const sourcebook = sourcebooks?.find((sb) => sb.bookUrl === link.path);
@@ -207,25 +232,21 @@ export async function resolve(ctx: ConversionContext): Promise<void> {
 
       const targetFile = urlMap.get(link.path);
       if (targetFile) {
-        tracker.trackLinkIssue(link.original, link.text, "header-link");
         const fallback = formatFallback(link.text);
         return fallback || `[${link.text}](${link.original})`;
       }
 
-      tracker.trackLinkIssue(link.original, link.text, "url-not-in-mapping");
       return null;
     }
 
     // Has anchor - look up in URL mapping
     const targetFile = urlMap.get(link.path);
     if (!targetFile) {
-      tracker.trackLinkIssue(link.original, link.text, "url-not-in-mapping");
       return null;
     }
 
     const fileAnchors = targetFile.anchors;
     if (!fileAnchors) {
-      tracker.trackLinkIssue(link.original, link.text, "no-anchors");
       return null;
     }
 
@@ -242,8 +263,12 @@ export async function resolve(ctx: ConversionContext): Promise<void> {
     }
 
     if (!matchedAnchor) {
-      tracker.trackLinkIssue(link.original, link.text, "anchor-not-found");
       return null;
+    }
+
+    // If linking to same file, use just the anchor
+    if (targetFile.uniqueId === file.uniqueId) {
+      return `[${link.text}](#${matchedAnchor})`;
     }
 
     return `[${link.text}](${targetFile.uniqueId}.md#${matchedAnchor})`;
@@ -267,25 +292,29 @@ export async function resolve(ctx: ConversionContext): Promise<void> {
     // Entity URLs and source URLs are mutually exclusive
     if (isEntityUrl(link.path)) {
       // Try entity link
-      const entityResult = resolveEntityLink(link);
+      const entityResult = resolveEntityLink(link, file);
       if (entityResult) {
         tracker.incrementLinksResolved();
         return entityResult;
       }
     } else {
       // Try source link
-      const sourceResult = resolveSourceLink(link);
+      const sourceResult = resolveSourceLink(link, file);
       if (sourceResult) {
-        if (sourceResult.endsWith(".md)") || sourceResult.includes(".md#")) {
-          tracker.incrementLinksResolved();
-        }
+        // Check if result is an actual link (not a fallback like **text**)
+        const isResolvedLink = sourceResult.includes("](");
+        if (isResolvedLink) tracker.incrementLinksResolved();
         return sourceResult;
       }
     }
 
     // Fallback
     const fallback = formatFallback(link.text);
-    return fallback || `[${link.text}](${link.original})`;
+    if (fallback) {
+      tracker.trackUnresolvedLink(link.original, link.text);
+      return fallback;
+    }
+    return `[${link.text}](${link.original})`;
   }
 
   /**

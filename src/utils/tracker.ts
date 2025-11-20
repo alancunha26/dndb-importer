@@ -7,18 +7,16 @@ import { writeFile } from "fs/promises";
 import { join } from "path";
 import { ZodError } from "zod";
 import type {
-  ConversionConfig,
   Issue,
   IssueType,
   FileIssueReason,
   ImageIssueReason,
   ResourceIssueReason,
-  LinkIssueReason,
-  LinkIssue,
   FileIssue,
   ImageIssue,
   ResourceIssue,
   ProcessingStats,
+  UnresolvedLink,
 } from "../types";
 
 // ============================================================================
@@ -122,9 +120,8 @@ export class Tracker {
   private resolvedLinks = 0;
   private createdIndexes = 0;
   private issues: Issue[] = [];
+  private unresolvedLinksList: UnresolvedLink[] = [];
   private startTime = new Date();
-
-  constructor(private config: ConversionConfig) {}
 
   // ============================================================================
   // Stat counters
@@ -166,6 +163,10 @@ export class Tracker {
     this.resolvedLinks++;
   }
 
+  trackUnresolvedLink(path: string, text: string): void {
+    this.unresolvedLinksList.push({ path, text });
+  }
+
   // ============================================================================
   // Issue tracking
   // ============================================================================
@@ -195,11 +196,6 @@ export class Tracker {
     }
   }
 
-  trackLinkIssue(path: string, text: string, reason: LinkIssueReason): void {
-    if (this.config.links.fallbackStyle === "none") return;
-    this.issues.push({ type: "link", path, reason, text });
-  }
-
   // ============================================================================
   // Issue getters
   // ============================================================================
@@ -207,10 +203,6 @@ export class Tracker {
   getIssues(type?: IssueType): Issue[] {
     if (!type) return this.issues;
     return this.issues.filter((i) => i.type === type);
-  }
-
-  getLinkIssuesByReason(reason: LinkIssueReason): Issue[] {
-    return this.issues.filter((i) => i.type === "link" && i.reason === reason);
   }
 
   // ============================================================================
@@ -230,6 +222,7 @@ export class Tracker {
       cachedImages: this.cachedImages,
       failedImages: this.failedImages,
       resolvedLinks: this.resolvedLinks,
+      unresolvedLinks: this.unresolvedLinksList.length,
       createdIndexes: this.createdIndexes,
       issues: this.issues,
       duration,
@@ -242,7 +235,6 @@ export class Tracker {
 
   async exportStats(outputDir: string): Promise<void> {
     const stats = this.getStats();
-    const linkIssues = this.getIssues("link") as LinkIssue[];
 
     const exported = {
       summary: {
@@ -254,11 +246,12 @@ export class Tracker {
         cachedImages: stats.cachedImages,
         failedImages: stats.failedImages,
         resolvedLinks: stats.resolvedLinks,
-        unresolvedLinks: linkIssues.length,
+        unresolvedLinks: stats.unresolvedLinks,
         createdIndexes: stats.createdIndexes,
         duration: stats.duration,
       },
       issues: this.groupIssuesByTypeAndReason(),
+      unresolvedLinks: this.unresolvedLinksList,
     };
 
     const outputPath = join(outputDir, "stats.json");
@@ -269,18 +262,15 @@ export class Tracker {
     file: Record<string, FileIssue[]>;
     image: Record<string, ImageIssue[]>;
     resource: Record<string, ResourceIssue[]>;
-    link: Record<string, LinkIssue[]>;
   } {
     const grouped: {
       file: Record<string, FileIssue[]>;
       image: Record<string, ImageIssue[]>;
       resource: Record<string, ResourceIssue[]>;
-      link: Record<string, LinkIssue[]>;
     } = {
       file: {},
       image: {},
       resource: {},
-      link: {},
     };
 
     for (const issue of this.issues) {
@@ -304,13 +294,6 @@ export class Tracker {
             grouped.resource[issue.reason] = [];
           }
           grouped.resource[issue.reason].push(issue);
-          break;
-        }
-        case "link": {
-          if (!grouped.link[issue.reason]) {
-            grouped.link[issue.reason] = [];
-          }
-          grouped.link[issue.reason].push(issue);
           break;
         }
       }

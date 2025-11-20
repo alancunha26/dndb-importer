@@ -6,7 +6,6 @@
 import chalk from "chalk";
 import type {
   Tracker,
-  LinkIssue,
   ImageIssue,
   FileIssue,
   ResourceIssue,
@@ -86,8 +85,7 @@ export async function stats(ctx: ConversionContext): Promise<void> {
   await tracker.exportStats(config.output);
 
   const stats = tracker.getStats();
-  const linkIssues = tracker.getIssues("link") as LinkIssue[];
-  const hasWarnings = linkIssues.length > 0 || stats.failedImages > 0;
+  const hasWarnings = stats.unresolvedLinks > 0 || stats.failedImages > 0;
   const hasErrors = stats.failedFiles > 0;
 
   // Blank line for separation
@@ -111,7 +109,7 @@ export async function stats(ctx: ConversionContext): Promise<void> {
   displayImagesSection(stats);
 
   // Links section
-  displayLinksSection(stats, tracker, verbose);
+  displayLinksSection(stats);
 
   // Issues section
   displayIssuesSection(tracker, verbose);
@@ -192,14 +190,8 @@ function displayImagesSection(stats: ProcessingStats): void {
   }
 }
 
-function displayLinksSection(
-  stats: ProcessingStats,
-  tracker: Tracker,
-  verbose?: boolean,
-): void {
-  const linkIssues = tracker.getIssues("link") as LinkIssue[];
-  const unresolvedLinks = linkIssues.length;
-  const totalLinks = stats.resolvedLinks + unresolvedLinks;
+function displayLinksSection(stats: ProcessingStats): void {
+  const totalLinks = stats.resolvedLinks + stats.unresolvedLinks;
 
   if (totalLinks === 0) {
     return; // Skip if no links
@@ -215,63 +207,15 @@ function displayLinksSection(
     statRow(chalk.green("◉"), "Resolved", stats.resolvedLinks, chalk.green),
   );
 
-  if (unresolvedLinks > 0) {
+  if (stats.unresolvedLinks > 0) {
     console.log(
-      statRow(chalk.yellow("◉"), "Unresolved", unresolvedLinks, chalk.yellow),
+      statRow(
+        chalk.yellow("◉"),
+        "Unresolved",
+        stats.unresolvedLinks,
+        chalk.yellow,
+      ),
     );
-
-    // Show link issue breakdown
-    displayLinkIssueBreakdown(linkIssues, verbose);
-  }
-}
-
-function displayLinkIssueBreakdown(
-  linkIssues: LinkIssue[],
-  verbose?: boolean,
-): void {
-  // Group by reason
-  const reasonCounts = new Map<string, number>();
-  for (const issue of linkIssues) {
-    const count = reasonCounts.get(issue.reason) || 0;
-    reasonCounts.set(issue.reason, count + 1);
-  }
-
-  // Sort by count (descending)
-  const sortedReasons = Array.from(reasonCounts.entries()).sort(
-    (a, b) => b[1] - a[1],
-  );
-
-  const reasonLabels: Record<string, string> = {
-    "url-not-in-mapping": "URL not mapped",
-    "entity-not-found": "Entity not found",
-    "anchor-not-found": "Anchor not found",
-    "header-link": "Header link",
-    "no-anchors": "No anchors",
-  };
-
-  // Display breakdown inline
-  console.log("");
-  for (const [reason, count] of sortedReasons) {
-    const label = reasonLabels[reason] || reason;
-    console.log(
-      `      ${chalk.dim("›")} ${chalk.dim(label.padEnd(18))} ${chalk.yellow(count)}`,
-    );
-  }
-
-  // Display examples in verbose mode
-  if (verbose && linkIssues.length > 0) {
-    console.log("");
-    console.log(`      ${chalk.dim("Examples:")}`);
-
-    linkIssues.slice(0, 3).forEach((issue) => {
-      console.log(
-        `      ${chalk.dim("·")} ${chalk.white(issue.text)} ${chalk.dim(`→ ${issue.path}`)}`,
-      );
-    });
-
-    if (linkIssues.length > 3) {
-      console.log(`      ${chalk.dim(`  +${linkIssues.length - 3} more`)}`);
-    }
   }
 }
 
