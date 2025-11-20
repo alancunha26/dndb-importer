@@ -26,9 +26,13 @@ This CLI tool converts locally downloaded D&D Beyond HTML pages into Markdown fo
 
 ## Project Status
 
-**Feature Complete** - Core converter with link resolution implemented and tested.
+**v1.0 - Feature Complete** - Core converter with link resolution implemented and tested.
 
-See [docs/rfcs/0001-dndbeyond-html-markdown-converter.md](docs/rfcs/0001-dndbeyond-html-markdown-converter.md) for the architecture specification.
+See [docs/rfcs/0001-dndbeyond-html-markdown-converter.md](docs/rfcs/0001-dndbeyond-html-markdown-converter.md) for the architecture specification and [docs/roadmap.md](docs/roadmap.md) for planned features.
+
+## Requirements
+
+- Node.js 18+
 
 ## Installation
 
@@ -67,9 +71,6 @@ dndb-convert --input ./input --output ./output
 # Convert specific book
 dndb-convert --input ./input/players-handbook --output ./output
 
-# Dry run (preview without writing)
-dndb-convert --input ./input --dry-run
-
 # Verbose output
 dndb-convert --input ./input --output ./output --verbose
 
@@ -104,75 +105,76 @@ The configuration system follows the XDG Base Directory specification on Linux a
 
 ### Default Configuration
 
-Here's the complete default configuration with explanations for each option:
+See [`src/config/default.json`](src/config/default.json) for the actual default values.
 
-````jsonc
+Here are all available configuration options with explanations:
+
+```jsonc
 {
   // === Input/Output Directories ===
-  "input": "./input", // Where your downloaded HTML files are located
-  "output": "./output", // Where to write converted markdown files
+  "input": "./input",           // Where your downloaded HTML files are located
+  "output": "./output",         // Where to write converted markdown files
 
   // === Unique ID Settings ===
   "ids": {
-    "length": 4, // Length of generated IDs (e.g., "a3f9")
-    "characters": "abcdefghijklmnopqrstuvwxyz0123456789", // Character set for IDs
+    "length": 4,                // Length of generated IDs (e.g., "a3f9")
+    "characters": "abc...xyz0123456789"  // Character set for IDs
   },
 
   // === Markdown Formatting ===
   // Customize how your markdown is generated to match your preferred style
   // or tool requirements (Obsidian, GitHub, CommonMark, etc.)
   "markdown": {
-    "headingStyle": "atx", // "atx" (# Heading) or "setext" (underlined)
+    "headingStyle": "atx",      // "atx" (# Heading) or "setext" (underlined)
     "codeBlockStyle": "fenced", // "fenced" (```) or "indented" (4 spaces)
-    "emphasis": "_", // "_" or "*" for italic text
-    "strong": "**", // "**" or "__" for bold text
-    "bulletMarker": "-", // "-", "+", or "*" for unordered lists
-    "linkStyle": "inlined", // "inlined" [text](url) or "referenced" [text][ref]
-    "linkReferenceStyle": "full", // "full", "collapsed", or "shortcut" (for referenced links)
-    "horizontalRule": "---", // Any string (e.g., "---", "* * *", "___")
-    "lineBreak": "  ", // Two spaces for soft line breaks
-    "codeFence": "```", // "```" or "~~~" for fenced code blocks
-    "preformattedCode": false, // Preserve preformatted code blocks
+    "emphasis": "_",            // "_" or "*" for italic text
+    "strong": "**",             // "**" or "__" for bold text
+    "bulletMarker": "-",        // "-", "+", or "*" for unordered lists
+    "linkStyle": "inlined",     // "inlined" [text](url) or "referenced" [text][ref]
+    "linkReferenceStyle": "full", // "full", "collapsed", or "shortcut"
+    "horizontalRule": "---",    // Any string (e.g., "---", "* * *", "___")
+    "lineBreak": "  ",          // Two spaces for soft line breaks
+    "codeFence": "```",         // "```" or "~~~" for fenced code blocks
+    "preformattedCode": false   // Preserve preformatted code blocks
   },
 
   // === HTML Parsing ===
   "html": {
-    "contentSelector": ".p-article-content", // CSS selector for main content
-    "removeSelectors": [], // CSS selectors for elements to remove
+    "contentSelector": ".p-article-content",  // CSS selector for main content
+    "removeSelectors": []       // CSS selectors for elements to remove
   },
 
   // === Image Download Settings ===
   "images": {
-    "download": true, // Enable/disable image downloading
-    "formats": ["png", "jpg", "jpeg", "webp", "gif"], // Allowed image formats
-    "maxSize": 10485760, // Maximum image size in bytes (10MB)
-    "timeout": 30000, // Download timeout in milliseconds (30s)
-    "retries": 3, // Number of retry attempts for failed downloads
+    "download": true,           // Enable/disable image downloading
+    "formats": ["png", "jpg", "jpeg", "webp", "gif"],  // Allowed formats
+    "maxSize": 10485760,        // Maximum image size in bytes (10MB)
+    "timeout": 30000,           // Download timeout in milliseconds (30s)
+    "retries": 3                // Number of retry attempts
   },
 
   // === Link Resolution ===
   "links": {
-    "resolveInternal": true, // Enable/disable link resolution
-    "fallbackStyle": "bold", // How to format unresolved links: "bold", "italic", "plain", "none"
+    "resolveInternal": true,    // Enable/disable link resolution
+    "fallbackStyle": "bold",    // Unresolved links: "bold", "italic", "plain", "none"
+
+    // Map URLs to canonical forms
     "urlAliases": {
-      // Map URLs to canonical forms
       // Source aliasing (Free Rules → PHB)
       "/sources/dnd/free-rules/equipment": "/sources/dnd/phb-2024/equipment",
       // Entity aliasing (variant items → base items)
-      "/magic-items/4585-belt-of-hill-giant-strength": "/magic-items/5372-belt-of-giant-strength",
+      "/magic-items/4585-belt-of-hill-giant-strength": "/magic-items/5372-belt-of-giant-strength"
     },
+
+    // Map entity types to allowed source pages
     "entityLocations": {
-      // Map entity types to allowed source pages
       "spells": ["/sources/dnd/phb-2024/spell-descriptions"],
-      "monsters": [
-        "/sources/dnd/mm-2024/monsters-a",
-        "/sources/dnd/mm-2024/monsters-b",
-      ],
-      "magic-items": ["/sources/dnd/dmg-2024/magic-items"],
-    },
-  },
+      "monsters": ["/sources/dnd/mm-2024/monsters-a", "/sources/dnd/mm-2024/monsters-b"],
+      "magic-items": ["/sources/dnd/dmg-2024/magic-items"]
+    }
+  }
 }
-````
+```
 
 **Markdown Configuration Notes:**
 
@@ -198,58 +200,6 @@ These settings are not configurable:
 - File encoding: `utf-8`
 - Output extension: `.md`
 - Index creation: always enabled
-
-## Issue Tracking
-
-The converter tracks issues silently during processing and displays a summary at the end. Issues are categorized by type and reason for easier debugging.
-
-A `stats.json` file is generated in the output directory with detailed statistics and all issues grouped by type and reason. This is useful for debugging link resolution issues and updating `urlAliases` configuration.
-
-### Issue Types
-
-| Type       | Description                                                |
-| ---------- | ---------------------------------------------------------- |
-| `file`     | Problems processing source HTML files                      |
-| `image`    | Problems downloading or copying images                     |
-| `resource` | Problems loading config, metadata, or mapping files        |
-| `link`     | Links that couldn't be resolved and fell back to bold text |
-
-### Issue Reasons
-
-#### File Issues
-
-| Reason        | Description                                              |
-| ------------- | -------------------------------------------------------- |
-| `parse-error` | HTML parsing or Markdown conversion failed               |
-| `read-error`  | Could not read the source file (permissions, not found)  |
-| `write-error` | Could not write the output file (permissions, disk full) |
-
-#### Image Issues
-
-| Reason             | Description                                           |
-| ------------------ | ----------------------------------------------------- |
-| `download-failed`  | Network error while downloading image from D&D Beyond |
-| `timeout`          | Image download exceeded the configured timeout        |
-| `not-found`        | Local image file not found (for cover images)         |
-| `invalid-response` | Server returned an error status (4xx, 5xx)            |
-
-#### Resource Issues
-
-| Reason              | Description                             |
-| ------------------- | --------------------------------------- |
-| `invalid-json`      | JSON file has syntax errors             |
-| `schema-validation` | JSON file doesn't match expected schema |
-| `read-error`        | Could not read the resource file        |
-
-#### Link Issues
-
-| Reason               | Description                                        |
-| -------------------- | -------------------------------------------------- |
-| `url-not-in-mapping` | URL path not found in any converted file           |
-| `entity-not-found`   | Entity (spell, monster, etc.) not found in index   |
-| `anchor-not-found`   | Target anchor doesn't exist in the target file     |
-| `header-link`        | Page-level link without anchor (converted to bold) |
-| `no-anchors`         | Target file has no anchor data                     |
 
 ## Templates
 
@@ -353,11 +303,14 @@ All fields are optional. Any custom fields you add will be available in template
 
 - **[RFC 0001](docs/rfcs/0001-dndbeyond-html-markdown-converter.md)** - Architecture specification
 - **[Link Resolver](docs/resolver.md)** - Detailed resolver implementation documentation
+- **[Roadmap](docs/roadmap.md)** - Planned features and future improvements
 - **[CLAUDE.md](CLAUDE.md)** - Development guide for Claude Code
 
 ## Contributing
 
 This project follows a modular pipeline architecture. Each module is a simple function with a clear input/output contract via the `ConversionContext` object.
+
+See the [roadmap](docs/roadmap.md) for planned features and contribution ideas.
 
 ## License
 
