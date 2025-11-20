@@ -12,6 +12,7 @@
  */
 const DNDBEYOND_HTTPS = "https://www.dndbeyond.com/";
 const DNDBEYOND_HTTP = "http://www.dndbeyond.com/";
+const LOCAL_MD_FILE_PATTERN = /^[a-z0-9]{4}\.md/;
 
 /**
  * D&D Beyond entity types that can be linked
@@ -111,9 +112,12 @@ export function normalizeDnDBeyondUrl(url: string): string {
  * shouldResolveUrl("https://example.com") // => false (external link)
  */
 export function shouldResolveUrl(url: string): boolean {
-  // Internal anchors (same-page)
   if (url.startsWith("#")) {
     return true;
+  }
+
+  if (url.endsWith(".md") || LOCAL_MD_FILE_PATTERN.test(url)) {
+    return false;
   }
 
   // Full D&D Beyond URLs

@@ -8,7 +8,6 @@
 
 import { readFile, writeFile } from "fs/promises";
 import type { ConversionContext, FileDescriptor } from "../types";
-import type { ConversionTracker } from "../utils/conversion-tracker";
 import {
   normalizeDnDBeyondUrl,
   shouldResolveUrl,
@@ -16,10 +15,6 @@ import {
   isEntityUrl,
 } from "../utils/url";
 import { normalizeAnchor, findMatchingAnchor } from "../utils/anchor";
-
-// ============================================================================
-// Entity Index Builder
-// ============================================================================
 
 /**
  * Entity location with matched anchor
@@ -29,20 +24,31 @@ interface EntityMatch {
   anchor: string;
 }
 
+interface LinkInfo {
+  path: string;
+  anchor?: string;
+  text: string;
+  original: string;
+}
+
 /**
  * Build entity index by matching entity slugs to file anchors
+ *
+ * @param files - Files to process
+ * @param ctx - Conversion context
  */
 function buildEntityIndex(
   files: FileDescriptor[],
-  tracker: ConversionTracker,
-  entityLocations: Record<string, string[]>,
-  urlAliases: Record<string, string>,
+  ctx: ConversionContext,
 ): Map<string, EntityMatch> {
+  const { entityLocations, urlAliases } = ctx.config.links;
   const entityIndex = new Map<string, EntityMatch>();
   const seenUrls = new Set<string>();
 
   for (const file of files) {
-    if (!file.entities) continue;
+    if (!file.entities) {
+      continue;
+    }
 
     for (const entity of file.entities) {
       if (!entity.slug || seenUrls.has(entity.url)) continue;
@@ -77,7 +83,7 @@ function buildEntityIndex(
       }
 
       if (!entityIndex.has(entity.url)) {
-        tracker.trackLinkIssue(entity.url, entity.type, "entity-not-found");
+        ctx.tracker.trackLinkIssue(entity.url, entity.type, "entity-not-found");
       }
     }
   }
@@ -91,7 +97,6 @@ function buildEntityIndex(
 
 const MARKDOWN_LINK_REGEX = /\[([^\]]+)\]\(([^)]+)\)/g;
 const IMAGE_LINE_PATTERN = /^\s*!/;
-const LOCAL_MD_FILE_PATTERN = /^[a-z0-9]{4}\.md/;
 
 // ============================================================================
 // Main Resolver Function
@@ -101,7 +106,7 @@ const LOCAL_MD_FILE_PATTERN = /^[a-z0-9]{4}\.md/;
  * Resolves cross-references in all written files
  *
  * Uses factory pattern with closure variables to avoid prop drilling.
- * Inner functions have shared access to fileMap, urlMap, tracker, etc.
+ * Inner functions have shared access to urlMap, tracker, etc.
  */
 export async function resolve(ctx: ConversionContext): Promise<void> {
   if (!ctx.files) {
@@ -118,15 +123,10 @@ export async function resolve(ctx: ConversionContext): Promise<void> {
 
   const { tracker, config, sourcebooks } = ctx;
   const files = ctx.files.filter((f) => f.written);
-  const fileMap = new Map(files.map((f) => [f.uniqueId, f]));
-  const urlMap = new Map(files.filter((f) => f.url).map((f) => [f.url!, f]));
 
-  const entityIndex = buildEntityIndex(
-    files,
-    tracker,
-    config.links.entityLocations,
-    config.links.urlAliases,
-  );
+  // Build URL map keyed by canonical URLs
+  const urlMap = new Map(files.filter((f) => f.url).map((f) => [f.url!, f]));
+  const entityIndex = buildEntityIndex(files, ctx);
 
   /**
    * Format text using the configured fallback style
@@ -146,16 +146,20 @@ export async function resolve(ctx: ConversionContext): Promise<void> {
     }
   }
 
+  /**
+   * Parse and normalize a URL into LinkInfo
+   */
+  function parseLink(url: string, text: string): LinkInfo {
+    const original = url;
+    const normalized = normalizeDnDBeyondUrl(url);
+    let [path, anchor] = normalized.split("#");
+    path = applyAliases(path, config.links.urlAliases);
+    return { path, anchor, text, original };
+  }
+
   // ============================================================================
   // Resolution Functions
   // ============================================================================
-
-  interface LinkInfo {
-    path: string;
-    anchor?: string;
-    text: string;
-    original: string;
-  }
 
   /**
    * Resolve internal anchor link (same-page)
@@ -163,9 +167,9 @@ export async function resolve(ctx: ConversionContext): Promise<void> {
   function resolveInternalAnchor(
     htmlId: string,
     text: string,
-    fileId: string,
+    file: FileDescriptor,
   ): string | null {
-    const fileAnchors = fileMap.get(fileId)?.anchors;
+    const fileAnchors = file.anchors;
     if (!fileAnchors) return null;
 
     const markdownAnchor = fileAnchors.htmlIdToAnchor[htmlId];
@@ -245,26 +249,19 @@ export async function resolve(ctx: ConversionContext): Promise<void> {
   }
 
   /**
-   * Resolve a single link
+   * Resolve a single link (already parsed and aliased)
    */
-  function resolveLink(url: string, text: string, fileId: string): string {
-    const original = url;
-    url = normalizeDnDBeyondUrl(url);
-
+  function resolveLink(link: LinkInfo, file: FileDescriptor): string {
     // Handle internal anchors
-    if (url.startsWith("#")) {
-      const result = resolveInternalAnchor(url.slice(1), text, fileId);
+    if (link.path.startsWith("#")) {
+      const result = resolveInternalAnchor(link.path.slice(1), link.text, file);
       if (result) {
         tracker.incrementLinksResolved();
         return result;
+      } else {
+        return `[${link.text}](${link.path})`;
       }
-      return `[${text}](${url})`;
     }
-
-    // Parse URL and apply aliases
-    const [initialPath, anchor] = url.split("#");
-    const path = applyAliases(initialPath, config.links.urlAliases);
-    const link: LinkInfo = { path, anchor, text, original };
 
     // Try entity link
     const entityResult = resolveEntityLink(link);
@@ -278,31 +275,31 @@ export async function resolve(ctx: ConversionContext): Promise<void> {
     if (sourceResult) {
       if (sourceResult.endsWith(".md)") || sourceResult.includes(".md#")) {
         tracker.incrementLinksResolved();
+      } else {
+        return sourceResult;
       }
-      return sourceResult;
     }
 
     // Fallback
-    const fallback = formatFallback(text);
-    return fallback || `[${text}](${url})`;
+    const fallback = formatFallback(link.text);
+    return fallback || `[${link.text}](${link.original})`;
   }
 
   /**
    * Resolve all markdown links in content
    */
-  function resolveLinksInContent(content: string, fileId: string): string {
+  function resolveContent(content: string, file: FileDescriptor): string {
     return content
       .split("\n")
       .map((line) => {
         if (IMAGE_LINE_PATTERN.test(line)) return line;
 
         return line.replace(MARKDOWN_LINK_REGEX, (_match, text, url) => {
-          if (url.endsWith(".md") || LOCAL_MD_FILE_PATTERN.test(url)) {
-            return `[${text}](${url})`;
-          }
           if (shouldResolveUrl(url)) {
-            return resolveLink(url, text, fileId);
+            const link = parseLink(url, text);
+            return resolveLink(link, file);
           }
+
           return `[${text}](${url})`;
         });
       })
@@ -316,7 +313,7 @@ export async function resolve(ctx: ConversionContext): Promise<void> {
   for (const file of files) {
     try {
       const content = await readFile(file.outputPath, "utf-8");
-      const resolvedContent = resolveLinksInContent(content, file.uniqueId);
+      const resolvedContent = resolveContent(content, file);
 
       if (resolvedContent !== content) {
         await writeFile(file.outputPath, resolvedContent, "utf-8");
