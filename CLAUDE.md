@@ -197,6 +197,8 @@ modules.stats(tracker, verbose); // 4. Display statistics
 - URL Aliases: `links.urlAliases` maps D&D Beyond URLs to canonical URLs
   - Source aliasing: `/sources/dnd/free-rules/foo` → `/sources/dnd/phb-2024/foo`
   - Entity aliasing: `/magic-items/4585-belt-of-hill-giant-strength` → `/magic-items/5372-belt-of-giant-strength`
+  - Equipment table aliasing: `/equipment/469-wagon` → `/sources/dnd/phb-2024/equipment#tack-harness-and-drawn-vehicles`
+  - **Important**: Anchors only work in VALUES (right side), not KEYS (left side). The resolver splits URLs into path and anchor before applying aliases, so only the path is looked up.
 - Entity Locations: `links.entityLocations` maps entity types to allowed source pages
   - Prevents spells resolving to monster pages with matching anchors
   - Example: `"spells": ["/sources/dnd/phb-2024/spell-descriptions"]`
@@ -218,11 +220,11 @@ modules.stats(tracker, verbose); // 4. Display statistics
   - Single `Tracker` class for all stats and issue tracking
   - Counter methods: `incrementSuccessful()`, `incrementImagesDownloaded()`, `incrementLinksResolved()`, etc.
   - Issue tracking: `trackError(path, error, type, context)` with automatic error classification
-  - Four issue types with typed reasons:
+  - Three issue types with typed reasons:
     - `file` - File processing errors (parse-error, read-error, write-error)
     - `image` - Image download errors (download-failed, timeout, not-found, invalid-response)
     - `resource` - Config/metadata errors (invalid-json, schema-validation, read-error)
-    - `link` - Link resolution issues (url-not-in-mapping, entity-not-found, anchor-not-found, header-link)
+  - Link tracking: `trackUnresolvedLink(path, text)` for simplified resolved/unresolved counts
   - All stats retrieved via `tracker.getStats()` returning `ProcessingStats`
 - **Graceful degradation:**
   - Invalid config → Falls back to default config
@@ -505,7 +507,7 @@ export type SourcebookMetadata = z.infer<typeof SourcebookMetadataSchema>;
   - `globalTemplates?`: TemplateSet (global templates from input root)
 - `Tracker` - Unified stats and issue tracking class:
   - Counter methods: `incrementSuccessful()`, `incrementImagesDownloaded()`, etc.
-  - Issue tracking: `trackError()`, `trackLinkIssue()`
+  - Issue tracking: `trackError()`, `trackUnresolvedLink()`
   - Results: `getStats()` returns `ProcessingStats`
 - `FileDescriptor` - File metadata with unique ID:
   - `sourcePath`, `relativePath`, `outputPath`, `sourcebook`, `uniqueId`
@@ -531,12 +533,16 @@ export type SourcebookMetadata = z.infer<typeof SourcebookMetadataSchema>;
 - `ProcessingStats` - Final statistics:
   - `totalFiles`, `successfulFiles`, `failedFiles`, `skippedFiles`
   - `downloadedImages`, `cachedImages`, `failedImages`
-  - `resolvedLinks`, `createdIndexes`
-  - `issues`: Issue[] (all tracked issues)
+  - `resolvedLinks`, `unresolvedLinks`, `createdIndexes`
+  - `issues`: Issue[] (file, image, resource issues)
+  - `unresolvedLinksList`: UnresolvedLink[] (path and text of unresolved links)
   - `duration`: Conversion time in milliseconds
+- `UnresolvedLink` - Unresolved link data:
+  - `path`: The URL path that couldn't be resolved
+  - `text`: The link text
 - `Issue` - Tracked issue with type discrimination:
-  - `FileIssue`, `ImageIssue`, `ResourceIssue`, `LinkIssue`
-  - Each has `type`, `path`, `reason`, and optional `details`/`text`
+  - `FileIssue`, `ImageIssue`, `ResourceIssue`
+  - Each has `type`, `path`, `reason`, and optional `details`
 
 ### Project Structure
 

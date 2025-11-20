@@ -165,11 +165,32 @@ D&D Beyond has multiple URLs for the same content. URL aliases normalize these t
 "/magic-items/4585-belt-of-hill-giant-strength": "/magic-items/5372-belt-of-giant-strength"
 ```
 
+**Equipment table aliasing** (items without individual anchors → table anchors):
+
+```json
+"/equipment/469-wagon": "/sources/dnd/phb-2024/equipment#tack-harness-and-drawn-vehicles"
+```
+
 ### How It Works
 
 1. Link URL is normalized (strip domain, lowercase)
-2. URL aliases are applied before resolution
-3. Entity index uses aliased URLs for matching
+2. URL is split into path and anchor
+3. URL aliases are applied to the **path only**
+4. If aliased value contains an anchor, it's extracted
+5. Entity index uses aliased URLs for matching
+
+**Important**: Anchors only work in VALUES (right side), not KEYS (left side):
+
+```json
+// ✓ Correct - anchor in value
+"/equipment/469-wagon": "/sources/dnd/phb-2024/equipment#tack-harness-and-drawn-vehicles"
+
+// ✗ Wrong - anchor in key won't match (path is looked up without anchor)
+"/sources/phb/equipment#MountsandOtherAnimals": "/sources/dnd/phb-2024/equipment#mounts-and-other-animals"
+
+// ✓ Correct - alias path only, let anchor matching handle the rest
+"/sources/phb/equipment": "/sources/dnd/phb-2024/equipment"
+```
 
 ## Smart Anchor Matching
 
@@ -183,16 +204,20 @@ D&D Beyond has multiple URLs for the same content. URL aliases normalize these t
    Match: "fireball"
    ```
 
-2. **Normalized match** (strips trailing 's' from words for singular/plural matching)
+2. **Normalized match** (removes hyphens and all 's' characters for plural matching)
 
    ```
    Anchor: "potion-of-healing"
    Valid: ["potions-of-healing", ...]
-   Normalized: "potion-of-healing" matches "potion-of-healing"
+   Normalized: "potionofhealing" matches "potionofhealing"
    Match: "potions-of-healing"
    ```
 
 3. **Prefix match** (for headers with suffixes)
+
+   Uses word-by-word matching to prevent false positives:
+   - `cart` does NOT match `cartographers-tools` (different first word)
+   - `alchemists-fire` matches `alchemists-fire-50-gp` (words match at positions)
 
    ```
    Anchor: "alchemists-fire"
@@ -200,47 +225,23 @@ D&D Beyond has multiple URLs for the same content. URL aliases normalize these t
    Match: "alchemists-fire-50-gp" (shortest prefix match)
    ```
 
-4. **No match** → Fallback
+   For multi-word searches (2+ words), also tries normalized prefix matching.
+
+4. **Unordered word match** (for reversed word order, requires 2+ words)
+
+   ```
+   Anchor: "travelers-clothes"
+   Valid: ["clothes-travelers-2-gp", ...]
+   Match: "clothes-travelers-2-gp" (all words found)
+   ```
+
+   Requires minimum 2 words to prevent false positives like "bolt" matching "crossbow-bolt".
+
+5. **No match** → Fallback
    ```
    Anchor: "nonexistent"
    Match: null → Apply fallback style
    ```
-
-### Implementation
-
-```typescript
-function findMatchingAnchor(
-  anchor: string,
-  validAnchors: string[],
-): string | null {
-  // 1. Exact match
-  if (validAnchors.includes(anchor)) {
-    return anchor;
-  }
-
-  // 2. Normalized match (strips trailing 's' for singular/plural)
-  const normalizedSearch = normalizeAnchorForMatching(anchor);
-  for (const valid of validAnchors) {
-    if (normalizeAnchorForMatching(valid) === normalizedSearch) {
-      return valid;
-    }
-  }
-
-  // 3. Prefix matching
-  const prefixMatches = validAnchors.filter((valid) =>
-    valid.startsWith(anchor + "-"),
-  );
-
-  if (prefixMatches.length === 0) {
-    return null;
-  }
-
-  // Return shortest match
-  return prefixMatches.reduce((shortest, current) =>
-    current.length < shortest.length ? current : shortest,
-  );
-}
-```
 
 ## Anchor Building (Processor Stage)
 
@@ -358,22 +359,24 @@ Maps entity types to allowed source pages:
 
 ## Error Handling
 
-### Issue Tracking
+### Link Tracking
 
-Link issues are tracked via `ctx.tracker.trackLinkIssue()`:
+Link resolution is tracked with simplified resolved/unresolved counts via `ctx.tracker`:
 
-- `url-not-in-mapping`: URL not found in file mapping
-- `entity-not-found`: Entity URL not in entity index
-- `anchor-not-found`: Anchor doesn't exist in target file
-- `header-link`: Page link without anchor
-- `no-anchors`: Target file has no anchors
+- `incrementLinksResolved()`: Called for each successfully resolved link
+- `trackUnresolvedLink(path, text)`: Called for links that couldn't be resolved
+
+The `stats.json` output includes:
+- `resolvedLinks`: Total count of resolved links
+- `unresolvedLinks`: Total count of unresolved links
+- `unresolvedLinksList`: Array of `{ path, text }` for each unresolved link
 
 ### Graceful Degradation
 
 - **File read error**: Skip file, track error, continue
-- **Invalid link**: Apply fallback style
-- **Missing entity**: Apply fallback style
-- **Missing anchor**: Apply fallback style
+- **Invalid link**: Apply fallback style, track as unresolved
+- **Missing entity**: Apply fallback style, track as unresolved
+- **Missing anchor**: Apply fallback style, track as unresolved
 
 ## Examples
 
@@ -411,6 +414,13 @@ Link issues are tracked via `ctx.tracker.trackLinkIssue()`:
 → [Alchemist's Fire](b4x8.md#alchemists-fire-50-gp)
 ```
 
+### Unordered Word Matching
+
+```markdown
+[Traveler's Clothes](/.../equipment#travelers-clothes)
+→ [Traveler's Clothes](b4x8.md#clothes-travelers-2-gp)
+```
+
 ### Book-Level Link
 
 ```markdown
@@ -434,7 +444,8 @@ Link issues are tracked via `ctx.tracker.trackLinkIssue()`:
 - D&D Beyond links resolved
 - Entity tooltips fall back correctly
 - Plural/singular matching works
-- Prefix matching works
+- Prefix matching works (word-by-word)
+- Unordered word matching works
 - Book-level links resolve to index
 - Header links fall back correctly
 
@@ -442,6 +453,8 @@ Link issues are tracked via `ctx.tracker.trackLinkIssue()`:
 
 - Multiple entities with same anchor
 - Full URLs vs relative paths
-- Aliased URLs
+- Aliased URLs with anchors in values
 - Missing target files
 - Missing anchors
+- Single-word searches avoid false positives (cart ≠ cartographers-tools)
+- Reversed word order matching (travelers-clothes → clothes-travelers)
