@@ -1,25 +1,74 @@
 /**
- * Convert command - Main conversion logic
+ * Convert command - Loads config and runs conversion pipeline
  */
 
-interface ConvertOptions {
-  input?: string;
-  output?: string;
-  config?: string;
-  dryRun?: boolean;
-  verbose?: boolean;
-}
+import ora from "ora";
+import { z } from "zod";
+import { loadConfig, Tracker } from "../../utils";
+import * as modules from "../../modules";
+import type { ConversionContext } from "../../types";
 
-export async function convertCommand(options: ConvertOptions): Promise<void> {
-  console.log("D&D Beyond Converter - Coming soon!");
-  console.log("Options:", options);
+const ConvertOptionsSchema = z.object({
+  input: z.string().optional(),
+  output: z.string().optional(),
+  config: z.string().optional(),
+  dryRun: z.boolean().optional(),
+  verbose: z.boolean().optional(),
+});
 
-  // TODO: Implement conversion logic
-  // 1. Load configuration
-  // 2. Scan input directory
-  // 3. Process HTML files
-  // 4. Convert to Markdown
-  // 5. Write output files
-  // 6. Generate index files
-  // 7. Display summary
+type Options = z.infer<typeof ConvertOptionsSchema>;
+
+export async function convertCommand(opts: Options): Promise<void> {
+  const spinner = ora({ text: "Initializing...", indent: 2 }).start();
+
+  try {
+    // Validate CLI options
+    const options = ConvertOptionsSchema.parse(opts);
+
+    // Load configuration (default → user → custom)
+    const { config, errors } = await loadConfig(options.config);
+
+    // Override with CLI options
+    if (options.input) {
+      config.input = options.input;
+    }
+    if (options.output) {
+      config.output = options.output;
+    }
+
+    // Initialize tracker and context
+    const tracker = new Tracker();
+
+    // Add any config loading errors to tracker
+    for (const err of errors) {
+      tracker.trackError(err.path, err.error, "resource");
+    }
+
+    const ctx: ConversionContext = {
+      config,
+      tracker,
+      verbose: options.verbose,
+    };
+
+    // Run conversion pipeline with spinner updates
+    spinner.text = "Scanning files...";
+    await modules.scan(ctx);
+
+    spinner.text = "Processing files...";
+    await modules.process(ctx);
+
+    spinner.text = "Resolving links...";
+    await modules.resolve(ctx);
+
+    // Clear and stop spinner before displaying stats
+    spinner.clear();
+    spinner.stop();
+
+    // Export and display stats
+    await modules.stats(ctx);
+  } catch (error) {
+    spinner.fail("Conversion failed");
+    console.error(error);
+    process.exit(1);
+  }
 }
