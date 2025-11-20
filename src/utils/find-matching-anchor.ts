@@ -3,12 +3,13 @@ import { normalizeAnchorForMatching } from "./generate-anchor-variants";
 /**
  * Find matching anchor with smart matching:
  * 1. Exact match
- * 2. Normalized match (strips trailing 's' from words for singular/plural matching)
+ * 2. Normalized match (removes hyphens and all 's' characters)
  * 3. Prefix match for headers with suffixes
  *
  * @example
  * findMatchingAnchor("fireball", ["fireball"]) // "fireball"
  * findMatchingAnchor("potion-of-healing", ["potions-of-healing"]) // "potions-of-healing"
+ * findMatchingAnchor("enlarge-reduce", ["enlargereduce"]) // "enlargereduce"
  * findMatchingAnchor("alchemists-fire", ["alchemists-fire-50-gp"]) // "alchemists-fire-50-gp"
  */
 export function findMatchingAnchor(
@@ -20,7 +21,7 @@ export function findMatchingAnchor(
     return anchor;
   }
 
-  // 2. Try normalized match (strips trailing 's' for singular/plural matching)
+  // 2. Try normalized match
   const normalizedSearch = normalizeAnchorForMatching(anchor);
   for (const valid of validAnchors) {
     if (normalizeAnchorForMatching(valid) === normalizedSearch) {
@@ -36,7 +37,7 @@ export function findMatchingAnchor(
     }
     // Also check normalized versions
     const normalizedValid = normalizeAnchorForMatching(valid);
-    return normalizedValid.startsWith(normalizedSearch + "-");
+    return normalizedValid.startsWith(normalizedSearch);
   });
 
   if (prefixMatches.length > 0) {

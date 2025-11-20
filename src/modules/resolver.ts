@@ -78,16 +78,20 @@ function buildEntityIndex(
     if (!file.entities) continue;
 
     for (const entity of file.entities) {
-      if (!entity.slug || seenUrls.has(entity.url)) continue;
-      seenUrls.add(entity.url);
+      // Apply aliases to get canonical URL for indexing
+      const aliasedUrl = applyAliases(entity.url, urlAliases);
+      const slug = aliasedUrl.split("/").pop()?.replace(/^\d+-/, "") || entity.slug;
+
+      if (!slug || seenUrls.has(aliasedUrl)) continue;
+      seenUrls.add(aliasedUrl);
 
       const targetFiles = getTargetFiles(entity.type);
-      const match = findMatch(entity.slug, targetFiles);
+      const match = findMatch(slug, targetFiles);
 
       if (match) {
-        entityIndex.set(entity.url, match);
+        entityIndex.set(aliasedUrl, match);
       } else {
-        ctx.tracker.trackLinkIssue(entity.url, entity.type, "entity-not-found");
+        ctx.tracker.trackLinkIssue(aliasedUrl, entity.type, "entity-not-found");
       }
     }
   }
@@ -260,20 +264,23 @@ export async function resolve(ctx: ConversionContext): Promise<void> {
       }
     }
 
-    // Try entity link
-    const entityResult = resolveEntityLink(link);
-    if (entityResult) {
-      tracker.incrementLinksResolved();
-      return entityResult;
-    }
-
-    // Try source link
-    const sourceResult = resolveSourceLink(link);
-    if (sourceResult) {
-      if (sourceResult.endsWith(".md)") || sourceResult.includes(".md#")) {
+    // Entity URLs and source URLs are mutually exclusive
+    if (isEntityUrl(link.path)) {
+      // Try entity link
+      const entityResult = resolveEntityLink(link);
+      if (entityResult) {
         tracker.incrementLinksResolved();
+        return entityResult;
       }
-      return sourceResult;
+    } else {
+      // Try source link
+      const sourceResult = resolveSourceLink(link);
+      if (sourceResult) {
+        if (sourceResult.endsWith(".md)") || sourceResult.includes(".md#")) {
+          tracker.incrementLinksResolved();
+        }
+        return sourceResult;
+      }
     }
 
     // Fallback
