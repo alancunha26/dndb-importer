@@ -20,7 +20,7 @@ const ConvertOptionsSchema = z.object({
 type Options = z.infer<typeof ConvertOptionsSchema>;
 
 export async function convertCommand(opts: Options): Promise<void> {
-  const spinner = ora("Initializing...").start();
+  const spinner = ora({ text: "Initializing...", indent: 2 }).start();
 
   try {
     // Validate CLI options
@@ -63,11 +63,9 @@ export async function convertCommand(opts: Options): Promise<void> {
     spinner.text = "Resolving links...";
     await modules.resolve(ctx);
 
-    // Complete spinner and display stats
-    spinner.succeed("Conversion complete!");
-
-    // Small delay to ensure spinner output is flushed before stats
-    await new Promise((resolve) => setTimeout(resolve, 10));
+    // Clear and stop spinner before displaying stats
+    spinner.clear();
+    spinner.stop();
 
     // Display stats
     modules.stats(tracker, options.verbose ?? false);
