@@ -30,13 +30,10 @@ export async function convertCommand(opts: Options): Promise<void> {
 
     // Override with CLI options
     if (options.input) {
-      config.input.directory = options.input;
+      config.input = options.input;
     }
     if (options.output) {
-      config.output.directory = options.output;
-    }
-    if (options.verbose) {
-      config.logging.level = "debug";
+      config.output = options.output;
     }
 
     // Initialize tracker and context

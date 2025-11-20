@@ -46,7 +46,7 @@ export async function process(ctx: ConversionContext): Promise<void> {
   // ============================================================================
 
   const { config, files, sourcebooks, globalTemplates, tracker } = ctx;
-  const imageMappingPath = join(config.output.directory, "images.json");
+  const imageMappingPath = join(config.output, "images.json");
   const imageMapping = await loadMapping(imageMappingPath);
   const idGenerator = IdGenerator.fromMapping(imageMapping);
 
@@ -100,7 +100,7 @@ export async function process(ctx: ConversionContext): Promise<void> {
     bookUrl: string | null;
     images: string[];
   }> {
-    const html = await readFile(file.sourcePath, config.input.encoding);
+    const html = await readFile(file.sourcePath, "utf-8");
     const $ = load(html);
 
     // Extract canonical URL
@@ -262,21 +262,21 @@ export async function process(ctx: ConversionContext): Promise<void> {
     const idx = sbFiles.findIndex((f) => f.uniqueId === file.uniqueId);
 
     if (idx === -1) {
-      return { index: `[Index](${sourcebook.id}${config.output.extension})` };
+      return { index: `[Index](${sourcebook.id}.md)` };
     }
 
     const nav: { prev?: string; index: string; next?: string } = {
-      index: `[Index](${sourcebook.id}${config.output.extension})`,
+      index: `[Index](${sourcebook.id}.md)`,
     };
 
     if (idx > 0) {
       const prev = sbFiles[idx - 1];
-      nav.prev = `← [${filenameToTitle(prev.filename)}](${prev.uniqueId}${config.output.extension})`;
+      nav.prev = `← [${filenameToTitle(prev.filename)}](${prev.uniqueId}.md)`;
     }
 
     if (idx < sbFiles.length - 1) {
       const next = sbFiles[idx + 1];
-      nav.next = `[${filenameToTitle(next.filename)}](${next.uniqueId}${config.output.extension}) →`;
+      nav.next = `[${filenameToTitle(next.filename)}](${next.uniqueId}.md) →`;
     }
 
     return nav;
@@ -319,7 +319,7 @@ export async function process(ctx: ConversionContext): Promise<void> {
     if (!coverImage) return undefined;
 
     const inputPath = join(
-      config.input.directory,
+      config.input,
       sourcebook.sourcebook,
       coverImage,
     );
@@ -333,7 +333,7 @@ export async function process(ctx: ConversionContext): Promise<void> {
 
     const extension = extname(coverImage);
     const localFilename = `${uniqueId}${extension}`;
-    const outputPath = join(config.output.directory, localFilename);
+    const outputPath = join(config.output, localFilename);
 
     try {
       await mkdir(dirname(outputPath), { recursive: true });
@@ -347,8 +347,6 @@ export async function process(ctx: ConversionContext): Promise<void> {
   }
 
   async function writeIndexes(): Promise<void> {
-    if (!config.output.createIndex) return;
-
     for (const sourcebook of sourcebooks) {
       const coverImage = await copyCoverImage(sourcebook);
 
@@ -370,7 +368,7 @@ export async function process(ctx: ConversionContext): Promise<void> {
         metadata: sourcebook.metadata,
         files: sbFiles.map((file) => ({
           title: file.title || "",
-          filename: `${file.uniqueId}${config.output.extension}`,
+          filename: `${file.uniqueId}.md`,
           uniqueId: file.uniqueId,
         })),
       };

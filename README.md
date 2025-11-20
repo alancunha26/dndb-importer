@@ -108,20 +108,9 @@ Here's the complete default configuration with explanations for each option:
 
 ```jsonc
 {
-  // === Input Settings ===
-  "input": {
-    "directory": "./input",          // Where your downloaded HTML files are located
-    "pattern": "**/*.html",          // Glob pattern to match HTML files (excludes *.hbs templates)
-    "encoding": "utf-8"              // Text encoding for reading files
-  },
-
-  // === Output Settings ===
-  "output": {
-    "directory": "./output",         // Where to write converted markdown files
-    "overwrite": true,               // Overwrite existing files without prompting
-    "extension": ".md",              // File extension for output files
-    "createIndex": true              // Generate index.md for each sourcebook
-  },
+  // === Input/Output Directories ===
+  "input": "./input",                  // Where your downloaded HTML files are located
+  "output": "./output",                // Where to write converted markdown files
 
   // === Unique ID Settings ===
   "ids": {
@@ -176,12 +165,6 @@ Here's the complete default configuration with explanations for each option:
       "monsters": ["/sources/dnd/mm-2024/monsters-a", "/sources/dnd/mm-2024/monsters-b"],
       "magic-items": ["/sources/dnd/dmg-2024/magic-items"]
     }
-  },
-
-  // === Logging ===
-  "logging": {
-    "level": "info",                 // "debug", "info", "warn", or "error"
-    "showProgress": true             // Show progress indicators during conversion
   }
 }
 ```
@@ -199,6 +182,14 @@ Configs are deep-merged with this priority order (lowest to highest):
 1. Default config (shown above)
 2. User config (OS-specific location)
 3. Custom config (via `--config` flag)
+
+**Hardcoded Values:**
+
+These settings are not configurable:
+- File pattern: `**/*.html`
+- File encoding: `utf-8`
+- Output extension: `.md`
+- Index creation: always enabled
 
 ## Issue Tracking
 

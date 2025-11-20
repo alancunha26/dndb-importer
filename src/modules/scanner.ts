@@ -76,13 +76,13 @@ async function loadSourcebookMetadata(
  * - globalTemplates: Global templates from input root
  */
 export async function scan(ctx: ConversionContext): Promise<void> {
-  const inputDir = path.resolve(ctx.config.input.directory);
+  const inputDir = path.resolve(ctx.config.input);
 
   // 1. Detect global templates (in input root)
   const globalTemplates = await detectTemplates(inputDir);
 
   // 2. Discover HTML files using fast-glob (exclude .hbs files)
-  const htmlFiles = await glob(ctx.config.input.pattern, {
+  const htmlFiles = await glob("**/*.html", {
     cwd: inputDir,
     absolute: true,
     onlyFiles: true,
@@ -114,7 +114,7 @@ export async function scan(ctx: ConversionContext): Promise<void> {
   });
 
   // 4. Load persistent file mapping (HTML path -> markdown filename)
-  const fileMappingPath = path.join(ctx.config.output.directory, "files.json");
+  const fileMappingPath = path.join(ctx.config.output, "files.json");
   const fileMapping = await loadMapping(fileMappingPath);
   const idGenerator = IdGenerator.fromMapping(fileMapping);
   const updatedFileMapping: FileMapping = { ...fileMapping };
@@ -150,16 +150,15 @@ export async function scan(ctx: ConversionContext): Promise<void> {
         // Generate new index ID
         indexId = idGenerator.generate();
         // Add to updated mapping
-        updatedFileMapping[indexKey] =
-          `${indexId}${ctx.config.output.extension}`;
+        updatedFileMapping[indexKey] = `${indexId}.md`;
       }
 
       // Use title from metadata, or generate from directory name
       const title = metadata.title ?? filenameToTitle(sourcebook);
 
       const outputPath = path.join(
-        ctx.config.output.directory,
-        `${indexId}${ctx.config.output.extension}`,
+        ctx.config.output,
+        `${indexId}.md`,
       );
 
       // bookUrl will be derived from first file's canonicalUrl in processor
@@ -185,13 +184,12 @@ export async function scan(ctx: ConversionContext): Promise<void> {
       // Generate new ID
       uniqueId = idGenerator.generate();
       // Add to updated mapping
-      updatedFileMapping[relativePath] =
-        `${uniqueId}${ctx.config.output.extension}`;
+      updatedFileMapping[relativePath] = `${uniqueId}.md`;
     }
 
     const outputPath = path.join(
-      ctx.config.output.directory,
-      `${uniqueId}${ctx.config.output.extension}`,
+      ctx.config.output,
+      `${uniqueId}.md`,
     );
 
     const sourcebookId = sourcebookIdMap.get(sourcebook)!;

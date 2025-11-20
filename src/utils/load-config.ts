@@ -60,8 +60,8 @@ function mergeConfig(
   return {
     ...base,
     ...override,
-    input: { ...base.input, ...override.input },
-    output: { ...base.output, ...override.output },
+    input: override.input ?? base.input,
+    output: override.output ?? base.output,
     ids: { ...base.ids, ...override.ids },
     markdown: { ...base.markdown, ...override.markdown },
     html: { ...base.html, ...override.html },
@@ -74,7 +74,6 @@ function mergeConfig(
         ...override.links?.urlAliases,
       },
     },
-    logging: { ...base.logging, ...override.logging },
   };
 }
 

@@ -12,18 +12,9 @@ export { Tracker };
 // Configuration Types & Schemas
 // ============================================================================
 
-export const InputConfigSchema = z.object({
-  directory: z.string(),
-  pattern: z.string(),
-  encoding: z.string() as z.ZodType<BufferEncoding>,
-});
+export const InputConfigSchema = z.string();
 
-export const OutputConfigSchema = z.object({
-  directory: z.string(),
-  overwrite: z.boolean(),
-  extension: z.string(),
-  createIndex: z.boolean(),
-});
+export const OutputConfigSchema = z.string();
 
 export const IdConfigSchema = z.object({
   length: z.number().int().positive(),
@@ -64,11 +55,6 @@ export const LinksConfigSchema = z.object({
   entityLocations: z.record(z.string(), z.array(z.string())),
 });
 
-export const LoggingConfigSchema = z.object({
-  level: z.enum(["debug", "info", "warn", "error"]),
-  showProgress: z.boolean(),
-});
-
 export const ConversionConfigSchema = z.object({
   input: InputConfigSchema,
   output: OutputConfigSchema,
@@ -77,18 +63,14 @@ export const ConversionConfigSchema = z.object({
   html: HtmlConfigSchema,
   images: ImagesConfigSchema,
   links: LinksConfigSchema,
-  logging: LoggingConfigSchema,
 });
 
 export const PartialConversionConfigSchema = ConversionConfigSchema.partial().extend({
-  input: InputConfigSchema.partial().optional(),
-  output: OutputConfigSchema.partial().optional(),
   ids: IdConfigSchema.partial().optional(),
   markdown: MarkdownConfigSchema.partial().optional(),
   html: HtmlConfigSchema.partial().optional(),
   images: ImagesConfigSchema.partial().optional(),
   links: LinksConfigSchema.partial().optional(),
-  logging: LoggingConfigSchema.partial().optional(),
 });
 
 export type InputConfig = z.infer<typeof InputConfigSchema>;
@@ -98,7 +80,6 @@ export type MarkdownConfig = z.infer<typeof MarkdownConfigSchema>;
 export type HtmlConfig = z.infer<typeof HtmlConfigSchema>;
 export type ImagesConfig = z.infer<typeof ImagesConfigSchema>;
 export type LinksConfig = z.infer<typeof LinksConfigSchema>;
-export type LoggingConfig = z.infer<typeof LoggingConfigSchema>;
 export type ConversionConfig = z.infer<typeof ConversionConfigSchema>;
 
 // ============================================================================

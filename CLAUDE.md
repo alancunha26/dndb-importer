@@ -180,15 +180,19 @@ modules.stats(tracker, verbose); // 4. Display statistics
   - Falls back to default config automatically
   - Errors displayed in final summary via `ctx.errors.resources`
 - Location: `src/config/default.json` (copied to `dist/config/` during build)
-- Structure: User-centric organization with 8 top-level sections:
-  - `input` - Source HTML files location and pattern
-  - `output` - Output directory and file settings
+- Structure: User-centric organization with 7 top-level sections:
+  - `input` - Source HTML files directory (string)
+  - `output` - Output directory (string)
   - `ids` - Unique ID generation (used for files and images)
-  - `markdown` - Markdown formatting preferences (all Turndown options: headingStyle, emphasis, strong, bulletMarker, linkStyle, linkReferenceStyle, horizontalRule, lineBreak, codeFence, preformattedCode)
+  - `markdown` - Markdown formatting preferences (all Turndown options)
   - `html` - HTML parsing settings (content selector, etc.)
   - `images` - Image download settings
   - `links` - Link resolution configuration
-  - `logging` - Logging level and progress display
+- Hardcoded values (not configurable):
+  - File pattern: `**/*.html`
+  - Encoding: `utf-8`
+  - Output extension: `.md`
+  - Index creation: always enabled
 - HTML Parser: Uses `.p-article-content` selector to extract main content from D&D Beyond HTML
 - URL Aliases: `links.urlAliases` maps D&D Beyond URLs to canonical URLs
   - Source aliasing: `/sources/dnd/free-rules/foo` → `/sources/dnd/phb-2024/foo`

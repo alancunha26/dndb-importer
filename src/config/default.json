@@ -1,15 +1,6 @@
 {
-  "input": {
-    "directory": "./input",
-    "pattern": "**/*.html",
-    "encoding": "utf-8"
-  },
-  "output": {
-    "directory": "./output",
-    "overwrite": true,
-    "extension": ".md",
-    "createIndex": true
-  },
+  "input": "./input",
+  "output": "./output",
   "ids": {
     "length": 4,
     "characters": "abcdefghijklmnopqrstuvwxyz0123456789"
@@ -160,9 +151,5 @@
         "/sources/dnd/mm-2024/animals"
       ]
     }
-  },
-  "logging": {
-    "level": "info",
-    "showProgress": true
   }
 }
