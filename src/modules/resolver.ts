@@ -34,9 +34,6 @@ interface LinkInfo {
 
 /**
  * Build entity index by matching entity slugs to file anchors
- *
- * @param files - Files to process
- * @param ctx - Conversion context
  */
 function buildEntityIndex(
   files: FileDescriptor[],
@@ -46,44 +43,50 @@ function buildEntityIndex(
   const entityIndex = new Map<string, EntityMatch>();
   const seenUrls = new Set<string>();
 
-  for (const file of files) {
-    if (!file.entities) {
-      continue;
+  // Helper: Find first matching anchor in a list of files
+  function findMatch(slug: string, targetFiles: FileDescriptor[]): EntityMatch | null {
+    for (const file of targetFiles) {
+      if (!file.anchors) continue;
+      const anchor = findMatchingAnchor(slug, file.anchors.valid);
+      if (anchor) {
+        return { fileId: file.uniqueId, anchor };
+      }
     }
+    return null;
+  }
+
+  // Helper: Get target files in priority order based on entityLocations
+  function getTargetFiles(entityType: string): FileDescriptor[] {
+    const allowedPages = entityLocations[entityType];
+    if (!allowedPages) return files;
+
+    const result: FileDescriptor[] = [];
+    for (const page of allowedPages) {
+      for (const file of files) {
+        if (!file.url) continue;
+        const canonicalUrl = applyAliases(file.url, urlAliases);
+        if (canonicalUrl.startsWith(page)) {
+          result.push(file);
+        }
+      }
+    }
+    return result;
+  }
+
+  // Process all entities from all files
+  for (const file of files) {
+    if (!file.entities) continue;
 
     for (const entity of file.entities) {
       if (!entity.slug || seenUrls.has(entity.url)) continue;
       seenUrls.add(entity.url);
 
-      // Filter target files by entity type if configured
-      const allowedPages = entityLocations[entity.type];
-      const targetFiles = allowedPages
-        ? files.filter((f) => {
-            if (!f.url) return false;
-            // Apply aliases to get canonical form of the URL
-            const canonicalUrl = applyAliases(f.url, urlAliases);
-            return allowedPages.some((page) => canonicalUrl.startsWith(page));
-          })
-        : files;
+      const targetFiles = getTargetFiles(entity.type);
+      const match = findMatch(entity.slug, targetFiles);
 
-      for (const targetFile of targetFiles) {
-        if (!targetFile.anchors) continue;
-
-        const matchedAnchor = findMatchingAnchor(
-          entity.slug,
-          targetFile.anchors.valid,
-        );
-
-        if (matchedAnchor) {
-          entityIndex.set(entity.url, {
-            fileId: targetFile.uniqueId,
-            anchor: matchedAnchor,
-          });
-          break;
-        }
-      }
-
-      if (!entityIndex.has(entity.url)) {
+      if (match) {
+        entityIndex.set(entity.url, match);
+      } else {
         ctx.tracker.trackLinkIssue(entity.url, entity.type, "entity-not-found");
       }
     }

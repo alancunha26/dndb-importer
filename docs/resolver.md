@@ -175,15 +175,24 @@ D&D Beyond has multiple URLs for the same content. URL aliases normalize these t
 
 ### Strategies
 
-1. **Exact match** (including plural/singular variants)
+1. **Exact match**
 
    ```
    Anchor: "fireball"
-   Valid: ["fireball", "fireballs", ...]
+   Valid: ["fireball", ...]
    Match: "fireball"
    ```
 
-2. **Prefix match** (for headers with suffixes)
+2. **Normalized match** (strips trailing 's' from words for singular/plural matching)
+
+   ```
+   Anchor: "potion-of-healing"
+   Valid: ["potions-of-healing", ...]
+   Normalized: "potion-of-healing" matches "potion-of-healing"
+   Match: "potions-of-healing"
+   ```
+
+3. **Prefix match** (for headers with suffixes)
 
    ```
    Anchor: "alchemists-fire"
@@ -191,7 +200,7 @@ D&D Beyond has multiple URLs for the same content. URL aliases normalize these t
    Match: "alchemists-fire-50-gp" (shortest prefix match)
    ```
 
-3. **No match** → Fallback
+4. **No match** → Fallback
    ```
    Anchor: "nonexistent"
    Match: null → Apply fallback style
@@ -204,12 +213,20 @@ function findMatchingAnchor(
   anchor: string,
   validAnchors: string[],
 ): string | null {
-  // 1. Exact match (includes plural/singular variants)
+  // 1. Exact match
   if (validAnchors.includes(anchor)) {
     return anchor;
   }
 
-  // 2. Prefix matching
+  // 2. Normalized match (strips trailing 's' for singular/plural)
+  const normalizedSearch = normalizeAnchorForMatching(anchor);
+  for (const valid of validAnchors) {
+    if (normalizeAnchorForMatching(valid) === normalizedSearch) {
+      return valid;
+    }
+  }
+
+  // 3. Prefix matching
   const prefixMatches = validAnchors.filter((valid) =>
     valid.startsWith(anchor + "-"),
   );

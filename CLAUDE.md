@@ -314,14 +314,16 @@ The resolver transforms D&D Beyond links into local markdown links, enabling sea
 
 **Smart Anchor Matching:**
 
-1. **Exact match** (including plural/singular variants)
-2. **Prefix match** for headers with suffixes
+1. **Exact match**
+2. **Normalized match** (strips trailing 's' from words for singular/plural matching)
+   - Example: `#potion-of-healing` matches `#potions-of-healing`
+3. **Prefix match** for headers with suffixes
    - Example: `#alchemists-fire` matches `#alchemists-fire-50-gp`
-3. Uses shortest match if multiple candidates
+4. Uses shortest match if multiple candidates
 
 **Anchor Building (Processor):**
 
-- `FileAnchors.valid: string[]` - All markdown anchors with plural/singular variants
+- `FileAnchors.valid: string[]` - All markdown anchors from headings
 - `FileAnchors.htmlIdToAnchor: Record<string, string>` - HTML element IDs → markdown anchors
 - Example: `<h2 id="Bell1GP">Bell (1 GP)</h2>` → `{ "Bell1GP": "bell-1-gp" }`
 
@@ -517,7 +519,7 @@ export type SourcebookMetadata = z.infer<typeof SourcebookMetadataSchema>;
   - `bookUrl?`: Book-level URL (e.g., `/sources/dnd/phb-2024`)
   - `id`, `title`, `sourcebook`, `outputPath`
 - `FileAnchors` - Anchor data for a single file:
-  - `valid: string[]` - All markdown anchors with plural/singular variants
+  - `valid: string[]` - All markdown anchors from headings
   - `htmlIdToAnchor: Record<string, string>` - HTML element IDs → markdown anchors
 - `ParsedEntityUrl` - Extracted entity URL data:
   - `type`: Entity type (spells, monsters, etc.)
@@ -560,7 +562,7 @@ src/
 │   ├── filename-to-title.ts # Convert filenames to readable titles
 │   ├── find-matching-anchor.ts # Smart anchor matching
 │   ├── generate-anchor.ts   # GitHub-style anchor generation
-│   ├── generate-anchor-variants.ts # Plural/singular variants
+│   ├── generate-anchor-variants.ts # Anchor normalization for matching
 │   ├── get-default-file-template.ts
 │   ├── get-default-index-template.ts
 │   ├── id-generator.ts      # Unique ID generation
@@ -675,7 +677,7 @@ Utilities are organized as focused, single-purpose functions in `src/utils/`:
 **Anchor utilities:**
 - `generate-anchor.ts` - GitHub-style anchor generation
 - `normalize-anchor.ts` - Anchor normalization
-- `generate-anchor-variants.ts` - Plural/singular variants
+- `generate-anchor-variants.ts` - Anchor normalization for matching
 - `find-matching-anchor.ts` - Smart anchor matching with prefix support
 
 ## Example Files

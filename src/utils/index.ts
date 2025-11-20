@@ -5,7 +5,7 @@
 // Anchor utilities
 export { generateAnchor } from "./generate-anchor";
 export { normalizeAnchor } from "./normalize-anchor";
-export { generateAnchorVariants } from "./generate-anchor-variants";
+export { normalizeAnchorForMatching } from "./generate-anchor-variants";
 export { findMatchingAnchor } from "./find-matching-anchor";
 
 // URL utilities

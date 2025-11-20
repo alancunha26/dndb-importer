@@ -1,18 +1,15 @@
 /**
- * Generate plural and singular variants of an anchor
+ * Normalize an anchor by stripping trailing 's' from each word segment
+ * This allows matching singular/plural forms without complex pluralization rules
  *
  * @example
- * generateAnchorVariants("spell") // ["spell", "spells"]
- * generateAnchorVariants("spells") // ["spells", "spell"]
+ * normalizeAnchorForMatching("potions-of-healing") // "potion-of-healing"
+ * normalizeAnchorForMatching("spells") // "spell"
+ * normalizeAnchorForMatching("staffs") // "staff"
  */
-export function generateAnchorVariants(anchor: string): string[] {
-  const variants = [anchor];
-
-  if (anchor.endsWith("s")) {
-    variants.push(anchor.slice(0, -1));
-  } else {
-    variants.push(anchor + "s");
-  }
-
-  return variants;
+export function normalizeAnchorForMatching(anchor: string): string {
+  return anchor
+    .split("-")
+    .map((word) => (word.endsWith("s") && word.length > 1 ? word.slice(0, -1) : word))
+    .join("-");
 }

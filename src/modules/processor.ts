@@ -17,7 +17,6 @@ import {
   isImageUrl,
   extractIdFromFilename,
   generateAnchor,
-  generateAnchorVariants,
   parseEntityUrl,
   loadIndexTemplate,
   loadFileTemplate,
@@ -165,7 +164,7 @@ export async function process(ctx: ConversionContext): Promise<void> {
 
       const anchor = generateAnchor(text);
       if (anchor) {
-        valid.push(...generateAnchorVariants(anchor));
+        valid.push(anchor);
         if (htmlId) {
           htmlIdToAnchor[htmlId] = anchor;
         }
