@@ -47,6 +47,7 @@ export async function convertCommand(opts: Options): Promise<void> {
     const ctx: ConversionContext = {
       config,
       tracker,
+      verbose: options.verbose,
     };
 
     // Run conversion pipeline with spinner updates
@@ -63,8 +64,8 @@ export async function convertCommand(opts: Options): Promise<void> {
     spinner.clear();
     spinner.stop();
 
-    // Display stats
-    modules.stats(tracker, options.verbose ?? false);
+    // Export and display stats
+    await modules.stats(ctx);
   } catch (error) {
     spinner.fail("Conversion failed");
     console.error(error);

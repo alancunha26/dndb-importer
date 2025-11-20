@@ -94,9 +94,9 @@ dndb-convert config
 
 **Config locations by OS:**
 
-- **Linux:** `$XDG_CONFIG_HOME/dndbeyond-importer/config.json` (defaults to `~/.config/dndbeyond-importer/config.json`)
-- **macOS:** `~/Library/Preferences/dndbeyond-importer/config.json`
-- **Windows:** `%APPDATA%\dndbeyond-importer\config.json`
+- **Linux:** `$XDG_CONFIG_HOME/dndb-importer/config.json` (defaults to `~/.config/dndbeyond-importer/config.json`)
+- **macOS:** `~/Library/Preferences/dndb-importer/config.json`
+- **Windows:** `%APPDATA%\dndb-importer\config.json`
 
 Create a `config.json` in your OS-specific directory to customize settings. See `src/config/default.json` for all available options.
 
@@ -106,72 +106,78 @@ The configuration system follows the XDG Base Directory specification on Linux a
 
 Here's the complete default configuration with explanations for each option:
 
-```jsonc
+````jsonc
 {
   // === Input/Output Directories ===
-  "input": "./input",                  // Where your downloaded HTML files are located
-  "output": "./output",                // Where to write converted markdown files
+  "input": "./input", // Where your downloaded HTML files are located
+  "output": "./output", // Where to write converted markdown files
 
   // === Unique ID Settings ===
   "ids": {
-    "length": 4,                     // Length of generated IDs (e.g., "a3f9")
-    "characters": "abcdefghijklmnopqrstuvwxyz0123456789"  // Character set for IDs
+    "length": 4, // Length of generated IDs (e.g., "a3f9")
+    "characters": "abcdefghijklmnopqrstuvwxyz0123456789", // Character set for IDs
   },
 
   // === Markdown Formatting ===
   // Customize how your markdown is generated to match your preferred style
   // or tool requirements (Obsidian, GitHub, CommonMark, etc.)
   "markdown": {
-    "headingStyle": "atx",           // "atx" (# Heading) or "setext" (underlined)
-    "codeBlockStyle": "fenced",      // "fenced" (```) or "indented" (4 spaces)
-    "emphasis": "_",                 // "_" or "*" for italic text
-    "strong": "**",                  // "**" or "__" for bold text
-    "bulletMarker": "-",             // "-", "+", or "*" for unordered lists
-    "linkStyle": "inlined",          // "inlined" [text](url) or "referenced" [text][ref]
-    "linkReferenceStyle": "full",    // "full", "collapsed", or "shortcut" (for referenced links)
-    "horizontalRule": "---",         // Any string (e.g., "---", "* * *", "___")
-    "lineBreak": "  ",               // Two spaces for soft line breaks
-    "codeFence": "```",              // "```" or "~~~" for fenced code blocks
-    "preformattedCode": false        // Preserve preformatted code blocks
+    "headingStyle": "atx", // "atx" (# Heading) or "setext" (underlined)
+    "codeBlockStyle": "fenced", // "fenced" (```) or "indented" (4 spaces)
+    "emphasis": "_", // "_" or "*" for italic text
+    "strong": "**", // "**" or "__" for bold text
+    "bulletMarker": "-", // "-", "+", or "*" for unordered lists
+    "linkStyle": "inlined", // "inlined" [text](url) or "referenced" [text][ref]
+    "linkReferenceStyle": "full", // "full", "collapsed", or "shortcut" (for referenced links)
+    "horizontalRule": "---", // Any string (e.g., "---", "* * *", "___")
+    "lineBreak": "  ", // Two spaces for soft line breaks
+    "codeFence": "```", // "```" or "~~~" for fenced code blocks
+    "preformattedCode": false, // Preserve preformatted code blocks
   },
 
   // === HTML Parsing ===
   "html": {
-    "contentSelector": ".p-article-content",  // CSS selector for main content
-    "removeSelectors": []                     // CSS selectors for elements to remove
+    "contentSelector": ".p-article-content", // CSS selector for main content
+    "removeSelectors": [], // CSS selectors for elements to remove
   },
 
   // === Image Download Settings ===
   "images": {
-    "download": true,                // Enable/disable image downloading
-    "formats": ["png", "jpg", "jpeg", "webp", "gif"],  // Allowed image formats
-    "maxSize": 10485760,             // Maximum image size in bytes (10MB)
-    "timeout": 30000,                // Download timeout in milliseconds (30s)
-    "retries": 3                     // Number of retry attempts for failed downloads
+    "download": true, // Enable/disable image downloading
+    "formats": ["png", "jpg", "jpeg", "webp", "gif"], // Allowed image formats
+    "maxSize": 10485760, // Maximum image size in bytes (10MB)
+    "timeout": 30000, // Download timeout in milliseconds (30s)
+    "retries": 3, // Number of retry attempts for failed downloads
   },
 
   // === Link Resolution ===
   "links": {
-    "resolveInternal": true,         // Enable/disable link resolution
-    "fallbackStyle": "bold",         // How to format unresolved links: "bold", "italic", "plain", "none"
-    "urlAliases": {                  // Map URLs to canonical forms
+    "resolveInternal": true, // Enable/disable link resolution
+    "fallbackStyle": "bold", // How to format unresolved links: "bold", "italic", "plain", "none"
+    "urlAliases": {
+      // Map URLs to canonical forms
       // Source aliasing (Free Rules → PHB)
       "/sources/dnd/free-rules/equipment": "/sources/dnd/phb-2024/equipment",
       // Entity aliasing (variant items → base items)
-      "/magic-items/4585-belt-of-hill-giant-strength": "/magic-items/5372-belt-of-giant-strength"
+      "/magic-items/4585-belt-of-hill-giant-strength": "/magic-items/5372-belt-of-giant-strength",
     },
-    "entityLocations": {             // Map entity types to allowed source pages
+    "entityLocations": {
+      // Map entity types to allowed source pages
       "spells": ["/sources/dnd/phb-2024/spell-descriptions"],
-      "monsters": ["/sources/dnd/mm-2024/monsters-a", "/sources/dnd/mm-2024/monsters-b"],
-      "magic-items": ["/sources/dnd/dmg-2024/magic-items"]
-    }
-  }
+      "monsters": [
+        "/sources/dnd/mm-2024/monsters-a",
+        "/sources/dnd/mm-2024/monsters-b",
+      ],
+      "magic-items": ["/sources/dnd/dmg-2024/magic-items"],
+    },
+  },
 }
-```
+````
 
 **Markdown Configuration Notes:**
 
 All markdown settings are respected throughout the conversion:
+
 - **Templates**: Index and file frontmatter formatting
 - **Content**: All Turndown-converted HTML
 - **Custom Rules**: Figure captions, flexible columns, headings
@@ -179,6 +185,7 @@ All markdown settings are respected throughout the conversion:
 **Configuration Priority:**
 
 Configs are deep-merged with this priority order (lowest to highest):
+
 1. Default config (shown above)
 2. User config (OS-specific location)
 3. Custom config (via `--config` flag)
@@ -186,6 +193,7 @@ Configs are deep-merged with this priority order (lowest to highest):
 **Hardcoded Values:**
 
 These settings are not configurable:
+
 - File pattern: `**/*.html`
 - File encoding: `utf-8`
 - Output extension: `.md`
@@ -195,69 +203,53 @@ These settings are not configurable:
 
 The converter tracks issues silently during processing and displays a summary at the end. Issues are categorized by type and reason for easier debugging.
 
+A `stats.json` file is generated in the output directory with detailed statistics and all issues grouped by type and reason. This is useful for debugging link resolution issues and updating `urlAliases` configuration.
+
 ### Issue Types
 
-| Type | Description |
-|------|-------------|
-| `file` | Problems processing source HTML files |
-| `image` | Problems downloading or copying images |
-| `resource` | Problems loading config, metadata, or mapping files |
-| `link` | Links that couldn't be resolved and fell back to bold text |
+| Type       | Description                                                |
+| ---------- | ---------------------------------------------------------- |
+| `file`     | Problems processing source HTML files                      |
+| `image`    | Problems downloading or copying images                     |
+| `resource` | Problems loading config, metadata, or mapping files        |
+| `link`     | Links that couldn't be resolved and fell back to bold text |
 
 ### Issue Reasons
 
 #### File Issues
 
-| Reason | Description |
-|--------|-------------|
-| `parse-error` | HTML parsing or Markdown conversion failed |
-| `read-error` | Could not read the source file (permissions, not found) |
+| Reason        | Description                                              |
+| ------------- | -------------------------------------------------------- |
+| `parse-error` | HTML parsing or Markdown conversion failed               |
+| `read-error`  | Could not read the source file (permissions, not found)  |
 | `write-error` | Could not write the output file (permissions, disk full) |
 
 #### Image Issues
 
-| Reason | Description |
-|--------|-------------|
-| `download-failed` | Network error while downloading image from D&D Beyond |
-| `timeout` | Image download exceeded the configured timeout |
-| `not-found` | Local image file not found (for cover images) |
-| `invalid-response` | Server returned an error status (4xx, 5xx) |
+| Reason             | Description                                           |
+| ------------------ | ----------------------------------------------------- |
+| `download-failed`  | Network error while downloading image from D&D Beyond |
+| `timeout`          | Image download exceeded the configured timeout        |
+| `not-found`        | Local image file not found (for cover images)         |
+| `invalid-response` | Server returned an error status (4xx, 5xx)            |
 
 #### Resource Issues
 
-| Reason | Description |
-|--------|-------------|
-| `invalid-json` | JSON file has syntax errors |
+| Reason              | Description                             |
+| ------------------- | --------------------------------------- |
+| `invalid-json`      | JSON file has syntax errors             |
 | `schema-validation` | JSON file doesn't match expected schema |
-| `read-error` | Could not read the resource file |
+| `read-error`        | Could not read the resource file        |
 
 #### Link Issues
 
-| Reason | Description |
-|--------|-------------|
-| `url-not-in-mapping` | URL path not found in any converted file |
-| `entity-not-found` | Entity (spell, monster, etc.) not found in index |
-| `anchor-not-found` | Target anchor doesn't exist in the target file |
-| `header-link` | Page-level link without anchor (converted to bold) |
-| `no-anchors` | Target file has no anchor data |
-
-### Example Output
-
-```
-Files processed: 59/59
-Images downloaded: 0
-Links resolved: 15107
-
-⚠️  1495 link(s) fell back to bold text:
-
-Breakdown by reason:
-  - url-not-in-mapping: 633
-  - entity-not-found: 595
-  - header-link: 255
-  - anchor-not-found: 12
-
-Duration: 4.48s
-```
+| Reason               | Description                                        |
+| -------------------- | -------------------------------------------------- |
+| `url-not-in-mapping` | URL path not found in any converted file           |
+| `entity-not-found`   | Entity (spell, monster, etc.) not found in index   |
+| `anchor-not-found`   | Target anchor doesn't exist in the target file     |
+| `header-link`        | Page-level link without anchor (converted to bold) |
+| `no-anchors`         | Target file has no anchor data                     |
 
 ## Templates
 
@@ -274,6 +266,7 @@ The converter supports customizable Handlebars templates for both index pages an
 **Index Template** (`index.md.hbs`) - Generates sourcebook table of contents
 
 Available variables:
+
 - `title` - Sourcebook title
 - `edition` - Edition string (from metadata)
 - `description` - Sourcebook description (from metadata)
@@ -286,6 +279,7 @@ Available variables:
 **File Template** (`file.md.hbs`) - Generates individual chapter/file pages
 
 Available variables:
+
 - `title` - File title (extracted from filename)
 - `date` - Current date (YYYY-MM-DD)
 - `tags` - Array of tags
@@ -296,26 +290,25 @@ Available variables:
 ### Example Custom Template
 
 ```handlebars
----
-title: "{{{title}}}"
-edition: "{{{edition}}}"
-date: {{date}}
----
-
-# {{{title}}}
+--- title: "{{{title}}}" edition: "{{{edition}}}" date:
+{{date}}
+--- #
+{{{title}}}
 
 {{#if edition}}
-**Edition:** {{{edition}}}
+  **Edition:**
+  {{{edition}}}
 {{/if}}
 
 {{#if description}}
-> {{{description}}}
+  >
+  {{{description}}}
 {{/if}}
 
 ## Contents
 
 {{#each files}}
-{{@index}}. [{{{this.title}}}]({{{this.filename}}})
+  {{@index}}. [{{{this.title}}}]({{{this.filename}}})
 {{/each}}
 ```
 

@@ -65,13 +65,14 @@ export const ConversionConfigSchema = z.object({
   links: LinksConfigSchema,
 });
 
-export const PartialConversionConfigSchema = ConversionConfigSchema.partial().extend({
-  ids: IdConfigSchema.partial().optional(),
-  markdown: MarkdownConfigSchema.partial().optional(),
-  html: HtmlConfigSchema.partial().optional(),
-  images: ImagesConfigSchema.partial().optional(),
-  links: LinksConfigSchema.partial().optional(),
-});
+export const PartialConversionConfigSchema =
+  ConversionConfigSchema.partial().extend({
+    ids: IdConfigSchema.partial().optional(),
+    markdown: MarkdownConfigSchema.partial().optional(),
+    html: HtmlConfigSchema.partial().optional(),
+    images: ImagesConfigSchema.partial().optional(),
+    links: LinksConfigSchema.partial().optional(),
+  });
 
 export type InputConfig = z.infer<typeof InputConfigSchema>;
 export type OutputConfig = z.infer<typeof OutputConfigSchema>;
@@ -180,6 +181,7 @@ export interface ConversionContext {
   files?: FileDescriptor[];
   sourcebooks?: SourcebookInfo[];
   globalTemplates?: TemplateSet;
+  verbose?: boolean;
 }
 
 // ============================================================================
@@ -306,4 +308,3 @@ export interface ConfigError {
   path: string;
   error: unknown;
 }
-

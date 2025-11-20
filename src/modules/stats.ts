@@ -11,6 +11,7 @@ import type {
   FileIssue,
   ResourceIssue,
   ProcessingStats,
+  ConversionContext,
 } from "../types";
 
 // ============================================================================
@@ -36,7 +37,11 @@ function formatDuration(ms: number): string {
 /**
  * Create a modern progress bar with percentage
  */
-function progressBar(current: number, total: number, width: number = 24): string {
+function progressBar(
+  current: number,
+  total: number,
+  width: number = 24,
+): string {
   if (total === 0) return chalk.dim("─".repeat(width));
 
   const percentage = current / total;
@@ -74,9 +79,12 @@ function sectionHeader(title: string): string {
 // ============================================================================
 
 /**
- * Display processing statistics to console with beautiful formatting
+ * Export stats to JSON and display processing statistics to console
  */
-export function stats(tracker: Tracker, verbose: boolean): void {
+export async function stats(ctx: ConversionContext): Promise<void> {
+  const { config, tracker, verbose } = ctx;
+  await tracker.exportStats(config.output);
+
   const stats = tracker.getStats();
   const linkIssues = tracker.getIssues("link") as LinkIssue[];
   const hasWarnings = linkIssues.length > 0 || stats.failedImages > 0;
@@ -123,18 +131,26 @@ function displayFilesSection(stats: ProcessingStats): void {
   console.log(`   ${bar}`);
 
   // Details
-  console.log(statRow(chalk.green("◉"), "Processed", stats.successfulFiles, chalk.green));
+  console.log(
+    statRow(chalk.green("◉"), "Processed", stats.successfulFiles, chalk.green),
+  );
 
   if (stats.failedFiles > 0) {
-    console.log(statRow(chalk.red("◉"), "Failed", stats.failedFiles, chalk.red));
+    console.log(
+      statRow(chalk.red("◉"), "Failed", stats.failedFiles, chalk.red),
+    );
   }
 
   if (stats.skippedFiles > 0) {
-    console.log(statRow(chalk.yellow("◉"), "Skipped", stats.skippedFiles, chalk.yellow));
+    console.log(
+      statRow(chalk.yellow("◉"), "Skipped", stats.skippedFiles, chalk.yellow),
+    );
   }
 
   if (stats.createdIndexes > 0) {
-    console.log(statRow(chalk.cyan("◉"), "Indexes", stats.createdIndexes, chalk.cyan));
+    console.log(
+      statRow(chalk.cyan("◉"), "Indexes", stats.createdIndexes, chalk.cyan),
+    );
   }
 }
 
@@ -153,22 +169,33 @@ function displayImagesSection(stats: ProcessingStats): void {
   console.log(`   ${bar}`);
 
   if (stats.downloadedImages > 0) {
-    console.log(statRow(chalk.green("◉"), "Downloaded", stats.downloadedImages, chalk.green));
+    console.log(
+      statRow(
+        chalk.green("◉"),
+        "Downloaded",
+        stats.downloadedImages,
+        chalk.green,
+      ),
+    );
   }
 
   if (stats.cachedImages > 0) {
-    console.log(statRow(chalk.cyan("◉"), "Cached", stats.cachedImages, chalk.cyan));
+    console.log(
+      statRow(chalk.cyan("◉"), "Cached", stats.cachedImages, chalk.cyan),
+    );
   }
 
   if (stats.failedImages > 0) {
-    console.log(statRow(chalk.red("◉"), "Failed", stats.failedImages, chalk.red));
+    console.log(
+      statRow(chalk.red("◉"), "Failed", stats.failedImages, chalk.red),
+    );
   }
 }
 
 function displayLinksSection(
   stats: ProcessingStats,
   tracker: Tracker,
-  verbose: boolean,
+  verbose?: boolean,
 ): void {
   const linkIssues = tracker.getIssues("link") as LinkIssue[];
   const unresolvedLinks = linkIssues.length;
@@ -184,10 +211,14 @@ function displayLinksSection(
   const bar = progressBar(stats.resolvedLinks, totalLinks);
   console.log(`   ${bar}`);
 
-  console.log(statRow(chalk.green("◉"), "Resolved", stats.resolvedLinks, chalk.green));
+  console.log(
+    statRow(chalk.green("◉"), "Resolved", stats.resolvedLinks, chalk.green),
+  );
 
   if (unresolvedLinks > 0) {
-    console.log(statRow(chalk.yellow("◉"), "Unresolved", unresolvedLinks, chalk.yellow));
+    console.log(
+      statRow(chalk.yellow("◉"), "Unresolved", unresolvedLinks, chalk.yellow),
+    );
 
     // Show link issue breakdown
     displayLinkIssueBreakdown(linkIssues, verbose);
@@ -196,7 +227,7 @@ function displayLinksSection(
 
 function displayLinkIssueBreakdown(
   linkIssues: LinkIssue[],
-  verbose: boolean,
+  verbose?: boolean,
 ): void {
   // Group by reason
   const reasonCounts = new Map<string, number>();
@@ -222,7 +253,9 @@ function displayLinkIssueBreakdown(
   console.log("");
   for (const [reason, count] of sortedReasons) {
     const label = reasonLabels[reason] || reason;
-    console.log(`      ${chalk.dim("›")} ${chalk.dim(label.padEnd(18))} ${chalk.yellow(count)}`);
+    console.log(
+      `      ${chalk.dim("›")} ${chalk.dim(label.padEnd(18))} ${chalk.yellow(count)}`,
+    );
   }
 
   // Display examples in verbose mode
@@ -242,10 +275,7 @@ function displayLinkIssueBreakdown(
   }
 }
 
-function displayIssuesSection(
-  tracker: Tracker,
-  verbose: boolean,
-): void {
+function displayIssuesSection(tracker: Tracker, verbose?: boolean): void {
   const fileIssues = tracker.getIssues("file") as FileIssue[];
   const imageIssues = tracker.getIssues("image") as ImageIssue[];
   const resourceIssues = tracker.getIssues("resource") as ResourceIssue[];
@@ -263,7 +293,9 @@ function displayIssuesSection(
 
   // File issues
   if (fileIssues.length > 0) {
-    console.log(statRow(chalk.red("✖"), "Files failed", fileIssues.length, chalk.red));
+    console.log(
+      statRow(chalk.red("✖"), "Files failed", fileIssues.length, chalk.red),
+    );
     if (verbose) {
       for (const issue of fileIssues) {
         console.log(`      ${chalk.dim("·")} ${issue.path}`);
@@ -276,7 +308,14 @@ function displayIssuesSection(
 
   // Image issues
   if (imageIssues.length > 0) {
-    console.log(statRow(chalk.yellow("✖"), "Images failed", imageIssues.length, chalk.yellow));
+    console.log(
+      statRow(
+        chalk.yellow("✖"),
+        "Images failed",
+        imageIssues.length,
+        chalk.yellow,
+      ),
+    );
     if (verbose) {
       for (const issue of imageIssues.slice(0, 5)) {
         console.log(`      ${chalk.dim("·")} ${issue.path}`);
@@ -289,7 +328,14 @@ function displayIssuesSection(
 
   // Resource issues
   if (resourceIssues.length > 0) {
-    console.log(statRow(chalk.yellow("✖"), "Resources failed", resourceIssues.length, chalk.yellow));
+    console.log(
+      statRow(
+        chalk.yellow("✖"),
+        "Resources failed",
+        resourceIssues.length,
+        chalk.yellow,
+      ),
+    );
     if (verbose) {
       for (const issue of resourceIssues) {
         console.log(`      ${chalk.dim("·")} ${issue.path}`);

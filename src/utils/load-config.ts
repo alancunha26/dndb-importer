@@ -12,7 +12,7 @@ import {
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
-const paths = envPaths("dndbeyond-importer", { suffix: "" });
+const paths = envPaths("dndb-importer", { suffix: "" });
 
 function getConfigDirectory(): string {
   return paths.config;

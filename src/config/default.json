@@ -111,11 +111,14 @@
     },
     "entityLocations": {
       "spells": ["/sources/dnd/phb-2024/spell-descriptions"],
-      "magic-items": ["/sources/dnd/dmg-2024/magic-items"],
       "equipment": ["/sources/dnd/phb-2024/equipment"],
       "backgrounds": ["/sources/dnd/phb-2024/character-origins"],
       "feats": ["/sources/dnd/phb-2024/feats"],
       "species": ["/sources/dnd/phb-2024/character-origins"],
+      "magic-items": [
+        "/sources/dnd/dmg-2024/magic-items",
+        "/sources/dnd/phb-2024/equipment"
+      ],
       "classes": [
         "/sources/dnd/phb-2024/character-classes",
         "/sources/dnd/phb-2024/character-classes-continued"

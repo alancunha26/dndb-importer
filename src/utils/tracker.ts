@@ -3,6 +3,8 @@
  * Unified tracking for stats and issues
  */
 
+import { writeFile } from "fs/promises";
+import { join } from "path";
 import { ZodError } from "zod";
 import type {
   ConversionConfig,
@@ -12,6 +14,10 @@ import type {
   ImageIssueReason,
   ResourceIssueReason,
   LinkIssueReason,
+  LinkIssue,
+  FileIssue,
+  ImageIssue,
+  ResourceIssue,
   ProcessingStats,
 } from "../types";
 
@@ -228,5 +234,88 @@ export class Tracker {
       issues: this.issues,
       duration,
     };
+  }
+
+  // ============================================================================
+  // Export
+  // ============================================================================
+
+  async exportStats(outputDir: string): Promise<void> {
+    const stats = this.getStats();
+    const linkIssues = this.getIssues("link") as LinkIssue[];
+
+    const exported = {
+      summary: {
+        totalFiles: stats.totalFiles,
+        successfulFiles: stats.successfulFiles,
+        failedFiles: stats.failedFiles,
+        skippedFiles: stats.skippedFiles,
+        downloadedImages: stats.downloadedImages,
+        cachedImages: stats.cachedImages,
+        failedImages: stats.failedImages,
+        resolvedLinks: stats.resolvedLinks,
+        unresolvedLinks: linkIssues.length,
+        createdIndexes: stats.createdIndexes,
+        duration: stats.duration,
+      },
+      issues: this.groupIssuesByTypeAndReason(),
+    };
+
+    const outputPath = join(outputDir, "stats.json");
+    await writeFile(outputPath, JSON.stringify(exported, null, 2), "utf-8");
+  }
+
+  private groupIssuesByTypeAndReason(): {
+    file: Record<string, FileIssue[]>;
+    image: Record<string, ImageIssue[]>;
+    resource: Record<string, ResourceIssue[]>;
+    link: Record<string, LinkIssue[]>;
+  } {
+    const grouped: {
+      file: Record<string, FileIssue[]>;
+      image: Record<string, ImageIssue[]>;
+      resource: Record<string, ResourceIssue[]>;
+      link: Record<string, LinkIssue[]>;
+    } = {
+      file: {},
+      image: {},
+      resource: {},
+      link: {},
+    };
+
+    for (const issue of this.issues) {
+      switch (issue.type) {
+        case "file": {
+          if (!grouped.file[issue.reason]) {
+            grouped.file[issue.reason] = [];
+          }
+          grouped.file[issue.reason].push(issue);
+          break;
+        }
+        case "image": {
+          if (!grouped.image[issue.reason]) {
+            grouped.image[issue.reason] = [];
+          }
+          grouped.image[issue.reason].push(issue);
+          break;
+        }
+        case "resource": {
+          if (!grouped.resource[issue.reason]) {
+            grouped.resource[issue.reason] = [];
+          }
+          grouped.resource[issue.reason].push(issue);
+          break;
+        }
+        case "link": {
+          if (!grouped.link[issue.reason]) {
+            grouped.link[issue.reason] = [];
+          }
+          grouped.link[issue.reason].push(issue);
+          break;
+        }
+      }
+    }
+
+    return grouped;
   }
 }
