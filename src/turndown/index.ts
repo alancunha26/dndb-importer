@@ -6,7 +6,7 @@
 import TurndownService from "turndown";
 import { gfm } from "@truto/turndown-plugin-gfm";
 import type { MarkdownConfig } from "../types";
-import { removeHeadingLinks, unwrapLinkedImages, imageAltText, figureCaptionRule, asideRule, flexibleColumnsRule, tableRule } from "./rules";
+import { removeHeadingLinks, unwrapLinkedImages, imageAltText, figureCaptionRule, asideRule, flexibleColumnsRule, tableRule, statBlockRules } from "./rules";
 
 export function createTurndownService(
   config: MarkdownConfig,
@@ -37,6 +37,7 @@ export function createTurndownService(
   turndownService.use(asideRule(config));
   turndownService.use(flexibleColumnsRule(config));
   turndownService.use(tableRule(config)); // Override GFM table rule for D&D Beyond tables
+  turndownService.use(statBlockRules());
 
   return turndownService;
 }

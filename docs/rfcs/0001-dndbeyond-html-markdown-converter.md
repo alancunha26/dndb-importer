@@ -6,7 +6,7 @@
 
 **Created:** 2025-11-15
 
-**Updated:** 2025-11-18
+**Updated:** 2025-11-20
 
 ## Summary
 
@@ -62,7 +62,7 @@ flowchart TD
     LoadConfig --> |Zod validation<br/>Track errors| InitCtx[Initialize ConversionContext]
 
     InitCtx --> Scanner[Scanner Module]
-    Scanner --> |Discover HTML files<br/>Assign unique IDs<br/>Load metadata<br/>Detect templates| ScannerWrite[Write to context:<br/>files, sourcebooks,<br/>fileIndex, pathIndex,<br/>globalTemplates]
+    Scanner --> |Discover HTML files<br/>Assign unique IDs<br/>Load metadata<br/>Detect templates| ScannerWrite[Write to context:<br/>files, sourcebooks,<br/>globalTemplates]
 
     ScannerWrite --> Processor[Processor Module]
     Processor --> |For each file:<br/>Parse HTML<br/>Convert to Markdown<br/>Download images<br/>Write to disk| ProcessorWrite[Files written<br/>with anchors]
@@ -90,9 +90,15 @@ flowchart TD
 A shared `ConversionContext` object flows through all modules, containing:
 
 - **Configuration** - User settings and preferences
-- **Error Tracking** - Three categories (files, images, resources)
-- **Pipeline Data** - File descriptors, sourcebook metadata, mappings
-- **Statistics** - Processing metrics
+- **Tracker** - Unified stats and issue tracking
+- **Pipeline Data** - File descriptors, sourcebook metadata, templates
+- **Statistics** - Processing metrics via Tracker
+
+The `Tracker` class provides:
+- Counter methods for files, images, and links
+- Issue tracking with typed reasons (file/image/resource/link)
+- Automatic error classification (Zod errors, HTTP errors, file system errors)
+- Final stats aggregation
 
 This approach eliminates the need for complex module interfaces or message passing systems.
 
@@ -321,63 +327,48 @@ Context-based approach is simple, testable, and flexible.
 
 ### Link Resolution Strategy
 
-**Decision:** Multi-stage resolution with user-provided URL mapping, automatic ID resolution, and anchor validation.
+**Decision:** Multi-stage resolution with entity-aware routing, URL aliasing, and smart anchor matching.
 
 **Architecture:**
 
-The link resolution system spans three pipeline stages:
+The link resolution system uses a three-stage pipeline:
 
-**1. Scanner Stage - Build URL to ID Mapping**
+1. **Scanner** - Discovers files and extracts canonical URLs
+2. **Processor** - Builds anchors and extracts entity URLs from HTML
+3. **Resolver** - Resolves links using entity index and URL mapping
 
-- Loads user's URL mapping from config: `D&D Beyond URL → HTML file path`
-- Builds runtime mapping as files are discovered: `HTML file path → unique ID`
-- Combined result provides: `D&D Beyond URL → unique ID`
+**Key Concepts:**
 
-**2. Processor Stage - Build Anchor Index**
-
-- For each file during HTML processing:
-  - Extracts all headings and generates markdown anchors
-  - Creates plural/singular variants for better matching
-  - Maps HTML element IDs to markdown anchors (for same-page links)
-- Stores `FileAnchors` with file metadata:
-  - `valid: string[]` - All valid anchor targets
-  - `htmlIdToAnchor: Record<string, string>` - HTML ID mappings
-
-**3. Resolver Stage - Resolve and Validate**
-
-- Builds unified `LinkResolutionIndex` from all file anchors
-- For each markdown file:
-  - Finds D&D Beyond links
-  - Looks up target file ID via URL mapping
-  - Validates anchor exists in target file with smart matching:
-    - Exact match (including plural/singular variants)
-    - Prefix match for headers with suffixes (e.g., "Alchemist's Fire" matches "Alchemist's Fire (50 GP)")
-    - Uses shortest match if multiple candidates
-  - Rewrites link: `[Text](dndbeyond.com/...)` → `[Text](a3f9.md#anchor)`
-  - Falls back to bold text if configured and unresolved
+- **Entity Index** - Maps entity URLs (spells, monsters, etc.) to file locations
+- **Entity Locations** - Config that routes entity types to specific source pages
+- **URL Aliasing** - Maps alternate URLs to canonical forms (Free Rules → PHB)
+- **Smart Anchor Matching** - Handles plural/singular variants and prefix matching
 
 **Rationale:**
 
-- **Minimal user configuration** - Users only map URLs to HTML files, system handles IDs
-- **Automatic validation** - Prevents broken links in output
-- **Flexible fallback** - Configurable behavior for unresolved links
-- **Smart matching** - Handles D&D Beyond's naming patterns (plurals, suffixes)
-- **Separation of concerns** - Each pipeline stage has distinct responsibility
+- **Entity-aware routing** - Prevents spells resolving to monster pages with matching anchors
+- **URL normalization** - Single canonical URL per page simplifies resolution
+- **Automatic validation** - Broken links fall back gracefully
+- **Configurable fallback** - Users choose bold, italic, plain, or keep original
+- **Memory efficient** - Processes one file at a time
 
-**Configuration Example:**
+**Configuration:**
 
 ```json
 {
   "links": {
     "resolveInternal": true,
-    "fallbackToBold": true,
-    "urlMapping": {
-      "/sources/dnd/phb-2024/equipment": "players-handbook/08-equipment.html",
-      "/spells": "players-handbook/10-spell-descriptions.html"
+    "fallbackStyle": "bold",
+    "urlAliases": { /* URL → canonical URL */ },
+    "entityLocations": {
+      "spells": ["/sources/dnd/phb-2024/spell-descriptions"],
+      "monsters": ["/sources/dnd/mm-2024/monsters-a", ...]
     }
   }
 }
 ```
+
+See `docs/resolver.md` for detailed implementation documentation.
 
 ### HTML Preprocessing vs Turndown Rules
 

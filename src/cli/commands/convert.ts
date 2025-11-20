@@ -4,7 +4,7 @@
 
 import ora from "ora";
 import { z } from "zod";
-import { loadConfig } from "../../utils/config";
+import { loadConfig, Tracker } from "../../utils";
 import * as modules from "../../modules";
 import type { ConversionContext } from "../../types";
 
@@ -19,7 +19,7 @@ const ConvertOptionsSchema = z.object({
 type Options = z.infer<typeof ConvertOptionsSchema>;
 
 export async function convertCommand(opts: Options): Promise<void> {
-  const spinner = ora("Initializing...").start();
+  const spinner = ora({ text: "Initializing...", indent: 2 }).start();
 
   try {
     // Validate CLI options
@@ -30,23 +30,24 @@ export async function convertCommand(opts: Options): Promise<void> {
 
     // Override with CLI options
     if (options.input) {
-      config.input.directory = options.input;
+      config.input = options.input;
     }
     if (options.output) {
-      config.output.directory = options.output;
-    }
-    if (options.verbose) {
-      config.logging.level = "debug";
+      config.output = options.output;
     }
 
-    // Initialize context with config errors
+    // Initialize tracker and context
+    const tracker = new Tracker(config);
+
+    // Add any config loading errors to tracker
+    for (const err of errors) {
+      tracker.trackError(err.path, err.error, "resource");
+    }
+
     const ctx: ConversionContext = {
       config,
-      errors: {
-        files: [],
-        images: [],
-        resources: [...errors],
-      },
+      tracker,
+      verbose: options.verbose,
     };
 
     // Run conversion pipeline with spinner updates
@@ -59,54 +60,12 @@ export async function convertCommand(opts: Options): Promise<void> {
     spinner.text = "Resolving links...";
     await modules.resolve(ctx);
 
-    spinner.text = "Building statistics...";
+    // Clear and stop spinner before displaying stats
+    spinner.clear();
+    spinner.stop();
+
+    // Export and display stats
     await modules.stats(ctx);
-
-    // Stats must be populated by stats module
-    if (!ctx.stats) {
-      throw new Error("Stats module failed to populate statistics");
-    }
-
-    // Complete spinner
-    spinner.succeed("Conversion complete!");
-
-    // Display summary
-    console.log(
-      `\nFiles processed: ${ctx.stats.successful}/${ctx.stats.totalFiles}`,
-    );
-    console.log(`Images downloaded: ${ctx.stats.imagesDownloaded}`);
-    console.log(`Links resolved: ${ctx.stats.linksResolved}`);
-    if (ctx.stats.duration) {
-      console.log(`Duration: ${(ctx.stats.duration / 1000).toFixed(2)}s`);
-    }
-
-    // Display errors if any
-    if (ctx.errors && ctx.errors.images.length > 0) {
-      console.warn(
-        `\n⚠️  ${ctx.errors.images.length} image(s) failed to download:`,
-      );
-      ctx.errors.images.forEach((err) => {
-        console.warn(`  - ${err.path}`);
-      });
-    }
-
-    if (ctx.errors && ctx.errors.files.length > 0) {
-      console.error(
-        `\n❌ ${ctx.errors.files.length} file(s) failed to process:`,
-      );
-      ctx.errors.files.forEach((err) => {
-        console.error(`  - ${err.path}: ${err.error.message}`);
-      });
-    }
-
-    if (ctx.errors && ctx.errors.resources.length > 0) {
-      console.warn(
-        `\n⚠️  ${ctx.errors.resources.length} resources(s) failed to load:`,
-      );
-      ctx.errors.resources.forEach((err) => {
-        console.warn(`  - ${err.path}: ${err.error.message}`);
-      });
-    }
   } catch (error) {
     spinner.fail("Conversion failed");
     console.error(error);

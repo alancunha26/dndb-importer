@@ -5,7 +5,7 @@
  * and tfoot elements that don't translate cleanly to standard markdown tables.
  *
  * This rule handles:
- * - Caption extraction (rendered above table in bold)
+ * - Caption extraction (rendered as heading one level deeper, or bold if no heading)
  * - Multiple header rows (keeps detailed row, discards grouping rows)
  * - Rowspan (renders value in first row, empty cells for spanned rows)
  * - Colspan (fills with empty cells)
@@ -25,21 +25,40 @@ interface CellSpan {
   content: string;   // The cell content (empty string for empty cells)
 }
 
+interface CaptionInfo {
+  text: string;
+  headingLevel: number | null; // 1-6 for h1-h6, null if not a heading
+}
+
 // ============================================================================
 // Caption Extraction
 // ============================================================================
 
 /**
- * Extract caption text from table
+ * Extract caption text and heading level from table
  * Handles nested headings and formatting
  */
-function extractCaption(table: TurndownNode): string | null {
+function extractCaption(table: TurndownNode): CaptionInfo | null {
   if (!table.childNodes) return null;
 
   for (const child of table.childNodes) {
     if (child.nodeName === "CAPTION") {
       const text = child.textContent?.trim();
-      return text || null;
+      if (!text) return null;
+
+      // Check if caption contains a heading element
+      let headingLevel: number | null = null;
+      if (child.childNodes) {
+        for (const captionChild of child.childNodes) {
+          const match = captionChild.nodeName.match(/^H([1-6])$/);
+          if (match) {
+            headingLevel = parseInt(match[1], 10);
+            break;
+          }
+        }
+      }
+
+      return { text, headingLevel };
     }
   }
 
@@ -105,9 +124,15 @@ function extractHeaderRow(thead: TurndownNode): TurndownNode | null {
 }
 
 /**
- * Extract cell text content
+ * Extract cell content and process through Turndown to preserve links
  */
-function getCellContent(cell: TurndownNode): string {
+function getCellContent(cell: TurndownNode, service: TurndownService): string {
+  // Use innerHTML to get the HTML content, then process through Turndown
+  // This preserves links and other markdown-able elements
+  if (cell.innerHTML) {
+    return service.turndown(cell.innerHTML).trim();
+  }
+  // Fallback to textContent if innerHTML not available
   return (cell.textContent || "").trim();
 }
 
@@ -180,7 +205,8 @@ function extractBodyRows(tbodies: TurndownNode[]): TurndownNode[] {
 function processRow(
   row: TurndownNode,
   rowspanTracker: CellSpan[],
-  columnCount: number
+  columnCount: number,
+  service: TurndownService
 ): string[] | null {
   const cells: string[] = [];
   let colIndex = 0;
@@ -221,7 +247,7 @@ function processRow(
       const cellElement = cellElements[cellElementIndex];
       cellElementIndex++;
 
-      const content = getCellContent(cellElement);
+      const content = getCellContent(cellElement, service);
       const colspan = getColspan(cellElement);
       const rowspan = getRowspan(cellElement);
 
@@ -348,7 +374,7 @@ export function tableRule(config: MarkdownConfig) {
         const table = node as TurndownNode;
 
         // Extract caption
-        const caption = extractCaption(table);
+        const captionInfo = extractCaption(table);
 
         // Extract footer
         const footer = extractFooter(table);
@@ -377,7 +403,7 @@ export function tableRule(config: MarkdownConfig) {
         // Process header
         let headerCells: string[] = [];
         if (headerRow) {
-          const cells = processRow(headerRow, rowspanTracker, columnCount);
+          const cells = processRow(headerRow, rowspanTracker, columnCount, service);
           headerCells = cells || new Array(columnCount).fill("");
         } else {
           // No header, create empty header
@@ -387,7 +413,7 @@ export function tableRule(config: MarkdownConfig) {
         // Process body rows
         const bodyCells: string[][] = [];
         for (const row of bodyRows) {
-          const cells = processRow(row, rowspanTracker, columnCount);
+          const cells = processRow(row, rowspanTracker, columnCount, service);
           if (cells !== null) {
             // Only add rows that aren't merged with next
             bodyCells.push(cells);
@@ -397,9 +423,18 @@ export function tableRule(config: MarkdownConfig) {
         // Build markdown
         let result = "\n\n";
 
-        // Add caption (bold, above table)
-        if (caption) {
-          result += `${config.strong}${caption}${config.strong}\n\n`;
+        // Add caption (as heading one level deeper, or bold if no heading in source)
+        if (captionInfo) {
+          if (captionInfo.headingLevel !== null) {
+            // Render as heading one level deeper than the source
+            // (capped at h6 since that's the deepest markdown heading)
+            const targetLevel = Math.min(captionInfo.headingLevel + 1, 6);
+            const hashes = "#".repeat(targetLevel);
+            result += `${hashes} ${captionInfo.text}\n\n`;
+          } else {
+            // No heading in source, render as bold
+            result += `${config.strong}${captionInfo.text}${config.strong}\n\n`;
+          }
         }
 
         // Add table

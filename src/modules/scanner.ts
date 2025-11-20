@@ -6,18 +6,22 @@
 import glob from "fast-glob";
 import path from "node:path";
 import { readFile } from "fs/promises";
-import { IdGenerator } from "../utils/id-generator";
-import { loadMapping, saveMapping } from "../utils/mapping";
-import { fileExists } from "../utils/fs";
-import { filenameToTitle, extractIdFromFilename } from "../utils/string";
-import { SourcebookMetadataSchema } from "../types/files";
-import type {
-  ConversionContext,
-  FileDescriptor,
-  FileMapping,
-  SourcebookInfo,
-  SourcebookMetadata,
-  TemplateSet,
+import {
+  IdGenerator,
+  loadMapping,
+  saveMapping,
+  fileExists,
+  filenameToTitle,
+  extractIdFromFilename,
+} from "../utils";
+import {
+  SourcebookMetadataSchema,
+  type ConversionContext,
+  type FileDescriptor,
+  type FileMapping,
+  type SourcebookInfo,
+  type SourcebookMetadata,
+  type TemplateSet,
 } from "../types";
 
 /**
@@ -58,7 +62,7 @@ async function loadSourcebookMetadata(
     return metadata as SourcebookMetadata;
   } catch (error) {
     // Track error silently - don't interrupt spinner
-    ctx.errors?.resources.push({ path: metadataPath, error: error as Error });
+    ctx.tracker.trackError(metadataPath, error, "resource");
     return {};
   }
 }
@@ -68,19 +72,17 @@ async function loadSourcebookMetadata(
  *
  * Writes to context:
  * - files: All files (flat list) - primary data structure
- * - sourcebooks: Sourcebook metadata only (no files array)
- * - fileIndex: Map of uniqueId → FileDescriptor (for fast lookups)
- * - pathIndex: Map of relativePath → uniqueId (for URL mapping)
+ * - sourcebooks: Sourcebook metadata only (no files array, includes bookUrl)
  * - globalTemplates: Global templates from input root
  */
 export async function scan(ctx: ConversionContext): Promise<void> {
-  const inputDir = path.resolve(ctx.config.input.directory);
+  const inputDir = path.resolve(ctx.config.input);
 
   // 1. Detect global templates (in input root)
   const globalTemplates = await detectTemplates(inputDir);
 
   // 2. Discover HTML files using fast-glob (exclude .hbs files)
-  const htmlFiles = await glob(ctx.config.input.pattern, {
+  const htmlFiles = await glob("**/*.html", {
     cwd: inputDir,
     absolute: true,
     onlyFiles: true,
@@ -90,8 +92,6 @@ export async function scan(ctx: ConversionContext): Promise<void> {
   if (htmlFiles.length === 0) {
     ctx.files = [];
     ctx.sourcebooks = [];
-    ctx.fileIndex = new Map();
-    ctx.pathIndex = new Map();
     ctx.globalTemplates = globalTemplates;
     return;
   }
@@ -114,15 +114,13 @@ export async function scan(ctx: ConversionContext): Promise<void> {
   });
 
   // 4. Load persistent file mapping (HTML path -> markdown filename)
-  const fileMappingPath = path.join(ctx.config.output.directory, "files.json");
+  const fileMappingPath = path.join(ctx.config.output, "files.json");
   const fileMapping = await loadMapping(fileMappingPath);
   const idGenerator = IdGenerator.fromMapping(fileMapping);
   const updatedFileMapping: FileMapping = { ...fileMapping };
 
   // 5. Single pass: Process files and create sourcebooks on-demand
   const files: FileDescriptor[] = [];
-  const fileIndex = new Map<string, FileDescriptor>();
-  const pathIndex = new Map<string, string>();
   const sourcebooks: SourcebookInfo[] = [];
   const sourcebookIdMap = new Map<string, string>(); // sourcebook dir name → ID
   const processedSourcebooks = new Set<string>(); // Track which sourcebooks we've seen
@@ -152,18 +150,18 @@ export async function scan(ctx: ConversionContext): Promise<void> {
         // Generate new index ID
         indexId = idGenerator.generate();
         // Add to updated mapping
-        updatedFileMapping[indexKey] =
-          `${indexId}${ctx.config.output.extension}`;
+        updatedFileMapping[indexKey] = `${indexId}.md`;
       }
 
       // Use title from metadata, or generate from directory name
       const title = metadata.title ?? filenameToTitle(sourcebook);
 
       const outputPath = path.join(
-        ctx.config.output.directory,
-        `${indexId}${ctx.config.output.extension}`,
+        ctx.config.output,
+        `${indexId}.md`,
       );
 
+      // bookUrl will be derived from first file's canonicalUrl in processor
       sourcebooks.push({
         id: indexId,
         title,
@@ -171,6 +169,7 @@ export async function scan(ctx: ConversionContext): Promise<void> {
         outputPath,
         metadata,
         templates: sourcebookTemplates,
+        bookUrl: undefined,
       });
 
       sourcebookIdMap.set(sourcebook, indexId);
@@ -185,13 +184,12 @@ export async function scan(ctx: ConversionContext): Promise<void> {
       // Generate new ID
       uniqueId = idGenerator.generate();
       // Add to updated mapping
-      updatedFileMapping[relativePath] =
-        `${uniqueId}${ctx.config.output.extension}`;
+      updatedFileMapping[relativePath] = `${uniqueId}.md`;
     }
 
     const outputPath = path.join(
-      ctx.config.output.directory,
-      `${uniqueId}${ctx.config.output.extension}`,
+      ctx.config.output,
+      `${uniqueId}.md`,
     );
 
     const sourcebookId = sourcebookIdMap.get(sourcebook)!;
@@ -206,10 +204,8 @@ export async function scan(ctx: ConversionContext): Promise<void> {
       uniqueId,
     };
 
-    // Add to flat list and indices
+    // Add to flat list
     files.push(descriptor);
-    fileIndex.set(uniqueId, descriptor);
-    pathIndex.set(relativePath, uniqueId);
   }
 
   // 7. Save updated file mapping
@@ -218,7 +214,5 @@ export async function scan(ctx: ConversionContext): Promise<void> {
   // Write to context
   ctx.files = files;
   ctx.sourcebooks = sourcebooks;
-  ctx.fileIndex = fileIndex;
-  ctx.pathIndex = pathIndex;
   ctx.globalTemplates = globalTemplates;
 }

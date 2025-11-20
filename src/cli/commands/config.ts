@@ -2,7 +2,7 @@
  * Config command - Show configuration file location
  */
 
-import { getUserConfigPath } from "../../utils/config";
+import { getUserConfigPath } from "../../utils";
 
 export function configCommand(): void {
   const configPath = getUserConfigPath();

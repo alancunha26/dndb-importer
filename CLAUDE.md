@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 A CLI tool that converts D&D Beyond HTML sourcebooks to clean, structured Markdown files. The tool uses unique 4-character IDs for file naming, downloads images locally, generates navigation links, and preserves D&D-specific formatting (stat blocks, spell descriptions, tables).
 
-**Current Status:** In active development - project structure complete, implementation in progress.
+**Current Status:** Feature complete - link resolver implemented with entity-aware resolution, URL aliasing, and smart anchor matching.
 
 See `docs/rfcs/0001-dndbeyond-html-markdown-converter.md` for the complete architecture specification.
 
@@ -73,17 +73,15 @@ The converter uses a **pipeline architecture** where a shared `ConversionContext
 **Conversion Pipeline** (`src/cli/commands/convert.ts`):
 
 ```typescript
-// Initialize context
-const ctx: ConversionContext = { config };
+// Initialize context with Tracker
+const tracker = new Tracker(config);
+const ctx: ConversionContext = { config, tracker };
 
 // Run pipeline
-await modules.scan(ctx); // 1. File discovery
+await modules.scan(ctx);    // 1. File discovery
 await modules.process(ctx); // 2. Process + write (memory-efficient)
 await modules.resolve(ctx); // 3. Resolve links (optional)
-await modules.stats(ctx); // 4. Build statistics
-
-// Display results
-console.log(`Files processed: ${ctx.stats.successful}/${ctx.stats.totalFiles}`);
+modules.stats(tracker, verbose); // 4. Display statistics
 ```
 
 **Pipeline Modules** (`src/modules/`):
@@ -96,7 +94,7 @@ console.log(`Files processed: ${ctx.stats.successful}/${ctx.stats.totalFiles}`);
    - Assigns unique 4-char IDs using `short-unique-id`
    - Builds filename→ID mapping (with persistent storage)
    - Groups files by sourcebook
-   - Writes: `ctx.files`, `ctx.sourcebooks`, `ctx.mappings`, `ctx.globalTemplates`
+   - Writes: `ctx.files`, `ctx.sourcebooks`, `ctx.globalTemplates`
 
 2. **Processor** (`processor.ts`) - **Memory-efficient streaming**
    - Processes files **one at a time** to avoid memory bloat
@@ -104,42 +102,54 @@ console.log(`Files processed: ${ctx.stats.successful}/${ctx.stats.totalFiles}`);
      - Parses HTML with Cheerio
      - Extracts content using `.p-article-content` selector
      - Removes unwanted elements (configured via `html.removeSelectors`)
-     - **Preprocesses HTML structure** for D&D Beyond patterns (inline in `processHtml`):
+     - **Preprocesses HTML structure** for D&D Beyond patterns:
        - Fixes nested lists: D&D Beyond uses `<ol><li>...</li><ul>...</ul></ol>` pattern
        - Moves misplaced lists into previous `<li>` element before Turndown conversion
        - Prevents incorrect markdown numbering (1,2,4 → 1,2,3)
      - Extracts title from first H1
+     - Extracts canonical URL from page metadata
      - Builds `FileAnchors` (valid anchors + HTML ID mappings)
+     - **Extracts entity URLs** from tooltip links (spells, monsters, magic items, equipment)
      - Converts HTML → Markdown using Turndown with custom D&D rules
      - Downloads images with retry logic (with persistent mapping)
      - Loads appropriate file template (sourcebook > global > default)
      - Builds `FileTemplateContext` with navigation links and metadata
      - Renders template with Handlebars
      - **Writes to disk immediately**
-     - Stores lightweight `WrittenFile` (path + anchors only)
+     - Marks file as `written: true` with anchors and entities
      - HTML and markdown are garbage collected before next file
    - Generates index files per sourcebook:
      - Loads appropriate index template (sourcebook > global > default)
      - Builds `IndexTemplateContext` with sourcebook metadata and file list
      - Renders template with Handlebars
-   - Writes: `ctx.writtenFiles` (lightweight - no HTML/markdown content)
+   - Updates `ctx.files` with anchors, entities, and written status
 
 3. **Resolver** (`resolver.ts`)
    - Runs **after all files are written to disk**
-   - Builds `LinkResolutionIndex` from `writtenFiles` anchors
+   - Builds entity index by matching entity slugs to file anchors
+     - Uses `entityLocations` config to filter target files by entity type
+     - Prevents spells resolving to monster pages with matching anchors
+   - Builds URL map from files with canonical URLs
    - For each file:
      - Reads markdown from disk (one file at a time)
-     - Resolves D&D Beyond links to local markdown links
-     - Validates anchors exist in target files
-     - Falls back to bold text for unresolved links
+     - Resolves D&D Beyond links using priority system:
+       1. Internal anchors (same-page `#links`)
+       2. Entity links (`/spells/123-name`, `/monsters/456-name`)
+       3. Source links (`/sources/dnd/phb-2024/chapter#anchor`)
+     - Applies URL aliases (Free Rules → PHB, variant items → base items)
+     - Validates anchors exist with smart matching (exact, prefix, plural/singular)
+     - Falls back based on `fallbackStyle` setting (bold, italic, plain, none)
      - Overwrites file with resolved links
    - Memory-efficient: Only one file's content in memory at a time
    - Skipped if `links.resolveInternal: false`
+   - Tracks resolved/unresolved links via `ctx.tracker`
 
 4. **Stats** (`stats.ts`)
-   - Counts files, images, links
-   - Calculates duration
-   - Writes: `ctx.stats`
+   - Displays formatted summary with progress bars
+   - Shows files, images, links sections
+   - Breaks down link issues by reason
+   - Shows errors for files, images, resources
+   - Uses Chalk for colored terminal output
 
 ### Key Design Decisions
 
@@ -170,18 +180,31 @@ console.log(`Files processed: ${ctx.stats.successful}/${ctx.stats.totalFiles}`);
   - Falls back to default config automatically
   - Errors displayed in final summary via `ctx.errors.resources`
 - Location: `src/config/default.json` (copied to `dist/config/` during build)
-- Structure: User-centric organization with 8 top-level sections:
-  - `input` - Source HTML files location and pattern
-  - `output` - Output directory and file settings
+- Structure: User-centric organization with 7 top-level sections:
+  - `input` - Source HTML files directory (string)
+  - `output` - Output directory (string)
   - `ids` - Unique ID generation (used for files and images)
-  - `markdown` - Markdown formatting preferences (all Turndown options: headingStyle, emphasis, strong, bulletMarker, linkStyle, linkReferenceStyle, horizontalRule, lineBreak, codeFence, preformattedCode)
+  - `markdown` - Markdown formatting preferences (all Turndown options)
   - `html` - HTML parsing settings (content selector, etc.)
   - `images` - Image download settings
   - `links` - Link resolution configuration
-  - `logging` - Logging level and progress display
+- Hardcoded values (not configurable):
+  - File pattern: `**/*.html`
+  - Encoding: `utf-8`
+  - Output extension: `.md`
+  - Index creation: always enabled
 - HTML Parser: Uses `.p-article-content` selector to extract main content from D&D Beyond HTML
-- URL Mapping: `links.urlMapping` maps D&D Beyond URLs to HTML file paths (relative to input directory)
-- Fallback: `links.fallbackToBold` converts unresolvable links to bold text (default: true)
+- URL Aliases: `links.urlAliases` maps D&D Beyond URLs to canonical URLs
+  - Source aliasing: `/sources/dnd/free-rules/foo` → `/sources/dnd/phb-2024/foo`
+  - Entity aliasing: `/magic-items/4585-belt-of-hill-giant-strength` → `/magic-items/5372-belt-of-giant-strength`
+- Entity Locations: `links.entityLocations` maps entity types to allowed source pages
+  - Prevents spells resolving to monster pages with matching anchors
+  - Example: `"spells": ["/sources/dnd/phb-2024/spell-descriptions"]`
+- Fallback Style: `links.fallbackStyle` controls unresolved link formatting
+  - `"bold"` - Convert to bold text `**Text**` (default)
+  - `"italic"` - Convert to italic text `_Text_`
+  - `"plain"` - Convert to plain text
+  - `"none"` - Keep original link (no fallback tracking)
 
 **Input Validation and Error Tracking:**
 
@@ -191,14 +214,16 @@ console.log(`Files processed: ${ctx.stats.successful}/${ctx.stats.totalFiles}`);
   2. Config files (`ConversionConfigSchema`, `PartialConversionConfigSchema`) - validates default, user, and custom configs
   3. Sourcebook metadata (`SourcebookMetadataSchema`) - validates sourcebook.json files
   4. Mapping files (`MappingSchema`) - validates files.json and images.json
-- **Error tracking architecture:**
-  - Utilities throw errors naturally (simple error handling)
-  - Modules catch errors and track in `ctx.errors`
-  - Three error categories:
-    - `ctx.errors.files` - File processing errors
-    - `ctx.errors.images` - Image download errors
-    - `ctx.errors.resources` - Config/metadata/mapping loading errors
-  - All errors displayed in final summary after conversion completes
+- **Unified Tracker system** (`src/utils/tracker.ts`):
+  - Single `Tracker` class for all stats and issue tracking
+  - Counter methods: `incrementSuccessful()`, `incrementImagesDownloaded()`, `incrementLinksResolved()`, etc.
+  - Issue tracking: `trackError(path, error, type, context)` with automatic error classification
+  - Four issue types with typed reasons:
+    - `file` - File processing errors (parse-error, read-error, write-error)
+    - `image` - Image download errors (download-failed, timeout, not-found, invalid-response)
+    - `resource` - Config/metadata errors (invalid-json, schema-validation, read-error)
+    - `link` - Link resolution issues (url-not-in-mapping, entity-not-found, anchor-not-found, header-link)
+  - All stats retrieved via `tracker.getStats()` returning `ProcessingStats`
 - **Graceful degradation:**
   - Invalid config → Falls back to default config
   - Invalid sourcebook metadata → Uses empty metadata
@@ -217,7 +242,7 @@ console.log(`Files processed: ${ctx.stats.successful}/${ctx.stats.totalFiles}`);
 - **Template precedence**:
   1. Sourcebook-specific: `input/players-handbook/index.md.hbs` or `file.md.hbs`
   2. Global: `input/index.md.hbs` or `file.md.hbs`
-  3. Built-in defaults: Hardcoded templates in `src/templates/defaults.ts`
+  3. Built-in defaults: `src/utils/get-default-index-template.ts` and `get-default-file-template.ts`
 - **Scanner detects templates** during file discovery
   - Global templates detected in input root
   - Per-sourcebook templates detected in each sourcebook directory
@@ -244,47 +269,110 @@ console.log(`Files processed: ${ctx.stats.successful}/${ctx.stats.totalFiles}`);
 
 **Cross-References (Resolver Module):**
 
-See RFC 0001 "Link Resolution Strategy" section for complete architecture.
+See `docs/resolver.md` for complete implementation details.
 
-- **Link resolution is optional** (`links.resolveInternal`):
-  - If `true`: Resolver module resolves links with full validation (default)
-  - If `false`: Resolver module skipped
-- User configures URL mapping in `links.urlMapping`:
-  - Source paths: `/sources/dnd/phb-2024/equipment` → `players-handbook/08-chapter-6-equipment.html`
-  - Entity paths: `/spells` → `players-handbook/10-spell-descriptions.html`
-- Supports both source book links and entity links (e.g., `https://www.dndbeyond.com/spells/2619022-magic-missile`)
-- Multi-stage resolution: Scanner builds URL→ID mapping, Processor builds anchors, Resolver validates and rewrites
-- **Processor builds `FileAnchors`** for each file during HTML processing:
-  - `valid: string[]` - All markdown anchors with plural/singular variants
-  - `htmlIdToAnchor: Record<string, string>` - HTML element IDs → markdown anchors
-  - Example: `<h2 id="Bell1GP">Bell (1 GP)</h2>` → `{ "Bell1GP": "bell-1-gp" }`
-- **Resolver builds `LinkResolutionIndex`** by collecting all `FileAnchors`:
-  - Single unified index: file ID → anchor data
-  - Used for both same-page link resolution and cross-file validation
-- **Validates** anchor exists in target file with smart matching:
-  1. Exact match (including plural/singular variants)
-  2. Prefix match for headers with suffixes (e.g., "Alchemist's Fire" matches "Alchemist's Fire (50 GP)")
-  3. Uses shortest match if multiple prefix matches
-- **Header links** (no anchor): Links without specific anchors (e.g., `[Equipment](/sources/.../equipment)`) are **removed entirely**
-- **Internal links** (same-page): Resolved using `LinkResolutionIndex`
-  - Processor builds `htmlIdToAnchor` mapping using Cheerio
-    - Example: `<h2 id="Bell1GP">Bell (1 GP)</h2>` → stores `{ "Bell1GP": "bell-1-gp" }`
-  - Resolver uses `index[fileId].htmlIdToAnchor` to resolve links
-    - Example: `[Bell](#Bell1GP)` → looks up `"Bell1GP"` → `[Bell](#bell-1-gp)`
-  - Always resolved, regardless of `resolveInternal` setting
-- Example 1: `[Bell](#Bell1GP)` → `[Bell](#bell-1-gp)` (internal link via HTML ID index)
-- Example 2: `[Fireball](/sources/dnd/phb-2024/spells#fireball)` → `[Fireball](a3f9.md#fireball)` (cross-file)
-- Example 3: `[Magic Missile](https://www.dndbeyond.com/spells/2619022-magic-missile)` → `[Magic Missile](b4x8.md#magic-missile)` (entity)
-- Example 4: `[Fireballs](/sources/...)` → matches heading "Fireball" (singular/plural handled)
-- Example 5: `[Alchemist's Fire](/.../equipment#alchemists-fire)` → matches "Alchemist's Fire (50 GP)" (prefix matching)
-- Example 6: `[Equipment](/.../equipment)` → removed entirely (no anchor)
-- Anchors generated from link text using GitHub markdown format (lowercase, hyphens)
-- **Fallback**: When `links.resolveInternal: true` and `links.fallbackToBold: true`, converts to bold text (`**Fireball**`) if:
-  - URL not in mapping
-  - File not found
-  - Anchor doesn't exist in target file (after checking exact, plural/singular, and prefix matches)
-- External links preserved as-is
-- Maintains navigation while preventing broken links
+**Overview:**
+
+The resolver transforms D&D Beyond links into local markdown links, enabling seamless cross-referencing between converted sourcebooks. It uses a factory pattern with closure variables for efficient resolution without prop drilling.
+
+**Link Resolution Priority:**
+
+1. **Internal anchors** (same-page `#links`)
+   - Uses `htmlIdToAnchor` mapping from FileAnchors
+   - Example: `[Bell](#Bell1GP)` → `[Bell](#bell-1-gp)`
+
+2. **Entity links** (`/spells/123-name`, `/monsters/456-name`)
+   - Builds entity index by matching entity slugs to file anchors
+   - Uses `entityLocations` config to filter target files by entity type
+   - Example: `[Fireball](/spells/2618887-fireball)` → `[Fireball](a3f9.md#fireball)`
+
+3. **Source links** (`/sources/dnd/phb-2024/chapter#anchor`)
+   - Looks up file by canonical URL
+   - Validates anchor with smart matching
+   - Example: `[Equipment](/sources/dnd/phb-2024/equipment#adventuring-gear)` → `[Equipment](b4x8.md#adventuring-gear)`
+
+**Entity Index System:**
+
+- Processor extracts entity URLs from tooltip links in HTML
+- Entity types: `spells`, `monsters`, `magic-items`, `equipment`, `classes`, `feats`, `species`, `backgrounds`
+- `entityLocations` config maps types to allowed source pages:
+  ```json
+  {
+    "spells": ["/sources/dnd/phb-2024/spell-descriptions"],
+    "monsters": ["/sources/dnd/mm-2024/monsters-a", ...],
+    "magic-items": ["/sources/dnd/dmg-2024/magic-items"]
+  }
+  ```
+- Prevents spells resolving to monster pages with matching anchors
+
+**URL Aliasing:**
+
+- `urlAliases` maps URLs to canonical forms before resolution
+- Source aliasing: `/sources/dnd/free-rules/foo` → `/sources/dnd/phb-2024/foo`
+- Entity aliasing: `/magic-items/4585-belt-of-hill-giant-strength` → `/magic-items/5372-belt-of-giant-strength`
+- Supports variant items (Belt of X Giant Strength → Belt of Giant Strength)
+
+**Smart Anchor Matching:**
+
+1. **Exact match**
+2. **Normalized match** (strips trailing 's' from words for singular/plural matching)
+   - Example: `#potion-of-healing` matches `#potions-of-healing`
+3. **Prefix match** for headers with suffixes
+   - Example: `#alchemists-fire` matches `#alchemists-fire-50-gp`
+4. Uses shortest match if multiple candidates
+
+**Anchor Building (Processor):**
+
+- `FileAnchors.valid: string[]` - All markdown anchors from headings
+- `FileAnchors.htmlIdToAnchor: Record<string, string>` - HTML element IDs → markdown anchors
+- Example: `<h2 id="Bell1GP">Bell (1 GP)</h2>` → `{ "Bell1GP": "bell-1-gp" }`
+
+**Special Cases:**
+
+- **Book-level links** (no anchor): Resolve to index files
+  - Example: `[Player's Handbook](/sources/dnd/phb-2024)` → `[Player's Handbook](ksmc.md)`
+- **Header links** (page without anchor): Fall back based on `fallbackStyle`
+  - Example: `[Equipment](/sources/.../equipment)` → `**Equipment**`
+- **Image lines**: Skipped entirely (lines starting with `!`)
+- **Local links**: Skipped (already resolved, e.g., `abc123.md`)
+
+**Fallback System:**
+
+- `fallbackStyle: "bold"` → `**Text**` (default)
+- `fallbackStyle: "italic"` → `_Text_`
+- `fallbackStyle: "plain"` → `Text`
+- `fallbackStyle: "none"` → Keep original link `[Text](url)`
+
+**Examples:**
+
+```markdown
+# Internal anchor
+[Bell](#Bell1GP) → [Bell](#bell-1-gp)
+
+# Entity link
+[Fireball](https://www.dndbeyond.com/spells/2618887-fireball) → [Fireball](a3f9.md#fireball)
+
+# Source link with anchor
+[Adventuring Gear](/sources/dnd/phb-2024/equipment#adventuring-gear) → [Adventuring Gear](b4x8.md#adventuring-gear)
+
+# Plural/singular matching
+[Fireballs](/sources/.../spells#fireballs) → [Fireballs](a3f9.md#fireball)
+
+# Prefix matching
+[Alchemist's Fire](/.../equipment#alchemists-fire) → [Alchemist's Fire](b4x8.md#alchemists-fire-50-gp)
+
+# Book-level link
+[Player's Handbook](/sources/dnd/phb-2024) → [Player's Handbook](ksmc.md)
+
+# Header link (no anchor)
+[Equipment](/sources/.../equipment) → **Equipment**
+```
+
+**Performance:**
+
+- Memory-efficient: Reads files one at a time
+- No full content caching: Read → Process → Write → GC
+- Entity index built once at start of resolution
 
 ### HTML Preprocessing vs Turndown Rules
 
@@ -321,6 +409,7 @@ The converter handles D&D Beyond HTML in two stages:
 - `aside.ts` - Convert aside elements to Obsidian/GitHub callouts or blockquotes
 - `flexible-columns.ts` - Convert D&D Beyond flexible column layouts to lists
 - `table.ts` - Custom table handling for complex D&D Beyond table patterns
+- `stat-block.ts` - Monster stat-block formatting (italic type/alignment, section headings)
 
 **Decision criteria:**
 - Use **preprocessing** if: Fixing invalid HTML structure that breaks Turndown
@@ -384,14 +473,7 @@ D&D Beyond uses complex table patterns that don't translate cleanly to standard 
 
 ### Type System
 
-Types are organized in `src/types/` by domain:
-
-- **`types/config.ts`** - Configuration types with Zod schemas (uses `z.infer` for type inference)
-- **`types/files.ts`** - File-related types including templates and sourcebook metadata (with Zod schemas)
-- **`types/context.ts`** - `ConversionContext`, `ErrorStats`, `ProcessingStats` (core pipeline types)
-- **`types/resolver.ts`** - Resolver module types (`LinkResolutionIndex`, `LinkResolutionResult`)
-- **`types/turndown.ts`** - Turndown-related types (`TurndownNode` - used by all Turndown rules)
-- **`types/index.ts`** - Re-exports all types and schemas
+All types are consolidated in a single file `src/types.ts` for easier navigation and maintenance.
 
 **Zod Schema Pattern:**
 All user-facing types use Zod for runtime validation with TypeScript type inference:
@@ -407,46 +489,54 @@ export const SourcebookMetadataSchema = z.looseObject({
 export type SourcebookMetadata = z.infer<typeof SourcebookMetadataSchema>;
 ```
 
-Validated types:
+**Validated types:**
 - **Config files** - `ConversionConfigSchema`, `PartialConversionConfigSchema`
 - **CLI options** - `ConvertOptionsSchema`
 - **Sourcebook metadata** - `SourcebookMetadataSchema`
 - **Mapping files** - `MappingSchema` (files.json, images.json)
 
-Key types:
+**Key types:**
 
 - `ConversionContext` - Context object that flows through pipeline modules:
   - `config`: ConversionConfig
-  - `errors`: { files: ErrorStats[], images: ErrorStats[], resources: ErrorStats[] }
+  - `tracker`: Tracker (unified stats and issue tracking)
   - `files?`: FileDescriptor[] (all files - flat list)
   - `sourcebooks?`: SourcebookInfo[] (sourcebook metadata only)
-  - `fileIndex?`: Map<string, FileDescriptor> (uniqueId → FileDescriptor)
-  - `pathIndex?`: Map<string, string> (relativePath → uniqueId)
   - `globalTemplates?`: TemplateSet (global templates from input root)
-  - `stats?`: ProcessingStats
-- `ErrorStats` - Error tracking entry:
-  - `path`: string (file path that failed)
-  - `error`: Error (error object)
-- `FileDescriptor` - File metadata with unique ID
+- `Tracker` - Unified stats and issue tracking class:
+  - Counter methods: `incrementSuccessful()`, `incrementImagesDownloaded()`, etc.
+  - Issue tracking: `trackError()`, `trackLinkIssue()`
+  - Results: `getStats()` returns `ProcessingStats`
+- `FileDescriptor` - File metadata with unique ID:
+  - `sourcePath`, `relativePath`, `outputPath`, `sourcebook`, `uniqueId`
+  - `url?`: Canonical URL from page metadata
+  - `title?`: Extracted from first H1
+  - `anchors?`: FileAnchors (valid anchors + HTML ID mappings)
+  - `entities?`: ParsedEntityUrl[] (extracted entity URLs)
+  - `written?`: Boolean flag set after successful write
 - `SourcebookInfo` - Sourcebook metadata with templates:
-  - `metadata`: SourcebookMetadata (from sourcebook.json - validated with Zod)
+  - `metadata`: SourcebookMetadata (from sourcebook.json)
   - `templates`: TemplateSet (sourcebook-specific template paths)
+  - `bookUrl?`: Book-level URL (e.g., `/sources/dnd/phb-2024`)
   - `id`, `title`, `sourcebook`, `outputPath`
-- `SourcebookMetadata` - Optional metadata from sourcebook.json (validated with Zod):
-  - `title?`, `edition?`, `description?`, `author?`, `coverImage?`
-  - Allows custom fields for user templates
-- `TemplateSet` - Template file paths:
-  - `index: string | null` - Path to index.md.hbs (null = use default)
-  - `file: string | null` - Path to file.md.hbs (null = use default)
-- `IndexTemplateContext` - Variables available in index templates
-- `FileTemplateContext` - Variables available in file templates
 - `FileAnchors` - Anchor data for a single file:
-  - `valid: string[]` - All markdown anchors with plural/singular variants
+  - `valid: string[]` - All markdown anchors from headings
   - `htmlIdToAnchor: Record<string, string>` - HTML element IDs → markdown anchors
-- `FileMapping` - Type alias for `Record<string, string>` (used by files.json and images.json)
-- `LinkResolutionIndex` - Maps file IDs to `FileAnchors` (for resolver module)
-- `LinkResolutionResult` - Result of link resolution attempt
-- `ProcessingStats` - Final statistics (files, images, links, duration)
+- `ParsedEntityUrl` - Extracted entity URL data:
+  - `type`: Entity type (spells, monsters, etc.)
+  - `id`: Entity ID number
+  - `slug?`: Entity slug (e.g., "fireball")
+  - `anchor?`: Computed anchor from slug
+  - `url`: Original entity URL
+- `ProcessingStats` - Final statistics:
+  - `totalFiles`, `successfulFiles`, `failedFiles`, `skippedFiles`
+  - `downloadedImages`, `cachedImages`, `failedImages`
+  - `resolvedLinks`, `createdIndexes`
+  - `issues`: Issue[] (all tracked issues)
+  - `duration`: Conversion time in milliseconds
+- `Issue` - Tracked issue with type discrimination:
+  - `FileIssue`, `ImageIssue`, `ResourceIssue`, `LinkIssue`
+  - Each has `type`, `path`, `reason`, and optional `details`/`text`
 
 ### Project Structure
 
@@ -460,30 +550,40 @@ src/
 ├── modules/
 │   ├── scanner.ts           # File discovery & ID assignment
 │   ├── processor.ts         # Process + write (memory-efficient)
-│   ├── writer.ts            # (deprecated - merged into processor)
 │   ├── resolver.ts          # Link resolution
-│   ├── stats.ts             # Build statistics
+│   ├── stats.ts             # Statistics display with formatting
 │   └── index.ts
-├── templates/
-│   ├── defaults.ts          # Built-in default templates
-│   └── index.ts             # Template loading utilities
 ├── turndown/
 │   ├── rules/index.ts
 │   └── index.ts
 ├── utils/
-│   ├── config.ts            # Configuration loading
+│   ├── apply-aliases.ts     # URL alias application
+│   ├── extract-id-from-filename.ts
+│   ├── file-exists.ts       # Filesystem check utility
+│   ├── filename-to-title.ts # Convert filenames to readable titles
+│   ├── find-matching-anchor.ts # Smart anchor matching
+│   ├── generate-anchor.ts   # GitHub-style anchor generation
+│   ├── generate-anchor-variants.ts # Anchor normalization for matching
+│   ├── get-default-file-template.ts
+│   ├── get-default-index-template.ts
 │   ├── id-generator.ts      # Unique ID generation
+│   ├── is-entity-url.ts     # Check for entity URL patterns
+│   ├── is-image-url.ts      # Check for image URLs
+│   ├── is-source-url.ts     # Check for source book URLs
+│   ├── load-config.ts       # Configuration loading
+│   ├── load-file-template.ts
+│   ├── load-index-template.ts
+│   ├── load-mapping.ts      # JSON mapping persistence
+│   ├── load-template.ts
 │   ├── logger.ts            # Logging utilities
-│   ├── mapping.ts           # JSON mapping persistence
-│   ├── fs.ts                # Filesystem utilities (fileExists)
-│   └── string.ts            # String utilities (filenameToTitle)
-├── types/
-│   ├── config.ts            # Configuration types with Zod schemas
-│   ├── files.ts             # File-related types with Zod schemas
-│   ├── context.ts           # ConversionContext, ErrorStats, ProcessingStats
-│   ├── resolver.ts          # Resolver module types
-│   ├── turndown.ts          # Turndown types (TurndownNode)
-│   └── index.ts             # Re-exports all types and schemas
+│   ├── normalize-anchor.ts  # Anchor normalization
+│   ├── normalize-url.ts     # URL normalization
+│   ├── parse-entity-url.ts  # Entity URL parsing
+│   ├── save-mapping.ts      # JSON mapping persistence
+│   ├── should-resolve-url.ts # Check if URL should be resolved
+│   ├── tracker.ts           # Unified stats and issue tracking
+│   └── index.ts             # Re-exports all utilities
+├── types.ts                 # All types and Zod schemas consolidated
 └── config/
     └── default.json
 ```
@@ -553,27 +653,33 @@ The config loader (`src/utils/config.ts`) uses:
 
 ### Shared Utilities
 
-**`src/utils/fs.ts`** - Filesystem helpers:
-- `fileExists(path: string)` - Check if file/directory exists
-- Used by scanner (template detection), processor (image checking), and mapping utilities
-- Eliminates duplicate code across modules
+Utilities are organized as focused, single-purpose functions in `src/utils/`:
 
-**`src/utils/string.ts`** - String manipulation:
-- `filenameToTitle(filename: string)` - Convert filenames to readable titles
-  - Removes numeric prefix (e.g., "01-", "02-")
-  - Splits by hyphens/underscores
-  - Capitalizes each word
-- Used by scanner (sourcebook titles) and processor (navigation links, file titles)
-- Eliminates duplicate title formatting code across modules
+**Core utilities:**
+- `id-generator.ts` - Unique ID generation with collision prevention
+- `load-config.ts` - Configuration loading with deep merge
+- `load-mapping.ts` / `save-mapping.ts` - JSON mapping persistence with Zod validation
+- `tracker.ts` - Unified stats and issue tracking class
+- `logger.ts` - Logging utilities
 
-**`src/utils/mapping.ts`** - JSON mapping persistence with validation:
-- `loadMapping(filepath)` - Load JSON mapping from file path
-  - Validates with Zod (`MappingSchema`)
-  - Automatically deletes corrupted files
-  - Returns empty mapping if file doesn't exist or is invalid
-- `saveMapping(filepath, mapping)` - Save JSON mapping with pretty formatting
-- Uses `FileMapping` type consistently
-- Used for `files.json` (HTML→MD mapping) and `images.json` (URL→filename mapping)
+**File utilities:**
+- `file-exists.ts` - Check if file/directory exists
+- `filename-to-title.ts` - Convert filenames to readable titles
+- `load-template.ts` / `load-file-template.ts` / `load-index-template.ts` - Template loading
+- `get-default-file-template.ts` / `get-default-index-template.ts` - Built-in defaults
+
+**URL utilities:**
+- `normalize-url.ts` - Strip domain, normalize paths
+- `apply-aliases.ts` - Apply URL aliases from config
+- `is-entity-url.ts` / `is-source-url.ts` / `is-image-url.ts` - URL type detection
+- `should-resolve-url.ts` - Check if URL should be resolved
+- `parse-entity-url.ts` - Parse entity URLs into components
+
+**Anchor utilities:**
+- `generate-anchor.ts` - GitHub-style anchor generation
+- `normalize-anchor.ts` - Anchor normalization
+- `generate-anchor-variants.ts` - Anchor normalization for matching
+- `find-matching-anchor.ts` - Smart anchor matching with prefix support
 
 ## Example Files
 

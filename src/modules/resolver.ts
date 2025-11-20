@@ -6,64 +6,315 @@
  * It reads the files, resolves links, and overwrites them.
  */
 
-import type { ConversionContext } from "../types";
+import { readFile, writeFile } from "fs/promises";
+import type { ConversionContext, FileDescriptor } from "../types";
+import {
+  normalizeUrl,
+  shouldResolveUrl,
+  applyAliases,
+  isEntityUrl,
+  normalizeAnchor,
+  findMatchingAnchor,
+} from "../utils";
+
+/**
+ * Entity location with matched anchor
+ */
+interface EntityMatch {
+  fileId: string;
+  anchor: string;
+}
+
+interface LinkInfo {
+  path: string;
+  anchor?: string;
+  text: string;
+  original: string;
+}
+
+/**
+ * Build entity index by matching entity slugs to file anchors
+ */
+function buildEntityIndex(
+  files: FileDescriptor[],
+  ctx: ConversionContext,
+): Map<string, EntityMatch> {
+  const { entityLocations, urlAliases } = ctx.config.links;
+  const entityIndex = new Map<string, EntityMatch>();
+  const seenUrls = new Set<string>();
+
+  // Helper: Find first matching anchor in a list of files
+  function findMatch(slug: string, targetFiles: FileDescriptor[]): EntityMatch | null {
+    for (const file of targetFiles) {
+      if (!file.anchors) continue;
+      const anchor = findMatchingAnchor(slug, file.anchors.valid);
+      if (anchor) {
+        return { fileId: file.uniqueId, anchor };
+      }
+    }
+    return null;
+  }
+
+  // Helper: Get target files in priority order based on entityLocations
+  function getTargetFiles(entityType: string): FileDescriptor[] {
+    const allowedPages = entityLocations[entityType];
+    if (!allowedPages) return files;
+
+    const result: FileDescriptor[] = [];
+    for (const page of allowedPages) {
+      for (const file of files) {
+        if (!file.url) continue;
+        const canonicalUrl = applyAliases(file.url, urlAliases);
+        if (canonicalUrl.startsWith(page)) {
+          result.push(file);
+        }
+      }
+    }
+    return result;
+  }
+
+  // Process all entities from all files
+  for (const file of files) {
+    if (!file.entities) continue;
+
+    for (const entity of file.entities) {
+      if (!entity.slug || seenUrls.has(entity.url)) continue;
+      seenUrls.add(entity.url);
+
+      const targetFiles = getTargetFiles(entity.type);
+      const match = findMatch(entity.slug, targetFiles);
+
+      if (match) {
+        entityIndex.set(entity.url, match);
+      } else {
+        ctx.tracker.trackLinkIssue(entity.url, entity.type, "entity-not-found");
+      }
+    }
+  }
+
+  return entityIndex;
+}
+
+// ============================================================================
+// Main Resolver Function
+// ============================================================================
 
 /**
  * Resolves cross-references in all written files
  *
- * Reads from context:
- * - files: Contains file descriptors with anchors (enriched by processor)
- * - pathIndex: relativePath → uniqueId mapping from scanner
- * - config.links: urlMapping, resolveInternal, fallbackToBold
- *
- * Process:
- * 1. Build LinkResolutionIndex from files (has all anchors)
- * 2. For each file, read markdown from disk
- * 3. Resolve D&D Beyond links using URL mapping + anchor validation
- * 4. Overwrite files with resolved links
- *
- * Memory efficient:
- * - Only one file's content in memory at a time
- * - FileDescriptor contains only lightweight metadata + anchors
+ * Uses factory pattern with closure variables to avoid prop drilling.
+ * Inner functions have shared access to urlMap, tracker, etc.
  */
 export async function resolve(ctx: ConversionContext): Promise<void> {
-  if (!ctx.files || !ctx.pathIndex) {
+  if (!ctx.files) {
     throw new Error("Processor and scanner must run before resolver");
   }
 
-  // Skip if link resolution is disabled
   if (!ctx.config.links.resolveInternal) {
     return;
   }
 
-  // TODO: Implement link resolution logic
-  // const writtenFiles = ctx.files.filter((f) => f.written);
-  // 1. Build LinkResolutionIndex from all file anchors
-  //    const index: LinkResolutionIndex = {}
-  //    for (const file of writtenFiles) {
-  //      if (file.anchors) {
-  //        index[file.uniqueId] = file.anchors
-  //      }
-  //    }
-  //
-  // 2. For each written file:
-  //    for (const file of writtenFiles) {
-  //      a. Read markdown content from disk
-  //         const content = await readFile(file.outputPath, 'utf-8')
-  //
-  //      b. Find all links (D&D Beyond URLs and internal anchors)
-  //
-  //      c. Resolve using:
-  //         - URL mapping (config.links.urlMapping)
-  //         - Path → ID mapping (ctx.pathIndex)
-  //         - Anchor validation (index built above)
-  //
-  //      d. Replace links or fallback to bold text
-  //
-  //      e. Overwrite file with resolved content
-  //         await writeFile(file.outputPath, resolvedContent, 'utf-8')
-  //    }
-  //
-  // 3. Track resolution stats (resolved/failed)
-  //    Update ctx.stats if needed or return stats
+  // ============================================================================
+  // Shared State (closure variables)
+  // ============================================================================
+
+  const { tracker, config, sourcebooks } = ctx;
+  const files = ctx.files.filter((f) => f.written);
+
+  // Build URL map keyed by canonical URLs
+  const urlMap = new Map(files.filter((f) => f.url).map((f) => [f.url!, f]));
+  const entityIndex = buildEntityIndex(files, ctx);
+
+  /**
+   * Format text using the configured fallback style
+   */
+  function formatFallback(text: string): string {
+    switch (config.links.fallbackStyle) {
+      case "bold":
+        return `${config.markdown.strong}${text}${config.markdown.strong}`;
+      case "italic":
+        return `${config.markdown.emphasis}${text}${config.markdown.emphasis}`;
+      case "plain":
+        return text;
+      case "none":
+        return ""; // Signal to keep original link
+      default:
+        return `${config.markdown.strong}${text}${config.markdown.strong}`;
+    }
+  }
+
+  /**
+   * Parse and normalize a URL into LinkInfo
+   */
+  function parseLink(url: string, text: string): LinkInfo {
+    const original = url;
+    const normalized = normalizeUrl(url);
+    let [path, anchor] = normalized.split("#");
+    path = applyAliases(path, config.links.urlAliases);
+    return { path, anchor, text, original };
+  }
+
+  // ============================================================================
+  // Resolution Functions
+  // ============================================================================
+
+  /**
+   * Resolve internal anchor link (same-page)
+   */
+  function resolveInternalAnchor(
+    htmlId: string,
+    text: string,
+    file: FileDescriptor,
+  ): string | null {
+    const fileAnchors = file.anchors;
+    if (!fileAnchors) return null;
+
+    const markdownAnchor = fileAnchors.htmlIdToAnchor[htmlId];
+    return markdownAnchor ? `[${text}](#${markdownAnchor})` : null;
+  }
+
+  /**
+   * Resolve entity link using entity index
+   */
+  function resolveEntityLink(link: LinkInfo): string | null {
+    if (!isEntityUrl(link.path)) return null;
+
+    const match = entityIndex.get(link.path);
+    if (!match) {
+      tracker.trackLinkIssue(link.original, link.text, "entity-not-found");
+      return null;
+    }
+
+    // Use link's anchor if specified, otherwise use the matched anchor
+    const targetAnchor = link.anchor || match.anchor;
+    return `[${link.text}](${match.fileId}.md#${targetAnchor})`;
+  }
+
+  /**
+   * Resolve source book link using canonical URLs
+   */
+  function resolveSourceLink(link: LinkInfo): string | null {
+    // No anchor - could be book-level or header link
+    if (!link.anchor) {
+      const sourcebook = sourcebooks?.find((sb) => sb.bookUrl === link.path);
+      if (sourcebook) {
+        return `[${link.text}](${sourcebook.id}.md)`;
+      }
+
+      const targetFile = urlMap.get(link.path);
+      if (targetFile) {
+        tracker.trackLinkIssue(link.original, link.text, "header-link");
+        const fallback = formatFallback(link.text);
+        return fallback || `[${link.text}](${link.original})`;
+      }
+
+      tracker.trackLinkIssue(link.original, link.text, "url-not-in-mapping");
+      return null;
+    }
+
+    // Has anchor - look up in URL mapping
+    const targetFile = urlMap.get(link.path);
+    if (!targetFile) {
+      tracker.trackLinkIssue(link.original, link.text, "url-not-in-mapping");
+      return null;
+    }
+
+    const fileAnchors = targetFile.anchors;
+    if (!fileAnchors) {
+      tracker.trackLinkIssue(link.original, link.text, "no-anchors");
+      return null;
+    }
+
+    // Priority 1: Direct HTML ID lookup
+    let matchedAnchor: string | null | undefined =
+      fileAnchors.htmlIdToAnchor[link.anchor];
+
+    // Priority 2: Smart matching
+    if (!matchedAnchor) {
+      matchedAnchor = findMatchingAnchor(
+        normalizeAnchor(link.anchor),
+        fileAnchors.valid,
+      );
+    }
+
+    if (!matchedAnchor) {
+      tracker.trackLinkIssue(link.original, link.text, "anchor-not-found");
+      return null;
+    }
+
+    return `[${link.text}](${targetFile.uniqueId}.md#${matchedAnchor})`;
+  }
+
+  /**
+   * Resolve a single link (already parsed and aliased)
+   */
+  function resolveLink(link: LinkInfo, file: FileDescriptor): string {
+    // Handle internal anchors
+    if (link.original.startsWith("#") && link.anchor) {
+      const result = resolveInternalAnchor(link.anchor, link.text, file);
+      if (result) {
+        tracker.incrementLinksResolved();
+        return result;
+      } else {
+        return `[${link.text}](#${link.anchor})`;
+      }
+    }
+
+    // Try entity link
+    const entityResult = resolveEntityLink(link);
+    if (entityResult) {
+      tracker.incrementLinksResolved();
+      return entityResult;
+    }
+
+    // Try source link
+    const sourceResult = resolveSourceLink(link);
+    if (sourceResult) {
+      if (sourceResult.endsWith(".md)") || sourceResult.includes(".md#")) {
+        tracker.incrementLinksResolved();
+      }
+      return sourceResult;
+    }
+
+    // Fallback
+    const fallback = formatFallback(link.text);
+    return fallback || `[${link.text}](${link.original})`;
+  }
+
+  /**
+   * Resolve all markdown links in content
+   */
+  function resolveContent(content: string, file: FileDescriptor): string {
+    return content
+      .split("\n")
+      .map((line) => {
+        // Find all markdown links
+        return line.replace(/\[([^\]]+)\]\(([^)]+)\)/g, (_match, text, url) => {
+          if (shouldResolveUrl(url)) {
+            const link = parseLink(url, text);
+            return resolveLink(link, file);
+          } else {
+            return `[${text}](${url})`;
+          }
+        });
+      })
+      .join("\n");
+  }
+
+  // ============================================================================
+  // Main Orchestration
+  // ============================================================================
+
+  for (const file of files) {
+    try {
+      const content = await readFile(file.outputPath, "utf-8");
+      const resolvedContent = resolveContent(content, file);
+
+      if (resolvedContent !== content) {
+        await writeFile(file.outputPath, resolvedContent, "utf-8");
+      }
+    } catch (error) {
+      tracker.trackError(file.outputPath, error, "file", "read");
+    }
+  }
 }

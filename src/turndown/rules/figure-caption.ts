@@ -10,7 +10,7 @@
 
 import type TurndownService from "turndown";
 import type { MarkdownConfig, TurndownNode } from "../../types";
-import { isImageUrl } from "../../utils/string";
+import { isImageUrl } from "../../utils";
 
 // ============================================================================
 // Artist Credit Extraction

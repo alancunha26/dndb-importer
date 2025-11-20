@@ -1,14 +1,6 @@
 /**
  * Processor Module
  * Processes files one at a time and writes immediately to avoid memory bloat
- *
- * Memory-efficient approach:
- * - Parse HTML (in memory briefly)
- * - Convert to Markdown (in memory briefly)
- * - Download images
- * - Write to disk immediately
- * - Store only lightweight WrittenFile
- * - HTML/markdown garbage collected before next file
  */
 
 import { readFile, writeFile, mkdir, copyFile } from "fs/promises";
@@ -16,15 +8,19 @@ import { dirname, join, extname } from "node:path";
 import { load } from "cheerio";
 import type { AnyNode } from "domhandler";
 import { createTurndownService } from "../turndown";
-import { loadIndexTemplate, loadFileTemplate } from "../templates";
-import { IdGenerator } from "../utils/id-generator";
-import { loadMapping, saveMapping } from "../utils/mapping";
-import { fileExists } from "../utils/fs";
 import {
+  IdGenerator,
+  loadMapping,
+  saveMapping,
+  fileExists,
   filenameToTitle,
   isImageUrl,
   extractIdFromFilename,
-} from "../utils/string";
+  generateAnchor,
+  parseEntityUrl,
+  loadIndexTemplate,
+  loadFileTemplate,
+} from "../utils";
 import type {
   ConversionContext,
   FileDescriptor,
@@ -32,157 +28,127 @@ import type {
   IndexTemplateContext,
   FileTemplateContext,
   SourcebookInfo,
+  ParsedEntityUrl,
 } from "../types";
 
 // ============================================================================
-// Helper Functions
+// Main Processor Function
 // ============================================================================
 
-/**
- * Download image with retry logic
- */
-async function downloadImageWithRetry(
-  url: string,
-  outputPath: string,
-  retries: number,
-  timeout: number,
-): Promise<void> {
-  let lastError: Error | null = null;
-
-  for (let attempt = 0; attempt <= retries; attempt++) {
-    try {
-      // Download image
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), timeout);
-
-      const response = await fetch(url, { signal: controller.signal });
-      clearTimeout(timeoutId);
-
-      if (!response.ok) {
-        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-      }
-
-      const buffer = Buffer.from(await response.arrayBuffer());
-
-      // Ensure output directory exists
-      await mkdir(dirname(outputPath), { recursive: true });
-
-      // Write file
-      await writeFile(outputPath, buffer);
-
-      return; // Success!
-    } catch (error) {
-      lastError = error as Error;
-
-      if (attempt < retries) {
-        // Exponential backoff: wait 1s, 2s, 4s, etc.
-        const delay = Math.pow(2, attempt) * 1000;
-        await new Promise((resolve) => setTimeout(resolve, delay));
-      }
-    }
-  }
-
-  throw lastError || new Error("Download failed");
-}
-
-// ============================================================================
-// Main Orchestrator (Factory Function)
-// ============================================================================
-
-/**
- * Processes all scanned files and writes them to disk
- * Enriches FileDescriptor objects with title, anchors, and written flag
- *
- * This function acts as a factory that creates inner functions with shared access
- * to common variables, eliminating argument drilling.
- *
- * Reads from context:
- * - files (flat list of all files)
- * - sourcebooks (metadata only)
- * - config
- *
- * Mutates:
- * - FileDescriptor objects in files array (adds title, anchors, written)
- */
 export async function process(ctx: ConversionContext): Promise<void> {
   if (!ctx.files || !ctx.sourcebooks) {
     throw new Error("Scanner must run before processor");
   }
 
   // ============================================================================
-  // Shared Variables (accessible to all inner functions via closure)
+  // Shared State (closure variables)
   // ============================================================================
 
-  const { config, files, sourcebooks, globalTemplates } = ctx;
-
-  // Load persistent image mapping from images.json (if exists)
-  const imageMappingPath = join(config.output.directory, "images.json");
-  let imageMapping = await loadMapping(imageMappingPath);
-
-  // Create ID generator and register existing IDs from mapping
+  const { config, files, sourcebooks, globalTemplates, tracker } = ctx;
+  const imageMappingPath = join(config.output, "images.json");
+  const imageMapping = await loadMapping(imageMappingPath);
   const idGenerator = IdGenerator.fromMapping(imageMapping);
 
   // ============================================================================
-  // Inner Functions (created by factory, share variables via closure)
+  // Helper Functions
   // ============================================================================
 
-  /**
-   * Parse HTML file and extract content, anchors, and images using Cheerio
-   * This is the ONLY place Cheerio is used - all extraction happens here
-   */
-  async function processHtml(file: FileDescriptor): Promise<{
+  async function downloadImage(url: string, outputPath: string): Promise<void> {
+    let lastError: Error | null = null;
+
+    for (let attempt = 0; attempt <= config.images.retries; attempt++) {
+      try {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(
+          () => controller.abort(),
+          config.images.timeout,
+        );
+
+        const response = await fetch(url, { signal: controller.signal });
+        clearTimeout(timeoutId);
+
+        if (!response.ok) {
+          throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+        }
+
+        const buffer = Buffer.from(await response.arrayBuffer());
+        await mkdir(dirname(outputPath), { recursive: true });
+        await writeFile(outputPath, buffer);
+        return;
+      } catch (error) {
+        lastError = error as Error;
+        if (attempt < config.images.retries) {
+          await new Promise((r) => setTimeout(r, Math.pow(2, attempt) * 1000));
+        }
+      }
+    }
+
+    throw lastError || new Error("Download failed");
+  }
+
+  // ============================================================================
+  // Processing Functions
+  // ============================================================================
+
+  async function parseHtml(file: FileDescriptor): Promise<{
     content: string;
     title: string;
     anchors: FileAnchors;
+    entities: ParsedEntityUrl[];
+    url: string | null;
+    bookUrl: string | null;
     images: string[];
   }> {
-    // 1. Read HTML file from disk
-    const html = await readFile(file.sourcePath, config.input.encoding);
-
-    // 2. Parse with Cheerio (ONLY place we use Cheerio)
+    const html = await readFile(file.sourcePath, "utf-8");
     const $ = load(html);
 
-    // 3. Extract main content using configured selector
-    const content = $(config.html.contentSelector);
+    // Extract canonical URL
+    let canonicalUrl: string | null = null;
+    let bookUrl: string | null = null;
+    const canonical = $('link[rel="canonical"]').attr("href");
+    if (canonical) {
+      const match = canonical.match(/dndbeyond\.com(\/.*)$/);
+      if (match) {
+        canonicalUrl = match[1];
+        const segments = canonicalUrl.split("/").filter((s) => s.length > 0);
+        if (segments.length > 1) {
+          bookUrl = "/" + segments.slice(0, -1).join("/");
+        }
+      }
+    }
 
+    // Extract content
+    const content = $(config.html.contentSelector);
     if (content.length === 0) {
       return {
         content: "",
         title: "",
         anchors: { valid: [], htmlIdToAnchor: {} },
+        entities: [],
+        url: null,
+        bookUrl: null,
         images: [],
       };
     }
 
-    // 4. Remove unwanted elements if configured
-    if (config.html.removeSelectors.length > 0) {
-      config.html.removeSelectors.forEach((selector) => {
-        content.find(selector).remove();
-      });
+    // Remove unwanted elements
+    for (const selector of config.html.removeSelectors) {
+      content.find(selector).remove();
     }
 
-    // 5. Preprocess HTML structure for D&D Beyond patterns
-    // Fix nested lists BEFORE Turndown conversion (not as a Turndown rule)
-    // This is preprocessing because:
-    // - D&D Beyond uses a specific HTML pattern (lists as siblings, not children)
-    // - Turndown needs proper HTML structure to generate correct markdown
-    // - DOM manipulation during Turndown conversion can cause content loss
+    // Fix nested lists
     content
       .find("ol > ul, ol > ol, ul > ul, ul > ol")
       .each((_index: number, element: AnyNode) => {
         const $nestedList = $(element);
-        const $parent = $nestedList.parent();
-
-        if (!$parent.is("ol, ul")) return;
-
         const $previousLi = $nestedList.prev("li");
-        if ($previousLi.length === 0) return;
-
-        $nestedList.remove();
-        $previousLi.append($nestedList);
+        if ($previousLi.length > 0) {
+          $nestedList.remove();
+          $previousLi.append($nestedList);
+        }
       });
 
-    // 6. Extract title from first H1 and anchors from all headings
+    // Extract title and anchors from headings
     let title = "";
     const valid: string[] = [];
     const htmlIdToAnchor: Record<string, string> = {};
@@ -192,194 +158,140 @@ export async function process(ctx: ConversionContext): Promise<void> {
       const text = $heading.text().trim();
       const htmlId = $heading.attr("id");
 
-      // Extract title from first H1
       if (!title && $heading.is("h1")) {
         title = text;
       }
 
-      // Generate GitHub-style anchor from heading text
-      const anchor = text
-        .toLowerCase()
-        .replace(/[^\w\s-]/g, "") // Remove special chars except spaces and hyphens
-        .replace(/\s+/g, "-") // Replace spaces with hyphens
-        .replace(/-+/g, "-") // Replace multiple hyphens with single
-        .replace(/^-|-$/g, ""); // Remove leading/trailing hyphens
-
+      const anchor = generateAnchor(text);
       if (anchor) {
-        // Add base anchor
         valid.push(anchor);
-
-        // Add plural/singular variants
-        if (anchor.endsWith("s")) {
-          valid.push(anchor.slice(0, -1)); // singular
-        } else {
-          valid.push(anchor + "s"); // plural
-        }
-
-        // Map HTML ID to markdown anchor
         if (htmlId) {
           htmlIdToAnchor[htmlId] = anchor;
         }
       }
     });
 
-    // 7. Extract image URLs from <img> tags
-    const imageUrls: string[] = [];
-    content.find("img").each((_index, element) => {
-      const src = $(element).attr("src");
-      if (src) {
-        imageUrls.push(src);
+    // Extract entity URLs from all links (deduplicated)
+    const entities: ParsedEntityUrl[] = [];
+    const seenUrls = new Set<string>();
+
+    content.find("a[href]").each((_i, link) => {
+      const href = $(link).attr("href");
+      if (href) {
+        const parsed = parseEntityUrl(href);
+        if (parsed && !seenUrls.has(parsed.url)) {
+          seenUrls.add(parsed.url);
+          entities.push(parsed);
+        }
       }
     });
 
-    // 8. Extract alternate image URLs from figcaption links (generic pattern)
-    // Finds any <a> in <figcaption> that links to an image file
-    content.find("figcaption a").each((_index, element) => {
-      const href = $(element).attr("href");
-      if (href && isImageUrl(href)) {
-        imageUrls.push(href);
-      }
+    // Extract images
+    const images: string[] = [];
+    content.find("img").each((_i, el) => {
+      const src = $(el).attr("src");
+      if (src) images.push(src);
+    });
+    content.find("figcaption a").each((_i, el) => {
+      const href = $(el).attr("href");
+      if (href && isImageUrl(href)) images.push(href);
     });
 
-    // 9. Return extracted data
     return {
       content: content.html() || "",
       title,
       anchors: { valid, htmlIdToAnchor },
-      images: imageUrls,
+      entities,
+      url: canonicalUrl,
+      bookUrl,
+      images,
     };
   }
 
-  /**
-   * Convert HTML to Markdown using Turndown
-   * No Cheerio needed - just pure HTML to Markdown conversion
-   */
-  async function processMarkdown(htmlContent: string): Promise<string> {
-    if (!htmlContent) {
-      return "";
-    }
-
-    // Convert HTML to Markdown using Turndown with image URL mapping
+  function convertToMarkdown(htmlContent: string): string {
+    if (!htmlContent) return "";
     const urlMapping = new Map(Object.entries(imageMapping));
     const turndown = createTurndownService(config.markdown, urlMapping);
     return turndown.turndown(htmlContent);
   }
 
-  /**
-   * Download images from URL list and build URL mapping
-   */
-  async function processImages(
+  async function downloadImages(
     file: FileDescriptor,
     images: string[],
   ): Promise<void> {
-    if (!config.images.download || images.length === 0) {
-      return;
-    }
+    if (!config.images.download || images.length === 0) return;
 
     for (const src of images) {
       const extension =
         extname(new URL(src, "https://www.dndbeyond.com").pathname) || ".png";
-
       const format = extension.slice(1);
-      if (!config.images.formats.includes(format)) {
-        continue;
-      }
+
+      if (!config.images.formats.includes(format)) continue;
 
       const path = imageMapping[src] ?? `${idGenerator.generate()}${extension}`;
       const outputPath = join(dirname(file.outputPath), path);
-      const imageExists = await fileExists(outputPath);
 
-      if (!imageExists) {
+      if (!(await fileExists(outputPath))) {
         try {
-          await downloadImageWithRetry(
-            src,
-            outputPath,
-            config.images.retries,
-            config.images.timeout,
-          );
+          await downloadImage(src, outputPath);
+          tracker.incrementImagesDownloaded();
         } catch (error) {
-          // Track error silently - don't interrupt spinner
-          ctx.errors?.images.push({ path: src, error: error as Error });
+          tracker.trackError(src, error, "image");
+          tracker.incrementImagesFailed();
         }
+      } else {
+        tracker.incrementImagesCached();
       }
 
-      // NOTE: Mutates mapping with updated path
       imageMapping[src] = path;
     }
   }
 
-  /**
-   * Build navigation links (prev/index/next)
-   */
-  function processNavigation(file: FileDescriptor): {
+  function buildNavigation(file: FileDescriptor): {
     prev?: string;
     index: string;
     next?: string;
   } {
-    // 1. Find the sourcebook for this file
     const sourcebook = sourcebooks.find((sb) => sb.id === file.sourcebookId);
-
     if (!sourcebook) {
-      return { index: "[Index](index.md)" }; // Fallback if sourcebook not found
+      return { index: "[Index](index.md)" };
     }
 
-    // 2. Get all files for this sourcebook in order
-    const sourcebookFiles = files.filter(
-      (f) => f.sourcebookId === file.sourcebookId,
-    );
+    const sbFiles = files.filter((f) => f.sourcebookId === file.sourcebookId);
+    const idx = sbFiles.findIndex((f) => f.uniqueId === file.uniqueId);
 
-    // 3. Find current file's index in the sourcebook
-    const currentIndex = sourcebookFiles.findIndex(
-      (f) => f.uniqueId === file.uniqueId,
-    );
-
-    if (currentIndex === -1) {
-      return { index: `[Index](${sourcebook.id}${config.output.extension})` };
+    if (idx === -1) {
+      return { index: `[Index](${sourcebook.id}.md)` };
     }
 
-    // 4. Get previous, index, and next files
-    const prevFile =
-      currentIndex > 0 ? sourcebookFiles[currentIndex - 1] : null;
-    const nextFile =
-      currentIndex < sourcebookFiles.length - 1
-        ? sourcebookFiles[currentIndex + 1]
-        : null;
-
-    // 5. Build navigation links object
-    const navigation: { prev?: string; index: string; next?: string } = {
-      index: `[Index](${sourcebook.id}${config.output.extension})`,
+    const nav: { prev?: string; index: string; next?: string } = {
+      index: `[Index](${sourcebook.id}.md)`,
     };
 
-    if (prevFile) {
-      const prevTitle = filenameToTitle(prevFile.filename);
-      navigation.prev = `← [${prevTitle}](${prevFile.uniqueId}${config.output.extension})`;
+    if (idx > 0) {
+      const prev = sbFiles[idx - 1];
+      nav.prev = `← [${filenameToTitle(prev.filename)}](${prev.uniqueId}.md)`;
     }
 
-    if (nextFile) {
-      const nextTitle = filenameToTitle(nextFile.filename);
-      navigation.next = `[${nextTitle}](${nextFile.uniqueId}${config.output.extension}) →`;
+    if (idx < sbFiles.length - 1) {
+      const next = sbFiles[idx + 1];
+      nav.next = `[${filenameToTitle(next.filename)}](${next.uniqueId}.md) →`;
     }
 
-    return navigation;
+    return nav;
   }
 
-  /**
-   * Assemble final document using template and write to disk
-   * Enriches the FileDescriptor with title, anchors, and written flag
-   */
-  async function processDocument(
+  async function writeDocument(
     file: FileDescriptor,
     markdown: string,
     sourcebook: SourcebookInfo,
   ): Promise<void> {
-    // 1. Load template (sourcebook-specific > global > default)
     const template = await loadFileTemplate(
       sourcebook.templates.file,
       globalTemplates?.file ?? null,
       config.markdown,
     );
 
-    // 2. Build template context
     const context: FileTemplateContext = {
       title: file.title || "",
       date: new Date().toISOString().split("T")[0],
@@ -390,164 +302,124 @@ export async function process(ctx: ConversionContext): Promise<void> {
         author: sourcebook.metadata.author,
         metadata: sourcebook.metadata,
       },
-      navigation: processNavigation(file),
+      navigation: buildNavigation(file),
       content: markdown,
     };
 
-    // 4. Render template
     const finalMarkdown = template(context);
-
-    // 5. Ensure output directory exists
     await mkdir(dirname(file.outputPath), { recursive: true });
-
-    // 6. Write to disk
     await writeFile(file.outputPath, finalMarkdown, "utf-8");
   }
 
-  /**
-   * Process a cover image for a sourcebook
-   */
-  async function processCoverImage(
+  async function copyCoverImage(
     sourcebook: SourcebookInfo,
   ): Promise<string | undefined> {
     const { coverImage } = sourcebook.metadata;
+    if (!coverImage) return undefined;
 
-    if (!coverImage) {
-      return undefined;
-    }
-
-    // Build path to cover image in input directory
     const inputPath = join(
-      config.input.directory,
+      config.input,
       sourcebook.sourcebook,
       coverImage,
     );
 
-    // Check if cover image exists
-    if (!(await fileExists(inputPath))) {
-      return undefined;
-    }
+    if (!(await fileExists(inputPath))) return undefined;
 
-    // Use input path as key for mapping (similar to how we handle regular images)
     const mappingKey = `cover:${sourcebook.sourcebook}/${coverImage}`;
+    const uniqueId = imageMapping[mappingKey]
+      ? extractIdFromFilename(imageMapping[mappingKey])
+      : idGenerator.generate();
 
-    // Check if we already have an ID for this cover image
-    let uniqueId: string;
-    if (imageMapping[mappingKey]) {
-      uniqueId = extractIdFromFilename(imageMapping[mappingKey]);
-    } else {
-      // Generate new unique ID
-      uniqueId = idGenerator.generate();
-    }
-
-    // Get file extension
     const extension = extname(coverImage);
     const localFilename = `${uniqueId}${extension}`;
+    const outputPath = join(config.output, localFilename);
 
-    // Build output path
-    const outputPath = join(config.output.directory, localFilename);
-
-    // Copy cover image to output directory
     try {
       await mkdir(dirname(outputPath), { recursive: true });
       await copyFile(inputPath, outputPath);
-
-      // NOTE: Mutates image mapping with cover image
       imageMapping[mappingKey] = localFilename;
-
       return localFilename;
     } catch (error) {
-      // Track error silently - don't interrupt spinner
-      ctx.errors?.images.push({ path: inputPath, error: error as Error });
+      tracker.trackError(inputPath, error, "image");
       return undefined;
     }
   }
 
-  /**
-   * Generate index files for all sourcebooks
-   */
-  async function processIndexes(): Promise<void> {
-    if (!sourcebooks || !config.output.createIndex) {
-      return; // Skip if no sourcebooks or index creation disabled
-    }
-
+  async function writeIndexes(): Promise<void> {
     for (const sourcebook of sourcebooks) {
-      // 1. Process cover image if present
-      const processedCoverImage = await processCoverImage(sourcebook);
+      const coverImage = await copyCoverImage(sourcebook);
 
-      // 2. Load template (sourcebook-specific > global > default)
       const template = await loadIndexTemplate(
         sourcebook.templates.index,
         globalTemplates?.index ?? null,
         config.markdown,
       );
 
-      // 3. Get all files for this sourcebook (should have title from processing)
-      const sourcebookFiles = files.filter(
-        (f) => f.sourcebookId === sourcebook.id,
-      );
+      const sbFiles = files.filter((f) => f.sourcebookId === sourcebook.id);
 
-      // 4. Build template context
       const context: IndexTemplateContext = {
         title: sourcebook.title,
         date: new Date().toISOString().split("T")[0],
         edition: sourcebook.metadata.edition,
         description: sourcebook.metadata.description,
         author: sourcebook.metadata.author,
-        coverImage: processedCoverImage, // Use processed filename with unique ID
+        coverImage,
         metadata: sourcebook.metadata,
-        files: sourcebookFiles.map((file) => ({
-          title: file.title || "", // Title should be set by processor
-          filename: `${file.uniqueId}${config.output.extension}`,
+        files: sbFiles.map((file) => ({
+          title: file.title || "",
+          filename: `${file.uniqueId}.md`,
           uniqueId: file.uniqueId,
         })),
       };
 
-      // 5. Render template
       const indexMarkdown = template(context);
-
-      // 6. Ensure output directory exists and write index
       await mkdir(dirname(sourcebook.outputPath), { recursive: true });
       await writeFile(sourcebook.outputPath, indexMarkdown, "utf-8");
     }
   }
 
   // ============================================================================
-  // Main Processing Logic
+  // Main Orchestration
   // ============================================================================
 
-  // Process each file one at a time (memory-efficient)
+  tracker.setTotalFiles(files.length);
+
   for (const file of files) {
-    // 1. Find sourcebook for this file
     const sourcebook = sourcebooks.find((sb) => sb.id === file.sourcebookId);
     if (!sourcebook) continue;
 
     try {
-      // 2. Parse HTML and extract content, title, anchors, and image URLs (ONLY place Cheerio is used)
-      const { content, title, anchors, images } = await processHtml(file);
+      // 1. Parse HTML
+      const { content, title, anchors, entities, url, bookUrl, images } =
+        await parseHtml(file);
+
       file.anchors = anchors;
       file.title = title;
+      file.url = url ?? undefined;
+      file.entities = entities;
 
-      // 3. Download images and build URL mapping (original URL -> local path)
-      await processImages(file, images);
+      if (!sourcebook.bookUrl && bookUrl) {
+        sourcebook.bookUrl = bookUrl;
+      }
 
-      // 4. Convert HTML to Markdown using Turndown with image URL mapping
-      const markdown = await processMarkdown(content);
+      // 2. Download images
+      await downloadImages(file, images);
 
-      // 5. Assemble and write document using template (enriches FileDescriptor)
-      await processDocument(file, markdown, sourcebook);
+      // 3. Convert to markdown
+      const markdown = convertToMarkdown(content);
+
+      // 4. Write document
+      await writeDocument(file, markdown, sourcebook);
       file.written = true;
+      tracker.incrementSuccessful();
     } catch (error) {
-      ctx.errors.files.push({
-        path: file.relativePath,
-        error: error as Error,
-      });
+      tracker.trackError(file.relativePath, error, "file");
+      tracker.incrementFailed();
     }
   }
 
-  // 6. Save updated image mapping to images.json (includes cover images)
+  // Save state and generate indexes
+  tracker.setIndexesCreated(sourcebooks.length);
   await saveMapping(imageMappingPath, imageMapping);
-
-  // 7. Generate index files
-  await processIndexes();
+  await writeIndexes();
 }
