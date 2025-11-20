@@ -4,9 +4,8 @@
 
 import ora from "ora";
 import { z } from "zod";
-import { loadConfig } from "../../utils/config";
+import { loadConfig, Tracker } from "../../utils";
 import * as modules from "../../modules";
-import { Tracker } from "../../utils/conversion-tracker";
 import type { ConversionContext } from "../../types";
 
 const ConvertOptionsSchema = z.object({

@@ -6,18 +6,22 @@
 import glob from "fast-glob";
 import path from "node:path";
 import { readFile } from "fs/promises";
-import { IdGenerator } from "../utils/id-generator";
-import { loadMapping, saveMapping } from "../utils/mapping";
-import { fileExists } from "../utils/fs";
-import { filenameToTitle, extractIdFromFilename } from "../utils/string";
-import { SourcebookMetadataSchema } from "../types/files";
-import type {
-  ConversionContext,
-  FileDescriptor,
-  FileMapping,
-  SourcebookInfo,
-  SourcebookMetadata,
-  TemplateSet,
+import {
+  IdGenerator,
+  loadMapping,
+  saveMapping,
+  fileExists,
+  filenameToTitle,
+  extractIdFromFilename,
+} from "../utils";
+import {
+  SourcebookMetadataSchema,
+  type ConversionContext,
+  type FileDescriptor,
+  type FileMapping,
+  type SourcebookInfo,
+  type SourcebookMetadata,
+  type TemplateSet,
 } from "../types";
 
 /**

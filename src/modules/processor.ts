@@ -8,17 +8,20 @@ import { dirname, join, extname } from "node:path";
 import { load } from "cheerio";
 import type { AnyNode } from "domhandler";
 import { createTurndownService } from "../turndown";
-import { loadIndexTemplate, loadFileTemplate } from "../templates";
-import { IdGenerator } from "../utils/id-generator";
-import { loadMapping, saveMapping } from "../utils/mapping";
-import { fileExists } from "../utils/fs";
 import {
+  IdGenerator,
+  loadMapping,
+  saveMapping,
+  fileExists,
   filenameToTitle,
   isImageUrl,
   extractIdFromFilename,
-} from "../utils/string";
-import { generateAnchor, generateAnchorVariants } from "../utils/anchor";
-import { parseEntityUrl, type ParsedEntityUrl } from "../utils/entity";
+  generateAnchor,
+  generateAnchorVariants,
+  parseEntityUrl,
+  loadIndexTemplate,
+  loadFileTemplate,
+} from "../utils";
 import type {
   ConversionContext,
   FileDescriptor,
@@ -26,6 +29,7 @@ import type {
   IndexTemplateContext,
   FileTemplateContext,
   SourcebookInfo,
+  ParsedEntityUrl,
 } from "../types";
 
 // ============================================================================

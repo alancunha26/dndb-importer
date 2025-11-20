@@ -9,12 +9,13 @@
 import { readFile, writeFile } from "fs/promises";
 import type { ConversionContext, FileDescriptor } from "../types";
 import {
-  normalizeDnDBeyondUrl,
+  normalizeUrl,
   shouldResolveUrl,
   applyAliases,
   isEntityUrl,
-} from "../utils/url";
-import { normalizeAnchor, findMatchingAnchor } from "../utils/anchor";
+  normalizeAnchor,
+  findMatchingAnchor,
+} from "../utils";
 
 /**
  * Entity location with matched anchor
@@ -144,7 +145,7 @@ export async function resolve(ctx: ConversionContext): Promise<void> {
    */
   function parseLink(url: string, text: string): LinkInfo {
     const original = url;
-    const normalized = normalizeDnDBeyondUrl(url);
+    const normalized = normalizeUrl(url);
     let [path, anchor] = normalized.split("#");
     path = applyAliases(path, config.links.urlAliases);
     return { path, anchor, text, original };

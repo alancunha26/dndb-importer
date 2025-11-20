@@ -1,37 +1,19 @@
-/**
- * Configuration Loader
- * Loads and merges configuration from defaults and user config
- */
-
 import { readFile } from "fs/promises";
 import { join, dirname } from "path";
 import { existsSync } from "fs";
 import { fileURLToPath } from "url";
 import envPaths from "env-paths";
-import type { ConversionConfig } from "../types";
+import type { ConversionConfig, ConfigError } from "../types";
 import {
   ConversionConfigSchema,
   PartialConversionConfigSchema,
-} from "../types/config";
-
-// Local type for config loading errors
-export interface ConfigError {
-  path: string;
-  error: unknown;
-}
+} from "../types";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
-// Get OS-specific paths using env-paths (follows XDG spec on Linux)
 const paths = envPaths("dndbeyond-importer", { suffix: "" });
 
-/**
- * Get the OS-specific config directory
- * - Linux: $XDG_CONFIG_HOME/dndbeyond-importer or ~/.config/dndbeyond-importer
- * - macOS: ~/Library/Preferences/dndbeyond-importer
- * - Windows: %APPDATA%\dndbeyond-importer
- */
 function getConfigDirectory(): string {
   return paths.config;
 }
@@ -46,10 +28,6 @@ export async function loadDefaultConfig(): Promise<ConversionConfig> {
   return ConversionConfigSchema.parse(parsed);
 }
 
-/**
- * Load user configuration from OS-specific directory with Zod validation
- * Throws error if config exists but is invalid
- */
 async function loadUserConfig(): Promise<Partial<ConversionConfig> | null> {
   const configDir = getConfigDirectory();
   const userConfigPath = join(configDir, "config.json");
@@ -65,10 +43,6 @@ async function loadUserConfig(): Promise<Partial<ConversionConfig> | null> {
   return parsed as Partial<ConversionConfig>;
 }
 
-/**
- * Load configuration from custom path with Zod validation
- * Throws error if config is invalid
- */
 async function loadCustomConfig(
   configPath: string,
 ): Promise<Partial<ConversionConfig>> {
@@ -79,9 +53,6 @@ async function loadCustomConfig(
   return parsed as Partial<ConversionConfig>;
 }
 
-/**
- * Deep merge two objects
- */
 function mergeConfig(
   base: ConversionConfig,
   override: Partial<ConversionConfig>,
@@ -98,7 +69,6 @@ function mergeConfig(
     links: {
       ...base.links,
       ...override.links,
-      // Deep merge urlAliases separately to allow adding/overriding individual aliases
       urlAliases: {
         ...base.links.urlAliases,
         ...override.links?.urlAliases,
@@ -116,22 +86,18 @@ interface LoadConfigResult {
 /**
  * Load and merge configuration
  * Priority: custom path > user config > default config
- * Returns default config if any of the config files fail to load or validate
  */
 export async function loadConfig(custom?: string): Promise<LoadConfigResult> {
-  // Load default config
   let config = await loadDefaultConfig();
   let errors: ConfigError[] = [];
 
   try {
-    // Merge with user config from OS-specific directory
     const userConfig = await loadUserConfig();
     if (userConfig) config = mergeConfig(config, userConfig);
   } catch (error) {
     errors.push({ path: getUserConfigPath(), error });
   }
 
-  // Merge with custom config if provided
   if (custom) {
     try {
       const customConfig = await loadCustomConfig(custom);

@@ -3,87 +3,17 @@
  * Unified tracking for stats and issues
  */
 
-import type { ConversionConfig } from "../types/config";
 import { ZodError } from "zod";
-
-// ============================================================================
-// Types
-// ============================================================================
-
-// Type-safe reasons for each issue type
-export type FileIssueReason = "parse-error" | "read-error" | "write-error";
-export type ImageIssueReason =
-  | "download-failed"
-  | "timeout"
-  | "not-found"
-  | "invalid-response";
-export type ResourceIssueReason =
-  | "invalid-json"
-  | "schema-validation"
-  | "read-error";
-export type LinkIssueReason =
-  | "url-not-in-mapping"
-  | "entity-not-found"
-  | "anchor-not-found"
-  | "header-link"
-  | "no-anchors";
-
-// Discriminated union - each type has its own subset of reasons
-export interface FileIssue {
-  type: "file";
-  path: string;
-  reason: FileIssueReason;
-  details?: string;
-}
-
-export interface ImageIssue {
-  type: "image";
-  path: string;
-  reason: ImageIssueReason;
-  details?: string;
-}
-
-export interface ResourceIssue {
-  type: "resource";
-  path: string;
-  reason: ResourceIssueReason;
-  details?: string;
-}
-
-export interface LinkIssue {
-  type: "link";
-  path: string;
-  reason: LinkIssueReason;
-  text: string;
-}
-
-export type Issue = FileIssue | ImageIssue | ResourceIssue | LinkIssue;
-export type IssueType = Issue["type"];
-
-export interface ProcessingStats {
-  // File counts
-  totalFiles: number;
-  successfulFiles: number;
-  failedFiles: number;
-  skippedFiles: number;
-
-  // Image counts
-  downloadedImages: number;
-  cachedImages: number;
-  failedImages: number;
-
-  // Link counts
-  resolvedLinks: number;
-
-  // Other counts
-  createdIndexes: number;
-
-  // All issues
-  issues: Issue[];
-
-  // Timing
-  duration: number;
-}
+import type {
+  ConversionConfig,
+  Issue,
+  IssueType,
+  FileIssueReason,
+  ImageIssueReason,
+  ResourceIssueReason,
+  LinkIssueReason,
+  ProcessingStats,
+} from "../types";
 
 // ============================================================================
 // Error Mapping (private)
@@ -121,28 +51,24 @@ function mapResourceError(error: unknown): IssueInfo<ResourceIssueReason> {
 
 function mapImageError(error: unknown): IssueInfo<ImageIssueReason> {
   if (error instanceof Error) {
-    // Timeout from AbortController
     if (error.name === "AbortError") {
       return {
         reason: "timeout",
         details: error.message,
       };
     }
-    // HTTP errors (4xx, 5xx)
     if (error.message.startsWith("HTTP ")) {
       return {
         reason: "invalid-response",
         details: error.message,
       };
     }
-    // File not found (for local copies)
     if ("code" in error && error.code === "ENOENT") {
       return {
         reason: "not-found",
         details: error.message,
       };
     }
-    // Other errors (network, etc.)
     return {
       reason: "download-failed",
       details: error.message,
@@ -160,7 +86,6 @@ function mapFileError(
 ): IssueInfo<FileIssueReason> {
   const details = error instanceof Error ? error.message : String(error);
 
-  // Check for specific error types
   if (error instanceof Error && "code" in error) {
     if (error.code === "ENOENT") {
       return { reason: "read-error", details };
@@ -173,12 +98,11 @@ function mapFileError(
     }
   }
 
-  // Use context to determine reason
   return { reason: `${context}-error` as FileIssueReason, details };
 }
 
 // ============================================================================
-// Tracker - Main tracker class
+// Tracker Class
 // ============================================================================
 
 export class Tracker {
@@ -240,9 +164,6 @@ export class Tracker {
   // Issue tracking
   // ============================================================================
 
-  /**
-   * Track an issue from an error, auto-detecting the reason based on error type
-   */
   trackError(
     path: string,
     error: unknown,
@@ -268,9 +189,6 @@ export class Tracker {
     }
   }
 
-  /**
-   * Track a link issue (only tracked when fallback is enabled)
-   */
   trackLinkIssue(path: string, text: string, reason: LinkIssueReason): void {
     if (this.config.links.fallbackStyle === "none") return;
     this.issues.push({ type: "link", path, reason, text });
@@ -293,9 +211,6 @@ export class Tracker {
   // Results
   // ============================================================================
 
-  /**
-   * Get final processing statistics
-   */
   getStats(): ProcessingStats {
     const endTime = new Date();
     const duration = endTime.getTime() - this.startTime.getTime();

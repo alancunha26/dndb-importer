@@ -4,7 +4,7 @@
  */
 
 import ShortUniqueId from "short-unique-id";
-import { extractIdFromFilename } from "./string";
+import { extractIdFromFilename } from "./extract-id-from-filename";
 import type { FileMapping } from "../types";
 
 export class IdGenerator {
