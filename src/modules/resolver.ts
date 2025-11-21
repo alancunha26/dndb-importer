@@ -43,18 +43,33 @@ function buildEntityIndex(
   const entityIndex = new Map<string, EntityMatch>();
   const seenUrls = new Set<string>();
 
-  // Helper: Find first matching anchor in a list of files
+  // Helper: Find best anchor match across all files (prioritize by match quality)
   function findMatch(
     slug: string,
     targetFiles: FileDescriptor[],
   ): EntityMatch | null {
+    let bestMatch: { fileId: string; anchor: string; step: number } | null =
+      null;
+
     for (const file of targetFiles) {
       if (!file.anchors) continue;
-      const anchor = findMatchingAnchor(slug, file.anchors.valid);
-      if (anchor) {
-        return { fileId: file.uniqueId, anchor };
+
+      const result = findMatchingAnchor(slug, file.anchors.valid);
+      if (result && (!bestMatch || result.step < bestMatch.step)) {
+        bestMatch = {
+          fileId: file.uniqueId,
+          anchor: result.anchor,
+          step: result.step,
+        };
+        // Short-circuit if we found an exact match (step 1)
+        if (result.step === 1) break;
       }
     }
+
+    if (bestMatch) {
+      return { fileId: bestMatch.fileId, anchor: bestMatch.anchor };
+    }
+
     return null;
   }
 
@@ -151,6 +166,14 @@ export async function resolve(ctx: ConversionContext): Promise<void> {
       default:
         return `${config.markdown.strong}${text}${config.markdown.strong}`;
     }
+  }
+
+  /**
+   * Convert internal --N notation to standard -N for markdown output
+   * The --N notation is used internally to avoid conflicts with entity URL slugs
+   */
+  function formatAnchor(result: string): string {
+    return result.replace(/--(\d+)(?=\)|$)/g, "-$1");
   }
 
   /**
@@ -256,10 +279,9 @@ export async function resolve(ctx: ConversionContext): Promise<void> {
 
     // Priority 2: Smart matching
     if (!matchedAnchor) {
-      matchedAnchor = findMatchingAnchor(
-        normalizeAnchor(link.anchor),
-        fileAnchors.valid,
-      );
+      const normalized = normalizeAnchor(link.anchor);
+      const result = findMatchingAnchor(normalized, fileAnchors.valid);
+      matchedAnchor = result?.anchor;
     }
 
     if (!matchedAnchor) {
@@ -328,7 +350,7 @@ export async function resolve(ctx: ConversionContext): Promise<void> {
         return line.replace(/\[([^\]]+)\]\(([^)]+)\)/g, (_match, text, url) => {
           if (shouldResolveUrl(url)) {
             const link = parseLink(url, text);
-            return resolveLink(link, file);
+            return formatAnchor(resolveLink(link, file));
           } else {
             return `[${text}](${url})`;
           }
