@@ -37,6 +37,7 @@ export const MarkdownConfigSchema = z.object({
 
 export const HtmlConfigSchema = z.object({
   contentSelector: z.string(),
+  titleSelector: z.string(),
   removeSelectors: z.array(z.string()),
 });
 
@@ -93,6 +94,7 @@ export const SourcebookMetadataSchema = z.looseObject({
   coverImage: z.string().optional(),
   description: z.string().optional(),
   author: z.string().optional(),
+  titles: z.array(z.string()).optional(),
 });
 
 export type SourcebookMetadata = z.infer<typeof SourcebookMetadataSchema>;

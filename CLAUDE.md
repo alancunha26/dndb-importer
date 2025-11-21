@@ -106,7 +106,7 @@ modules.stats(tracker, verbose); // 4. Display statistics
        - Fixes nested lists: D&D Beyond uses `<ol><li>...</li><ul>...</ul></ol>` pattern
        - Moves misplaced lists into previous `<li>` element before Turndown conversion
        - Prevents incorrect markdown numbering (1,2,4 → 1,2,3)
-     - Extracts title from first H1
+     - Extracts title with priority: sourcebook `titles` array → `titleSelector` → first H1
      - Extracts canonical URL from page metadata
      - Builds `FileAnchors` (valid anchors + HTML ID mappings)
      - **Extracts entity URLs** from tooltip links (spells, monsters, magic items, equipment)
@@ -194,6 +194,9 @@ modules.stats(tracker, verbose); // 4. Display statistics
   - Output extension: `.md`
   - Index creation: always enabled
 - HTML Parser: Uses `.p-article-content` selector to extract main content from D&D Beyond HTML
+- Title Selector: Uses `h1.page-title` selector to extract page titles from D&D Beyond HTML
+  - Falls back to first H1 in content area if not found
+  - Can be overridden per-sourcebook using `titles` array in sourcebook.json
 - URL Aliases: `links.urlAliases` maps D&D Beyond URLs to canonical URLs
   - Source aliasing: `/sources/dnd/free-rules/foo` → `/sources/dnd/phb-2024/foo`
   - Entity aliasing: `/magic-items/4585-belt-of-hill-giant-strength` → `/magic-items/5372-belt-of-giant-strength`
@@ -263,7 +266,11 @@ modules.stats(tracker, verbose); // 4. Display statistics
 - **Optional `sourcebook.json`** in each sourcebook directory
 - **Validated with Zod**: Uses `SourcebookMetadataSchema` with `.looseObject()` to allow custom fields
 - Scanner loads metadata using `loadSourcebookMetadata()` helper
-- Fields: `title`, `edition`, `description`, `author`, `coverImage`, plus any custom fields
+- Fields: `title`, `edition`, `description`, `author`, `coverImage`, `titles`, plus any custom fields
+- **Titles array**: Optional array of page titles in file sort order
+  - Overrides automatic title extraction from HTML
+  - Useful when D&D Beyond page titles are inconsistent
+  - Example: `"titles": ["Introduction", "Chapter 1: Playing the Game", ...]`
 - Invalid metadata files tracked in `ctx.errors.resources` and falls back to empty metadata
 - Stored in `SourcebookInfo.metadata` and passed to templates
 - Title from metadata overrides directory-name-based title generation

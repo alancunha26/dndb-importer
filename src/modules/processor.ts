@@ -90,7 +90,11 @@ export async function process(ctx: ConversionContext): Promise<void> {
   // Processing Functions
   // ============================================================================
 
-  async function parseHtml(file: FileDescriptor): Promise<{
+  async function parseHtml(
+    file: FileDescriptor,
+    sourcebook: SourcebookInfo,
+    fileIndex: number,
+  ): Promise<{
     content: string;
     title: string;
     anchors: FileAnchors;
@@ -148,8 +152,24 @@ export async function process(ctx: ConversionContext): Promise<void> {
         }
       });
 
-    // Extract title and anchors from headings
+    // Extract title with priority: titles array > titleSelector > content H1
     let title = "";
+
+    // 1. Try titles array from sourcebook metadata
+    const titlesArray = sourcebook.metadata.titles;
+    if (titlesArray && fileIndex >= 0 && fileIndex < titlesArray.length) {
+      title = titlesArray[fileIndex];
+    }
+
+    // 2. Try titleSelector on full document
+    if (!title) {
+      const titleElement = $(config.html.titleSelector);
+      if (titleElement.length > 0) {
+        title = titleElement.text().trim();
+      }
+    }
+
+    // 3. Extract anchors from headings and fall back to first H1 for title
     const valid: string[] = [];
     const htmlIdToAnchor: Record<string, string> = {};
     const anchorCounts = new Map<string, number>();
@@ -159,6 +179,7 @@ export async function process(ctx: ConversionContext): Promise<void> {
       const text = $heading.text().trim();
       const htmlId = $heading.attr("id");
 
+      // Fall back to first H1 if title still not set
       if (!title && $heading.is("h1")) {
         title = text;
       }
@@ -397,10 +418,14 @@ export async function process(ctx: ConversionContext): Promise<void> {
     const sourcebook = sourcebooks.find((sb) => sb.id === file.sourcebookId);
     if (!sourcebook) continue;
 
+    // Get file index within its sourcebook for title lookup
+    const sbFiles = files.filter((f) => f.sourcebookId === file.sourcebookId);
+    const fileIndex = sbFiles.findIndex((f) => f.uniqueId === file.uniqueId);
+
     try {
       // 1. Parse HTML
       const { content, title, anchors, entities, url, bookUrl, images } =
-        await parseHtml(file);
+        await parseHtml(file, sourcebook, fileIndex);
 
       file.anchors = anchors;
       file.title = title;
