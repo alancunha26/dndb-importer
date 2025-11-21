@@ -1,6 +1,6 @@
 # RFC 0002: Entity and Global Indexes
 
-**Status:** Draft
+**Status:** Accepted
 
 **Author:** Alan Cunha
 
@@ -248,19 +248,33 @@ Can be disabled via `indexes.generate: false` config.
 
 ### HTML Parsing
 
-Each entity type has a different listing page structure, requiring dedicated parsers. The exact HTML structure needs to be determined by inspecting the actual D&D Beyond pages.
+Each entity type requires its own parser for type-specific metadata extraction. However, parsers can share common utilities based on three distinct listing patterns. Sample HTML files are available in `examples/entities/` for reference during development.
 
-**Table-based listings** (spells, monsters, magic items, equipment, feats, backgrounds):
+> **Note:** The `examples/entities/` directory is not committed to the repository due to copyright restrictions.
 
-- Parse table rows
-- Extract entity name and URL from links
-- Extract metadata from table columns
+**Pattern 1: Info Cards** (spells, monsters, magic items):
 
-**Card-based listings** (species, classes):
+- Selector: `div.info[data-slug] a.link`
+- Entity ID from `data-slug` attribute
+- Has pagination
 
-- Parse card/section elements
-- Extract entity name and URL
-- Extract metadata from card content
+**Pattern 2: List Rows** (equipment, feats, backgrounds):
+
+- Selector: `div.list-row[data-slug] a.link`
+- Entity ID from `data-slug` attribute
+- Has pagination
+
+**Pattern 3: Card Grid** (species, classes):
+
+- Selector: `li.listing-card a.listing-card__link`
+- Entity ID from href or class name
+- No pagination (all shown in grid)
+
+**Parser architecture:**
+
+- One parser per entity type (8 total)
+- Common utilities per pattern for entity/URL extraction
+- Type-specific metadata selectors (e.g., spells: `.row.spell-level`, `.row.spell-school`; monsters: `.row.monster-type`, `.row.monster-challenge`)
 
 Each parser extracts:
 
@@ -324,33 +338,38 @@ D&D Beyond listing pages support various URL parameters for filtering:
 
 **Equipment:** cost range, weight range
 
-### Output Directory Structure
+### Filesystem Structure
 
-Overview of all files in the output directory:
+Overview of configuration, input, and output directories:
 
 ```
+~/.config/dndb-importer/
+└── config.json                 # User configuration (indexes config goes here)
+
+input/
+├── sourcebook.md.hbs           # Sourcebook index template (optional)
+├── page.md.hbs                 # Page content template (optional)
+├── entity-index.md.hbs         # Entity index template (optional)
+├── global-index.md.hbs         # Global index template (optional)
+├── players-handbook/
+│   ├── sourcebook.json         # Metadata with sourceId
+│   ├── sourcebook.md.hbs       # Sourcebook-specific index template (optional)
+│   ├── page.md.hbs             # Sourcebook-specific page template (optional)
+│   └── *.html                  # Downloaded HTML files
+├── dungeon-masters-guide/
+│   ├── sourcebook.json
+│   └── *.html
+└── monster-manual/
+    ├── sourcebook.json
+    └── *.html
+
 output/
-├── files.json              # HTML path → markdown filename mapping
-├── images.json             # Image URL → local filename mapping
-├── indexes.json            # Index mappings + cached entity lists
-│
-├── [Converted content - 4-char IDs]
-├── a3f9.md                 # Sourcebook page (e.g., PHB Chapter 1)
-├── b4c1.md                 # Sourcebook page (e.g., PHB Chapter 2)
-├── m3x7.png                # Downloaded image
-├── d0gh.jpg                # Downloaded image
-│
-├── [Sourcebook indexes - auto-generated]
-├── k2x8.md                 # PHB index (lists chapters)
-├── p9f3.md                 # DMG index (lists chapters)
-│
-├── [Entity indexes - from config]
-├── a7f2.md                 # All Spells index
-├── c9d8.md                 # All Monsters index
-├── f4k1.md                 # Spells parent index (links to children)
-│
-└── [Global index]
-    └── k3x9.md             # Links to sourcebook + entity indexes
+├── files.json                  # HTML path → markdown filename mapping
+├── images.json                 # Image URL → local filename mapping
+├── indexes.json                # Index mappings + cached entity lists
+├── *.md                        # Converted sourcebook pages (4-char IDs)
+├── *.png, *.jpg                # Downloaded images (4-char IDs)
+└── [indexes]                   # Sourcebook, entity, and global indexes (4-char IDs)
 ```
 
 All markdown and image files use 4-character unique IDs. The JSON mapping files provide persistence and human-readable lookups for debugging.
@@ -386,8 +405,10 @@ All markdown and image files use 4-character unique IDs. The JSON mapping files 
   - Entity indexes: configured cross-reference listings for lookup
   - Global index links to both types
 
-- [ ] **HTML structure**: What's the exact HTML structure of each listing page type?
-  - Need to investigate and create parsers for each
+- [x] **HTML structure**: What's the exact HTML structure of each listing page type?
+  - Three patterns: Info cards, List rows, Card grid
+  - Sample files in `examples/entities/` for reference
+  - See HTML Parsing section for selectors
 
 - [x] **Pagination**: How to handle paginated results?
   - D&D Beyond uses `page` URL parameter for pagination

@@ -1,6 +1,6 @@
 # RFC 0001: D&D Beyond HTML to Markdown Converter
 
-**Status:** Accepted
+**Status:** Done
 
 **Author:** Alan Cunha
 

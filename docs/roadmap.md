@@ -26,9 +26,10 @@ Track planned features and improvements for the D&D Beyond HTML to Markdown conv
 
 ## In Progress
 
-| Feature    | Description                                                        |
-| ---------- | ------------------------------------------------------------------ |
-| Unit tests | Tests for utility functions (anchor matching done, more to follow) |
+| Feature                   | Description                                                                                                            |
+| ------------------------- | ---------------------------------------------------------------------------------------------------------------------- |
+| Entity and global indexes | Generate entity indexes from D&D Beyond listing pages with filters ([RFC 0002](rfcs/0002-entity-and-global-indexes.md)) |
+| Unit tests                | Tests for utility functions (anchor matching done, more to follow)                                                     |
 
 ---
 
@@ -82,12 +83,11 @@ Track planned features and improvements for the D&D Beyond HTML to Markdown conv
 
 Ideas that need more exploration before committing.
 
-| Feature             | Description                                          |
-| ------------------- | ---------------------------------------------------- |
-| Web interface       | Simple UI for non-technical users                    |
-| Content sync        | Detect source updates, merge changes                 |
-| Global entity index | Cross-sourcebook entity search                       |
-| Accessibility       | Screen reader friendly output, alt text improvements |
+| Feature       | Description                                          |
+| ------------- | ---------------------------------------------------- |
+| Web interface | Simple UI for non-technical users                    |
+| Content sync  | Detect source updates, merge changes                 |
+| Accessibility | Screen reader friendly output, alt text improvements |
 
 ---
 
@@ -101,5 +101,6 @@ If you'd like to contribute:
 
 ## Changelog
 
+- **2025-11-21** - Added RFC 0002 for Entity and Global Indexes to In Progress; removed Global entity index from Future Considerations
 - **2025-11-21** - Added config reference, template guide, entityLocations (PHB/DMG/MM/ABOH/FRHOF), expanded urlAliases; Unit tests to In Progress
 - **2025-11-20** - Initial roadmap created for v1.0 release

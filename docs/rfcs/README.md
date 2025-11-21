@@ -26,12 +26,14 @@ For current implementation details, refer to:
 | Number                                            | Title                                 | Status   | Author     | Date       |
 | ------------------------------------------------- | ------------------------------------- | -------- | ---------- | ---------- |
 | [0000](0000-template.md)                          | Template                              | -        | -          | -          |
-| [0001](0001-dndbeyond-html-markdown-converter.md) | D&D Beyond HTML to Markdown Converter | Accepted | Alan Cunha | 2025-11-15 |
+| [0001](0001-dndbeyond-html-markdown-converter.md) | D&D Beyond HTML to Markdown Converter | Done     | Alan Cunha | 2025-11-15 |
+| [0002](0002-entity-and-global-indexes.md)         | Entity and Global Indexes             | Accepted | Alan Cunha | 2025-11-21 |
 
 ## Status Definitions
 
 - **Draft**: Initial proposal, open for feedback
 - **In Review**: Actively being discussed
 - **Accepted**: Approved for implementation
+- **Done**: Implementation complete
 - **Rejected**: Not moving forward
 - **Superseded**: Replaced by another RFC

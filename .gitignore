@@ -30,6 +30,7 @@ coverage/
 # Input/output directories (user data)
 input/
 output/
+entities/
 
 # Error reports
 *-error-report.json
