@@ -79,7 +79,7 @@ const ctx: ConversionContext = { config, tracker };
 
 // Run pipeline
 await modules.scan(ctx);    // 1. File discovery
-await modules.process(ctx); // 2. Process + write (memory-efficient)
+await modules.process(ctx); // 2. Parse all, then process + write
 await modules.resolve(ctx); // 3. Resolve links (optional)
 modules.stats(tracker, verbose); // 4. Display statistics
 ```
@@ -96,9 +96,9 @@ modules.stats(tracker, verbose); // 4. Display statistics
    - Groups files by sourcebook
    - Writes: `ctx.files`, `ctx.sourcebooks`, `ctx.globalTemplates`
 
-2. **Processor** (`processor.ts`) - **Memory-efficient streaming**
-   - Processes files **one at a time** to avoid memory bloat
-   - For each file:
+2. **Processor** (`processor.ts`) - **Two-pass processing**
+   - Uses two passes to enable correct navigation with extracted titles
+   - **Pass 1 - Parse all files:**
      - Parses HTML with Cheerio
      - Extracts content using `.p-article-content` selector
      - Removes unwanted elements (configured via `html.removeSelectors`)
@@ -110,19 +110,21 @@ modules.stats(tracker, verbose); // 4. Display statistics
      - Extracts canonical URL from page metadata
      - Builds `FileAnchors` (valid anchors + HTML ID mappings)
      - **Extracts entity URLs** from tooltip links (spells, monsters, magic items, equipment)
-     - Converts HTML → Markdown using Turndown with custom D&D rules
+     - Stores content and images on `FileDescriptor` for pass 2
+   - **Pass 2 - Process and write:**
      - Downloads images with retry logic (with persistent mapping)
+     - Converts HTML → Markdown using Turndown with custom D&D rules
      - Loads appropriate file template (sourcebook > global > default)
-     - Builds `FileTemplateContext` with navigation links and metadata
+     - Builds `FileTemplateContext` with navigation links using extracted titles
      - Renders template with Handlebars
-     - **Writes to disk immediately**
-     - Marks file as `written: true` with anchors and entities
-     - HTML and markdown are garbage collected before next file
+     - Writes to disk
+     - Clears content/images from `FileDescriptor` to free memory
    - Generates index files per sourcebook:
      - Loads appropriate index template (sourcebook > global > default)
      - Builds `IndexTemplateContext` with sourcebook metadata and file list
      - Renders template with Handlebars
    - Updates `ctx.files` with anchors, entities, and written status
+   - **Note:** Peak memory usage occurs at end of pass 1 (all content loaded). See [Performance](docs/performance.md) for details.
 
 3. **Resolver** (`resolver.ts`)
    - Runs **after all files are written to disk**
@@ -140,7 +142,6 @@ modules.stats(tracker, verbose); // 4. Display statistics
      - Validates anchors exist with smart matching (exact, prefix, plural/singular)
      - Falls back based on `fallbackStyle` setting (bold, italic, plain, none)
      - Overwrites file with resolved links
-   - Memory-efficient: Only one file's content in memory at a time
    - Skipped if `links.resolveInternal: false`
    - Tracks resolved/unresolved links via `ctx.tracker`
 
@@ -411,9 +412,9 @@ Uses shortest match for forward matching (steps 1-8, 12), longest match for reve
 
 **Performance:**
 
-- Memory-efficient: Reads files one at a time
-- No full content caching: Read → Process → Write → GC
+- Two-pass processing enables correct navigation titles
 - Entity index built once at start of resolution
+- See [Performance](docs/performance.md) for memory usage details
 
 ### HTML Preprocessing vs Turndown Rules
 
@@ -554,6 +555,8 @@ export type SourcebookMetadata = z.infer<typeof SourcebookMetadataSchema>;
   - `title?`: Extracted from first H1
   - `anchors?`: FileAnchors (valid anchors + HTML ID mappings)
   - `entities?`: ParsedEntityUrl[] (extracted entity URLs)
+  - `content?`: HTML content string (temporary, cleared after processing)
+  - `images?`: Image URLs array (temporary, cleared after processing)
   - `written?`: Boolean flag set after successful write
 - `SourcebookInfo` - Sourcebook metadata with templates:
   - `metadata`: SourcebookMetadata (from sourcebook.json)
@@ -595,7 +598,7 @@ src/
 │   └── index.ts
 ├── modules/
 │   ├── scanner.ts           # File discovery & ID assignment
-│   ├── processor.ts         # Process + write (memory-efficient)
+│   ├── processor.ts         # Two-pass: parse all, then process + write
 │   ├── resolver.ts          # Link resolution
 │   ├── stats.ts             # Statistics display with formatting
 │   └── index.ts

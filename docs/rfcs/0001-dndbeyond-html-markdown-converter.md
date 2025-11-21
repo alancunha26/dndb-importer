@@ -8,6 +8,8 @@
 
 **Updated:** 2025-11-20
 
+> **Note:** This RFC represents the original design. The implementation has evolved—notably, the processor now uses a two-pass architecture instead of single-pass streaming to enable correct navigation titles. See [Performance](../performance.md) for current memory usage details.
+
 ## Summary
 
 A CLI tool that converts D&D Beyond sourcebook HTML pages into clean, structured Markdown files suitable for note-taking applications like Obsidian. The tool uses unique ID-based file naming, downloads images locally, generates navigation links, and preserves D&D-specific formatting (stat blocks, spell descriptions, tables).

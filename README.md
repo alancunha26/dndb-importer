@@ -167,10 +167,11 @@ npm run format
 
 ## Documentation
 
-- [Architecture RFC](docs/rfcs/0001-dndbeyond-html-markdown-converter.md)
+- [Architecture](docs/architecture.md)
 - [Configuration Guide](docs/configuration.md)
 - [Template Guide](docs/templates.md)
 - [Link Resolver](docs/resolver.md)
+- [Performance](docs/performance.md)
 - [Roadmap](docs/roadmap.md)
 
 ## Contributing
