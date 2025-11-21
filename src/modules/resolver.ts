@@ -320,7 +320,6 @@ export async function resolve(ctx: ConversionContext): Promise<void> {
     if (excludeUrls.has(link.path)) {
       const fallback = formatFallback(link.text);
       if (fallback) {
-        tracker.trackUnresolvedLink(link.original, link.text);
         return fallback;
       } else {
         return `[${link.text}](${link.original})`;
