@@ -293,6 +293,8 @@ Reuse the existing entity matching from the resolver:
 
 Entities that can't be resolved are tracked separately and can be shown in stats or excluded from the index.
 
+**Optimization:** The resolver already builds an entity index mapping slugs to file anchors. This index should be stored in the context (`ctx.entityIndex`) and reused by the indexer module to avoid duplicate matching work. The resolver itself should also cache matched results to prevent redundant lookups for the same entity.
+
 ### Output Format
 
 Entity indexes are generated as markdown files using Handlebars templates. The template receives:
