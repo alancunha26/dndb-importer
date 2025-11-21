@@ -113,6 +113,8 @@ export interface FileDescriptor {
   title?: string;
   anchors?: FileAnchors;
   entities?: ParsedEntityUrl[];
+  content?: string;
+  images?: string[];
   written?: boolean;
 }
 

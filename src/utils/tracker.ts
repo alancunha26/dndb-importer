@@ -16,7 +16,6 @@ import type {
   ImageIssue,
   ResourceIssue,
   ProcessingStats,
-  UnresolvedLink,
 } from "../types";
 
 // ============================================================================

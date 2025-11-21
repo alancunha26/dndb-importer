@@ -243,13 +243,16 @@ export async function process(ctx: ConversionContext): Promise<void> {
     return turndown.turndown(htmlContent);
   }
 
-  async function downloadImages(
-    file: FileDescriptor,
-    images: string[],
-  ): Promise<void> {
-    if (!config.images.download || images.length === 0) return;
+  async function downloadImages(file: FileDescriptor): Promise<void> {
+    if (!config.images.download) {
+      return;
+    }
 
-    for (const src of images) {
+    if (!file.images?.length) {
+      return;
+    }
+
+    for (const src of file.images) {
       const extension =
         extname(new URL(src, "https://www.dndbeyond.com").pathname) || ".png";
       const format = extension.slice(1);
@@ -288,22 +291,27 @@ export async function process(ctx: ConversionContext): Promise<void> {
     const sbFiles = files.filter((f) => f.sourcebookId === file.sourcebookId);
     const idx = sbFiles.findIndex((f) => f.uniqueId === file.uniqueId);
 
+    const indexTitle = sourcebook.title || "Index";
+    const indexLink = `[${indexTitle}](${sourcebook.id}.md)`;
+
     if (idx === -1) {
-      return { index: `[Index](${sourcebook.id}.md)` };
+      return { index: indexLink };
     }
 
     const nav: { prev?: string; index: string; next?: string } = {
-      index: `[Index](${sourcebook.id}.md)`,
+      index: indexLink,
     };
 
     if (idx > 0) {
       const prev = sbFiles[idx - 1];
-      nav.prev = `← [${filenameToTitle(prev.filename)}](${prev.uniqueId}.md)`;
+      const prevTitle = prev.title || filenameToTitle(prev.filename);
+      nav.prev = `← [${prevTitle}](${prev.uniqueId}.md)`;
     }
 
     if (idx < sbFiles.length - 1) {
       const next = sbFiles[idx + 1];
-      nav.next = `[${filenameToTitle(next.filename)}](${next.uniqueId}.md) →`;
+      const nextTitle = next.title || filenameToTitle(next.filename);
+      nav.next = `[${nextTitle}](${next.uniqueId}.md) →`;
     }
 
     return nav;
@@ -414,16 +422,15 @@ export async function process(ctx: ConversionContext): Promise<void> {
 
   tracker.setTotalFiles(files.length);
 
+  // Pass 1: Parse all HTML files and extract metadata
   for (const file of files) {
     const sourcebook = sourcebooks.find((sb) => sb.id === file.sourcebookId);
     if (!sourcebook) continue;
 
-    // Get file index within its sourcebook for title lookup
     const sbFiles = files.filter((f) => f.sourcebookId === file.sourcebookId);
     const fileIndex = sbFiles.findIndex((f) => f.uniqueId === file.uniqueId);
 
     try {
-      // 1. Parse HTML
       const { content, title, anchors, entities, url, bookUrl, images } =
         await parseHtml(file, sourcebook, fileIndex);
 
@@ -431,21 +438,40 @@ export async function process(ctx: ConversionContext): Promise<void> {
       file.title = title;
       file.url = url ?? undefined;
       file.entities = entities;
+      file.content = content;
+      file.images = images;
 
       if (!sourcebook.bookUrl && bookUrl) {
         sourcebook.bookUrl = bookUrl;
       }
+    } catch (error) {
+      tracker.trackError(file.relativePath, error, "file");
+      tracker.incrementFailed();
+    }
+  }
 
-      // 2. Download images
-      await downloadImages(file, images);
+  // Pass 2: Download images, convert to markdown, write files
+  for (const file of files) {
+    const sourcebook = sourcebooks.find((sb) => sb.id === file.sourcebookId);
+    if (!sourcebook) continue;
 
-      // 3. Convert to markdown
-      const markdown = convertToMarkdown(content);
+    if (!file.content || !file.images) continue;
 
-      // 4. Write document
+    try {
+      // 1. Download images
+      await downloadImages(file);
+
+      // 2. Convert to markdown (reload HTML as Cheerio for Turndown)
+      const markdown = convertToMarkdown(file.content);
+
+      // 3. Write document
       await writeDocument(file, markdown, sourcebook);
-      file.written = true;
       tracker.incrementSuccessful();
+      file.written = true;
+
+      // Clear parsed data to free memory
+      delete file.content;
+      delete file.images;
     } catch (error) {
       tracker.trackError(file.relativePath, error, "file");
       tracker.incrementFailed();
