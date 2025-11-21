@@ -18,8 +18,8 @@ Convert D&D Beyond HTML sourcebooks to clean, structured Markdown files.
 
 ```bash
 # Clone the repository
-git clone https://github.com/alancunha26/dndbeyond-importer.git
-cd dndbeyond-importer
+git clone https://github.com/alancunha26/dndb-importer.git
+cd dndb-importer
 
 # Install dependencies
 npm install
@@ -82,7 +82,7 @@ The tool uses a layered configuration system with deep merging:
 
 | OS      | Path                                              |
 | ------- | ------------------------------------------------- |
-| Linux   | `~/.config/dndbeyond-importer/config.json`        |
+| Linux   | `~/.config/dndb-importer/config.json`             |
 | macOS   | `~/Library/Preferences/dndb-importer/config.json` |
 | Windows | `%APPDATA%\dndb-importer\config.json`             |
 

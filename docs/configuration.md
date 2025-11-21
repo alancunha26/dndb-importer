@@ -12,7 +12,7 @@ The converter uses a layered configuration system that deep-merges settings from
 
 | OS | Path |
 |----|------|
-| Linux | `$XDG_CONFIG_HOME/dndb-importer/config.json` (defaults to `~/.config/dndbeyond-importer/config.json`) |
+| Linux | `$XDG_CONFIG_HOME/dndb-importer/config.json` (defaults to `~/.config/dndb-importer/config.json`) |
 | macOS | `~/Library/Preferences/dndb-importer/config.json` |
 | Windows | `%APPDATA%\dndb-importer\config.json` |
 

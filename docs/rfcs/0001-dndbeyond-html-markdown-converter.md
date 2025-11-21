@@ -178,9 +178,9 @@ Configs are deep-merged, allowing partial overrides while preserving defaults.
 
 Uses `env-paths` library for cross-platform compatibility:
 
-- Linux: `~/.config/dndbeyond-importer/config.json` (XDG compliant)
-- macOS: `~/Library/Preferences/dndbeyond-importer/config.json`
-- Windows: `%APPDATA%\dndbeyond-importer\config.json`
+- Linux: `~/.config/dndb-importer/config.json` (XDG compliant)
+- macOS: `~/Library/Preferences/dndb-importer/config.json`
+- Windows: `%APPDATA%\dndb-importer\config.json`
 
 **Configuration Sections:**
 

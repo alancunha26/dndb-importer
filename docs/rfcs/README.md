@@ -1,6 +1,6 @@
 # RFCs (Requests for Comments)
 
-This directory contains proposal documents for significant changes, features, and architectural decisions in the dndbeyond-importer project.
+This directory contains proposal documents for significant changes, features, and architectural decisions in the dndb-importer project.
 
 ## Historical Documents
 
@@ -9,6 +9,7 @@ This directory contains proposal documents for significant changes, features, an
 **RFCs are not kept in sync with implementation changes.** As the codebase evolves, the actual implementation may diverge from the original RFC design. This is expected—implementation often reveals better approaches.
 
 For current implementation details, refer to:
+
 - [CLAUDE.md](../../CLAUDE.md) - Development guide with architecture details
 - [docs/](../) - Up-to-date documentation
 
@@ -22,9 +23,9 @@ For current implementation details, refer to:
 
 ## RFC Index
 
-| Number                                            | Title                                 | Status | Author     | Date       |
-| ------------------------------------------------- | ------------------------------------- | ------ | ---------- | ---------- |
-| [0000](0000-template.md)                          | Template                              | -      | -          | -          |
+| Number                                            | Title                                 | Status   | Author     | Date       |
+| ------------------------------------------------- | ------------------------------------- | -------- | ---------- | ---------- |
+| [0000](0000-template.md)                          | Template                              | -        | -          | -          |
 | [0001](0001-dndbeyond-html-markdown-converter.md) | D&D Beyond HTML to Markdown Converter | Accepted | Alan Cunha | 2025-11-15 |
 
 ## Status Definitions
