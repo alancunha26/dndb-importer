@@ -19,9 +19,9 @@
     "preformattedCode": false
   },
   "html": {
-    "contentSelector": ".p-article-content",
     "titleSelector": "h1.page-title",
-    "removeSelectors": []
+    "contentSelector": ".p-article-content",
+    "removeSelectors": ["style", "script", "noscript"]
   },
   "images": {
     "download": true,
