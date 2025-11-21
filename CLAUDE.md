@@ -316,21 +316,33 @@ The resolver transforms D&D Beyond links into local markdown links, enabling sea
 
 **Smart Anchor Matching:**
 
-1. **Exact match**
-2. **Normalized match** (strips trailing 's' from words for singular/plural matching)
-   - Example: `#potion-of-healing` matches `#potions-of-healing`
-3. **Prefix match** for headers with suffixes
-   - Example: `#alchemists-fire` matches `#alchemists-fire-50-gp`
-4. Uses shortest match if multiple candidates
+Uses a 9-step priority system with quality scores (lower is better). When searching across multiple files, the best quality match wins regardless of file order.
+
+With hyphens (preserving word boundaries):
+1. **Exact match** - `fireball` matches `fireball`
+2. **Exact plural match** - `bugbear` matches `bugbears`
+3. **Word-by-word prefix match** - `arcane-focus` matches `arcane-focus-varies` (not `arcane-focuses`)
+4. **Plural word prefix match** - `potion-of-healing` matches `potions-of-healing`
+
+Without hyphens (for special characters like `/`):
+5. **Exact match (no hyphens)** - `blindness-deafness` matches `blindnessdeafness`
+6. **Exact plural (no hyphens)** - handles plural variants
+7. **Prefix match (no hyphens)** - `blindness-deafness` matches `blindnessdeafnessvaries`
+8. **Prefix plural (no hyphens)** - handles plural prefix variants
+
+Fallback:
+9. **Unordered word match** - `travelers-clothes` matches `clothes-travelers-2-gp` (multi-word only)
+
+Uses shortest match if multiple candidates at same quality level, preferring the first match when lengths are equal.
 
 **Anchor Building (Processor):**
 
 - `FileAnchors.valid: string[]` - All markdown anchors from headings
 - `FileAnchors.htmlIdToAnchor: Record<string, string>` - HTML element IDs → markdown anchors
-- **Duplicate anchor handling**: Per GitHub markdown spec, duplicate headings get suffixed with `-1`, `-2`, etc.
+- **Duplicate anchor handling**: Uses `--N` suffix internally to avoid conflicts with entity URL slugs (e.g., `ammunition-1` magic item vs `ammunition--1` duplicate heading). Output converts to standard `-N` format.
   - First occurrence: `#ability-score-improvement`
-  - Second occurrence: `#ability-score-improvement-1`
-  - Third occurrence: `#ability-score-improvement-2`
+  - Second occurrence: `#ability-score-improvement-1` (stored as `--1` internally)
+  - Third occurrence: `#ability-score-improvement-2` (stored as `--2` internally)
 - Example: `<h2 id="Bell1GP">Bell (1 GP)</h2>` → `{ "Bell1GP": "bell-1-gp" }`
 
 **Special Cases:**

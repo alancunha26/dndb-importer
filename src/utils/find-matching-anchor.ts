@@ -1,88 +1,119 @@
-import { normalizeAnchorForMatching } from "./generate-anchor-variants";
+/**
+ * Match result with quality score (lower is better)
+ */
+export interface AnchorMatch {
+  anchor: string;
+  step: number;
+}
 
 /**
- * Find matching anchor with smart matching:
+ * Pre-processed anchor with all normalized forms
+ */
+interface ProcessedAnchor {
+  original: string;
+  norm: string;
+  normPlural: string;
+  noHyphens: string;
+  noHyphensPlural: string;
+  words: string[];
+  wordsPlural: string[];
+}
+
+/**
+ * Find matching anchor with smart matching and quality score:
+ *
+ * With hyphens (preserving word boundaries):
  * 1. Exact match
- * 2. Normalized match (removes hyphens and all 's' characters)
- * 3. Prefix match for headers with suffixes
+ * 2. Exact plural match (bugbear → bugbears)
+ * 3. Exact word-by-word prefix match
+ * 4. Plural-aware word-by-word prefix match
+ *
+ * Without hyphens (for special characters like "/"):
+ * 5. Exact match (no hyphens)
+ * 6. Exact plural match (no hyphens)
+ * 7. Prefix match (no hyphens)
+ * 8. Prefix plural match (no hyphens)
+ *
+ * Fallback:
+ * 9. Unordered word match
  *
  * @example
- * findMatchingAnchor("fireball", ["fireball"]) // "fireball"
- * findMatchingAnchor("potion-of-healing", ["potions-of-healing"]) // "potions-of-healing"
- * findMatchingAnchor("enlarge-reduce", ["enlargereduce"]) // "enlargereduce"
- * findMatchingAnchor("alchemists-fire", ["alchemists-fire-50-gp"]) // "alchemists-fire-50-gp"
+ * findMatchingAnchor("fireball", anchors) // { anchor: "fireball", step: 1 }
+ * findMatchingAnchor("bugbear", anchors) // { anchor: "bugbears", step: 2 }
+ * findMatchingAnchor("arcane-focus", anchors) // { anchor: "arcane-focus-varies", step: 3 }
+ * findMatchingAnchor("blindness-deafness", anchors) // { anchor: "blindnessdeafness", step: 5 }
  */
 export function findMatchingAnchor(
   anchor: string,
   validAnchors: string[],
-): string | null {
-  // 1. Try exact match
-  if (validAnchors.includes(anchor)) {
-    return anchor;
-  }
+): AnchorMatch | null {
+  // Helper functions
+  const stripPlural = (s: string) => (s.endsWith("s") ? s.slice(0, -1) : s);
+  const stripDupSuffix = (s: string) => s.replace(/--\d+$/, "");
+  const removeHyphens = (s: string) => s.replace(/-/g, "");
 
-  // 2. Try normalized match
-  const normalizedSearch = normalizeAnchorForMatching(anchor);
-  for (const valid of validAnchors) {
-    if (normalizeAnchorForMatching(valid) === normalizedSearch) {
-      return valid;
-    }
-  }
+  // Return shortest match, or first match when lengths are equal
+  const findShortest = (items: ProcessedAnchor[]) =>
+    items.reduce((a, b) => (b.norm.length < a.norm.length ? b : a));
 
-  // 3. Try prefix matching with consistent normalization
-  const searchWords = anchor.split("-").map((w) => w.replace(/s/g, ""));
-  const prefixMatches = validAnchors.filter((valid) => {
-    // Normalized prefix check (handles plurals and "/" characters)
-    // Only for multi-word searches to avoid "cart" matching "cartographers-tools"
-    // "potions-of-healing" matches "potion-of-healing-50-gp"
-    // "enlarge-reduce" matches "enlargereduce-spell"
-    if (searchWords.length >= 2) {
-      const normalizedValid = normalizeAnchorForMatching(valid);
-      if (normalizedValid.startsWith(normalizedSearch)) {
-        return true;
-      }
-    }
+  const isWordPrefix = (search: string[], valid: string[]) => {
+    if (search.length > valid.length) return false;
+    return search.every((word, i) => word === valid[i]);
+  };
 
-    // Word-by-word matching for additional precision
-    // "alchemists-fire" matches "alchemists-fire-50-gp"
-    // "cart" does NOT match "cartographers-tools"
-    const validWords = valid.split("-").map((w) => w.replace(/s/g, ""));
-    if (searchWords.length > validWords.length) return false;
+  // Pre-process all anchors with all normalized forms (computed once)
+  const processed: ProcessedAnchor[] = validAnchors.map((original) => {
+    const norm = stripDupSuffix(original);
+    const words = norm.split("-");
+    const noHyphens = removeHyphens(norm);
+    const normPlural = stripPlural(norm);
+    const noHyphensPlural = stripPlural(noHyphens);
+    const wordsPlural = words.map(stripPlural);
 
-    // Each search word must match corresponding anchor word
-    for (let i = 0; i < searchWords.length; i++) {
-      if (searchWords[i] !== validWords[i]) return false;
-    }
-
-    return true;
+    return {
+      original,
+      norm,
+      normPlural,
+      noHyphens,
+      noHyphensPlural,
+      words,
+      wordsPlural,
+    };
   });
 
-  if (prefixMatches.length > 0) {
-    // Return shortest match
-    return prefixMatches.reduce((shortest, current) =>
-      current.length < shortest.length ? current : shortest,
-    );
-  }
+  // Pre-process search anchor
+  const searchWords = anchor.split("-");
+  const searchWordsPlural = searchWords.map(stripPlural);
+  const searchPlural = stripPlural(anchor);
+  const searchNoHyphens = removeHyphens(anchor);
+  const searchNoHyphensPlural = stripPlural(searchNoHyphens);
 
-  // 4. Try unordered word matching (fallback for reversed word order)
-  // "travelers-clothes" matches "clothes-travelers-2-gp"
-  // Only for multi-word searches to avoid false positives like "bolt" matching "crossbow-bolt"
-  if (searchWords.length < 2) {
-    return null;
-  }
+  // Define matchers in priority order
+  const matchers: Array<(p: ProcessedAnchor) => boolean> = [
+    // With hyphens (preserving word boundaries)
+    (p) => p.norm === anchor, // 1. Exact match
+    (p) => p.normPlural === searchPlural, // 2. Exact plural match
+    (p) => isWordPrefix(searchWords, p.words), // 3. Word-by-word prefix match
+    (p) => isWordPrefix(searchWordsPlural, p.wordsPlural), // 4. Plural word prefix match
 
-  const unorderedMatches = validAnchors.filter((valid) => {
-    const validWords = valid.split("-").map((w) => w.replace(/s/g, ""));
-    return searchWords.every((searchWord) =>
-      validWords.some((validWord) => validWord === searchWord),
-    );
-  });
+    // Without hyphens (for special characters like "/" → "-")
+    (p) => p.noHyphens === searchNoHyphens, // 5. Exact match (no hyphens)
+    (p) => p.noHyphensPlural === searchNoHyphensPlural, // 6. Exact plural (no hyphens)
+    (p) => p.noHyphens.startsWith(searchNoHyphens), // 7. Prefix match (no hyphens)
+    (p) => p.noHyphensPlural.startsWith(searchNoHyphensPlural), // 8. Prefix plural (no hyphens)
 
-  if (unorderedMatches.length > 0) {
-    // Return shortest match
-    return unorderedMatches.reduce((shortest, current) =>
-      current.length < shortest.length ? current : shortest,
-    );
+    // Fallback: Unordered word match (only for multi-word searches)
+    (p) =>
+      searchWords.length >= 2 &&
+      searchWordsPlural.every((sw) => p.wordsPlural.includes(sw)),
+  ];
+
+  // Run matchers in order, return first match
+  for (let step = 0; step < matchers.length; step++) {
+    const matches = processed.filter(matchers[step]);
+    if (matches.length > 0) {
+      return { anchor: findShortest(matches).original, step: step + 1 };
+    }
   }
 
   return null;

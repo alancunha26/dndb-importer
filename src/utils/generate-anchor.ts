@@ -4,6 +4,7 @@
  * @example
  * generateAnchor("Bell (1 GP)") // "bell-1-gp"
  * generateAnchor("Opportunity Attack") // "opportunity-attack"
+ * generateAnchor("Blindness/Deafness") // "blindnessdeafness"
  */
 export function generateAnchor(text: string): string {
   return text

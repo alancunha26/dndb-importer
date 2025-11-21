@@ -194,54 +194,88 @@ D&D Beyond has multiple URLs for the same content. URL aliases normalize these t
 
 ## Smart Anchor Matching
 
+### Quality-Based Matching
+
+The resolver uses a **9-step priority system with quality scores** (lower is better). When searching across multiple files (e.g., for entity resolution), the best quality match wins regardless of file order.
+
 ### Strategies
 
-1. **Exact match**
+**With hyphens (preserving word boundaries):**
 
+1. **Exact match**
    ```
    Anchor: "fireball"
    Valid: ["fireball", ...]
-   Match: "fireball"
+   Match: "fireball" (step 1)
    ```
 
-2. **Normalized match** (removes hyphens and all 's' characters for plural matching)
+2. **Exact plural match** (strips trailing 's')
+   ```
+   Anchor: "bugbear"
+   Valid: ["bugbears", "bugbear-stalker", ...]
+   Match: "bugbears" (step 2)
+   ```
 
+3. **Word-by-word prefix match** (words must match at positions)
+   ```
+   Anchor: "arcane-focus"
+   Valid: ["arcane-focus-varies", "arcane-focuses", ...]
+   Match: "arcane-focus-varies" (step 3, NOT "arcane-focuses")
+   ```
+
+4. **Plural word prefix match** (strips 's' from each word)
    ```
    Anchor: "potion-of-healing"
    Valid: ["potions-of-healing", ...]
-   Normalized: "potionofhealing" matches "potionofhealing"
-   Match: "potions-of-healing"
+   Match: "potions-of-healing" (step 4)
    ```
 
-3. **Prefix match** (for headers with suffixes)
+**Without hyphens (for special characters like `/` → removed):**
 
-   Uses word-by-word matching to prevent false positives:
-   - `cart` does NOT match `cartographers-tools` (different first word)
-   - `alchemists-fire` matches `alchemists-fire-50-gp` (words match at positions)
-
+5. **Exact match (no hyphens)**
    ```
-   Anchor: "alchemists-fire"
-   Valid: ["alchemists-fire-50-gp", "alchemists-supplies"]
-   Match: "alchemists-fire-50-gp" (shortest prefix match)
+   Anchor: "blindness-deafness"
+   Valid: ["blindnessdeafness", ...]
+   Match: "blindnessdeafness" (step 5)
    ```
 
-   For multi-word searches (2+ words), also tries normalized prefix matching.
+6. **Exact plural (no hyphens)**
+   ```
+   Anchor: "blindness-deafness"
+   Valid: ["blindnessdeafnesss", ...]  # hypothetical
+   Match: "blindnessdeafnesss" (step 6)
+   ```
 
-4. **Unordered word match** (for reversed word order, requires 2+ words)
+7. **Prefix match (no hyphens)**
+   ```
+   Anchor: "blindness-deafness"
+   Valid: ["blindnessdeafnessvaries", ...]
+   Match: "blindnessdeafnessvaries" (step 7)
+   ```
 
+8. **Prefix plural (no hyphens)**
+   ```
+   Anchor: "blindness-deafness"
+   Valid: ["blindnessdeafnesssvaries", ...]  # hypothetical
+   Match: "blindnessdeafnesssvaries" (step 8)
+   ```
+
+**Fallback:**
+
+9. **Unordered word match** (requires 2+ words)
    ```
    Anchor: "travelers-clothes"
    Valid: ["clothes-travelers-2-gp", ...]
-   Match: "clothes-travelers-2-gp" (all words found)
+   Match: "clothes-travelers-2-gp" (step 9)
    ```
 
-   Requires minimum 2 words to prevent false positives like "bolt" matching "crossbow-bolt".
+10. **No match** → Apply fallback style
 
-5. **No match** → Fallback
-   ```
-   Anchor: "nonexistent"
-   Match: null → Apply fallback style
-   ```
+### Tie-Breaking
+
+When multiple anchors match at the same quality level:
+- **Shortest match wins** (by normalized length)
+- **First match wins** when lengths are equal (preserves document order)
 
 ## Anchor Building (Processor Stage)
 
@@ -260,8 +294,12 @@ interface FileAnchors {
 
 1. **Extract heading text** from HTML
 2. **Generate GitHub-style anchor** (lowercase, hyphens)
-3. **Handle duplicate anchors** - Per GitHub markdown spec, duplicate headings get suffixed with `-1`, `-2`, etc.
+3. **Handle duplicate anchors** - Uses `--N` suffix internally to avoid conflicts with entity URL slugs (e.g., `ammunition-1` magic item vs `ammunition--1` duplicate heading). Output converts to standard `-N` format.
 4. **Map HTML IDs** to markdown anchors
+
+**Why `--N` internally?**
+
+Entity URL slugs from D&D Beyond use patterns like `ammunition-1` (for "Ammunition, +1"). If we used GitHub's standard `-1` suffix for duplicates, a link to the magic item could incorrectly resolve to a duplicate heading. The `--N` pattern ensures clean separation during matching.
 
 **Example (single heading):**
 
@@ -288,17 +326,25 @@ Results in:
 <h3 id="Level12AbilityScoreImprovement">Ability Score Improvement</h3>
 ```
 
-Results in:
+Stored internally (with `--N`):
 
 ```typescript
 {
-  valid: ["ability-score-improvement", "ability-score-improvement-1", "ability-score-improvement-2"],
+  valid: ["ability-score-improvement", "ability-score-improvement--1", "ability-score-improvement--2"],
   htmlIdToAnchor: {
     "Level4AbilityScoreImprovement": "ability-score-improvement",
-    "Level8AbilityScoreImprovement": "ability-score-improvement-1",
-    "Level12AbilityScoreImprovement": "ability-score-improvement-2"
+    "Level8AbilityScoreImprovement": "ability-score-improvement--1",
+    "Level12AbilityScoreImprovement": "ability-score-improvement--2"
   }
 }
+```
+
+Output in markdown (converted to `-N`):
+
+```markdown
+[Ability Score Improvement](#ability-score-improvement)
+[Ability Score Improvement](#ability-score-improvement-1)
+[Ability Score Improvement](#ability-score-improvement-2)
 ```
 
 ## Special Cases

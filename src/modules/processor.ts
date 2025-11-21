@@ -165,9 +165,10 @@ export async function process(ctx: ConversionContext): Promise<void> {
 
       const baseAnchor = generateAnchor(text);
       if (baseAnchor) {
-        // Handle duplicate anchors per GitHub markdown spec
+        // Handle duplicate anchors with --N suffix to avoid conflicts with entity URL slugs
+        // Example: ammunition--1 (duplicate) won't conflict with ammunition-1 (magic item)
         const count = anchorCounts.get(baseAnchor) || 0;
-        const anchor = count === 0 ? baseAnchor : `${baseAnchor}-${count}`;
+        const anchor = count === 0 ? baseAnchor : `${baseAnchor}--${count}`;
         anchorCounts.set(baseAnchor, count + 1);
 
         valid.push(anchor);
