@@ -8,6 +8,7 @@
 import { Command } from "commander";
 import { convertCommand } from "./commands/convert";
 import { configCommand } from "./commands/config";
+import { extractCommand } from "./commands/extract";
 
 const program = new Command();
 
@@ -30,5 +31,13 @@ program
   .command("config")
   .description("Show configuration file location")
   .action(configCommand);
+
+// Extract command - find entity URLs in HTML files
+program
+  .command("extract <input>")
+  .description("Extract entity URLs from HTML files and add to urlAliases config")
+  .option("--update", "Update default.json with missing entities")
+  .option("--smart <output>", "Only show entities that failed to resolve (uses stats.json from output directory)")
+  .action(extractCommand);
 
 program.parse();
