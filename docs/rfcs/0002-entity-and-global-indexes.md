@@ -44,22 +44,6 @@ Instead of extracting entities from converted file anchors (error-prone, loses d
 - Metadata (rarity, school, CR, etc.)
 - Filter support via URL parameters
 
-### Entity Listing URLs
-
-**Standard listing pages** (with filter support):
-
-- Magic Items: `https://www.dndbeyond.com/magic-items?filter-source=146&...`
-- Backgrounds: `https://www.dndbeyond.com/backgrounds?filter-name=&...`
-- Feats: `https://www.dndbeyond.com/feats?filter-name=&...`
-- Spells: `https://www.dndbeyond.com/spells?filter-search=&...`
-- Monsters: `https://www.dndbeyond.com/monsters?filter-type=0&...`
-- Equipment: `https://www.dndbeyond.com/equipment?filter-search=&...`
-
-**Full page lists** (no pagination):
-
-- Species: `https://www.dndbeyond.com/species`
-- Classes: `https://www.dndbeyond.com/classes`
-
 ### Benefits of This Approach
 
 1. **Accurate display names**: Get exact names from D&D Beyond (no guessing from anchors)
@@ -113,6 +97,25 @@ Example configuration:
 ```
 
 Users can create multiple indexes of the same type with different filters (e.g., "PHB Spells" vs "All Spells").
+
+### Sourcebook ID in Metadata
+
+Each `sourcebook.json` can include a D&D Beyond source ID:
+
+```json
+{
+  "title": "Player's Handbook",
+  "sourceId": 145
+}
+```
+
+This enables:
+
+- Automatic filtering to only show entities from converted sourcebooks
+- The indexer can compute `filter-source` parameters based on available books
+- Users don't need to manually specify source IDs in every URL
+
+When an index URL doesn't include a `filter-source` parameter, the indexer can automatically add filters for all converted sourcebooks that have a `sourceId` defined. This prevents indexes from showing entities from books the user hasn't downloaded.
 
 ### Nested Indexes
 
@@ -221,75 +224,6 @@ Like all other output files, index files use 4-character unique IDs (e.g., `k3x9
 
 4. **Force refetch**: Users can pass a CLI flag to ignore cache and refetch all entity lists.
 
-### Output Directory Structure
-
-Overview of all files in the output directory:
-
-```
-output/
-├── files.json              # HTML path → markdown filename mapping
-├── images.json             # Image URL → local filename mapping
-├── indexes.json            # Index mappings + cached entity lists
-│
-├── [Converted content - 4-char IDs]
-├── a3f9.md                 # Sourcebook page (e.g., PHB Chapter 1)
-├── b4c1.md                 # Sourcebook page (e.g., PHB Chapter 2)
-├── m3x7.png                # Downloaded image
-├── d0gh.jpg                # Downloaded image
-│
-├── [Sourcebook indexes - auto-generated]
-├── k2x8.md                 # PHB index (lists chapters)
-├── p9f3.md                 # DMG index (lists chapters)
-│
-├── [Entity indexes - from config]
-├── a7f2.md                 # All Spells index
-├── c9d8.md                 # All Monsters index
-├── f4k1.md                 # Spells parent index (links to children)
-│
-└── [Global index]
-    └── k3x9.md             # Links to sourcebook + entity indexes
-```
-
-All markdown and image files use 4-character unique IDs. The JSON mapping files provide persistence and human-readable lookups for debugging.
-
-The `indexes.json` stores both filename mappings and cached entity lists (keyed by URL). This avoids re-fetching on subsequent runs. Users can pass a CLI flag to force refetch when needed.
-
-### Sourcebook ID in Metadata
-
-Each `sourcebook.json` can include a D&D Beyond source ID:
-
-```json
-{
-  "title": "Player's Handbook",
-  "sourceId": 145
-}
-```
-
-This enables:
-
-- Automatic filtering to only show entities from converted sourcebooks
-- The indexer can compute `filter-source` parameters based on available books
-- Users don't need to manually specify source IDs in every URL
-
-When an index URL doesn't include a `filter-source` parameter, the indexer can automatically add filters for all converted sourcebooks that have a `sourceId` defined. This prevents indexes from showing entities from books the user hasn't downloaded.
-
-### D&D Beyond Filter Parameters
-
-D&D Beyond listing pages support various URL parameters for filtering:
-
-**Common filters:**
-
-- `filter-source=ID` - Filter by sourcebook (145=PHB, 146=DMG, etc.)
-- `filter-partnered-content=f` - Exclude partnered content
-
-**Spells:** level, school, class, concentration, ritual
-
-**Magic Items:** rarity, type, attunement
-
-**Monsters:** type, CR range, legendary status
-
-**Equipment:** cost range, weight range
-
 ## Design Details
 
 ### Pipeline Integration
@@ -358,16 +292,6 @@ The global index template receives:
 - List of all sourcebooks with their index paths
 - List of all entity indexes with entry counts
 
-### Caching
-
-To avoid hitting D&D Beyond repeatedly:
-
-1. **Cache fetched listing pages** in the output directory
-2. **Cache parsed entity lists** as JSON
-3. **Invalidation** - Manual or time-based
-
-This allows re-running the indexer without re-fetching from D&D Beyond.
-
 ### Handling Pagination
 
 D&D Beyond listing pages paginate for large result sets. The indexer handles this by:
@@ -382,6 +306,54 @@ D&D Beyond listing pages paginate for large result sets. The indexer handles thi
 - **Fetch failures**: Retry with backoff, skip index if persistent failure
 - **Parse failures**: Log and continue, generate partial index
 - **Resolution failures**: Track unresolved entities, show in stats
+
+### D&D Beyond Filter Parameters
+
+D&D Beyond listing pages support various URL parameters for filtering:
+
+**Common filters:**
+
+- `filter-source=ID` - Filter by sourcebook (145=PHB, 146=DMG, etc.)
+- `filter-partnered-content=f` - Exclude partnered content
+
+**Spells:** level, school, class, concentration, ritual
+
+**Magic Items:** rarity, type, attunement
+
+**Monsters:** type, CR range, legendary status
+
+**Equipment:** cost range, weight range
+
+### Output Directory Structure
+
+Overview of all files in the output directory:
+
+```
+output/
+├── files.json              # HTML path → markdown filename mapping
+├── images.json             # Image URL → local filename mapping
+├── indexes.json            # Index mappings + cached entity lists
+│
+├── [Converted content - 4-char IDs]
+├── a3f9.md                 # Sourcebook page (e.g., PHB Chapter 1)
+├── b4c1.md                 # Sourcebook page (e.g., PHB Chapter 2)
+├── m3x7.png                # Downloaded image
+├── d0gh.jpg                # Downloaded image
+│
+├── [Sourcebook indexes - auto-generated]
+├── k2x8.md                 # PHB index (lists chapters)
+├── p9f3.md                 # DMG index (lists chapters)
+│
+├── [Entity indexes - from config]
+├── a7f2.md                 # All Spells index
+├── c9d8.md                 # All Monsters index
+├── f4k1.md                 # Spells parent index (links to children)
+│
+└── [Global index]
+    └── k3x9.md             # Links to sourcebook + entity indexes
+```
+
+All markdown and image files use 4-character unique IDs. The JSON mapping files provide persistence and human-readable lookups for debugging.
 
 ## Alternatives Considered
 
@@ -444,29 +416,38 @@ D&D Beyond listing pages paginate for large result sets. The indexer handles thi
 
 ### Phase 1: Core Infrastructure
 
-- Config schema for index definitions
-- Fetch and cache listing pages
+- Config schema for index definitions (Zod validation)
+- `indexes.json` for mappings and cache persistence
+- Fetch listing pages with retry logic
 - Basic HTML parser for one entity type (spells)
 - Entity resolution using existing matcher
-- Generate simple markdown list
+- Generate simple markdown list output
 
 ### Phase 2: All Entity Types
 
-- Parsers for all entity types
-- Pagination handling
-- Metadata extraction
+- Parsers for all entity types (table-based and card-based)
+- Pagination handling (detect last page, fetch all)
+- Metadata extraction per entity type
 
-### Phase 3: Global Index
+### Phase 3: Nested Indexes and Global Index
 
-- Generate global index with sourcebook links
-- Link to all entity indexes
-- Entry counts
+- Nested index configuration (`children` support)
+- Parent indexes that link to child indexes
+- Global index with sourcebook and entity index links
+- Root-only listing in global index
 
-### Phase 4: Enhanced Features
+### Phase 4: Auto-filtering and Caching
 
-- Custom templates
+- `sourceId` in sourcebook.json metadata
+- Auto-filter URLs based on converted sourcebooks
+- Cache parsed entity lists in `indexes.json`
+- CLI flag to force refetch
+
+### Phase 5: Templates and Statistics
+
+- Handlebars templates for entity and global indexes
 - Statistics (resolved/unresolved counts)
-- Source ID mapping helper
+- Fallback handling for unresolved entities
 
 ## References
 
