@@ -38,6 +38,7 @@ program
   .description("Extract entity URLs from HTML files and add to urlAliases config")
   .option("--update", "Update default.json with missing entities")
   .option("--smart <output>", "Only show entities that failed to resolve (uses stats.json from output directory)")
+  .option("--exclude <types...>", "Exclude specific entity types (e.g., --exclude monsters spells)")
   .action(extractCommand);
 
 program.parse();

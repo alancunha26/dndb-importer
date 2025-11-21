@@ -26,6 +26,7 @@ interface ExtractedEntity {
 interface ExtractEntitiesOptions {
   update?: boolean;
   smart?: string; // Path to output directory with stats.json
+  exclude?: string[]; // Entity types to exclude
 }
 
 interface StatsJson {
@@ -125,6 +126,7 @@ export async function extractCommand(
 ): Promise<void> {
   const shouldUpdate = options.update ?? false;
   const smartMode = options.smart;
+  const excludeTypes = new Set(options.exclude ?? []);
 
   console.log(chalk.cyan("\nExtract Entity URLs"));
   console.log(chalk.gray("─".repeat(60)));
@@ -132,6 +134,11 @@ export async function extractCommand(
   if (smartMode) {
     console.log(
       `Smart mode: ${chalk.cyan("enabled")} (using ${smartMode}/stats.json)`,
+    );
+  }
+  if (excludeTypes.size > 0) {
+    console.log(
+      `Excluding: ${chalk.yellow([...excludeTypes].join(", "))}`,
     );
   }
   console.log(
@@ -192,6 +199,11 @@ export async function extractCommand(
   for (const entity of uniqueEntities.values()) {
     // Skip if already in urlAliases
     if (existingUrls.has(entity.url)) {
+      continue;
+    }
+
+    // Skip excluded entity types
+    if (excludeTypes.has(entity.type)) {
       continue;
     }
 

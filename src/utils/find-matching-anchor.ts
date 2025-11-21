@@ -34,14 +34,21 @@ interface ProcessedAnchor {
  * 7. Prefix match (no hyphens)
  * 8. Prefix plural match (no hyphens)
  *
+ * Reverse matching (anchor contained in search):
+ * 9. Reverse prefix match (flame-tongue-club → flame-tongue)
+ * 10. Word subset match (belt-of-hill-giant-strength → belt-of-giant-strength)
+ * 11. Word subset match with plurals (potion-of-healing-greater → potions-of-healing)
+ *
  * Fallback:
- * 9. Unordered word match
+ * 12. Unordered word match
  *
  * @example
  * findMatchingAnchor("fireball", anchors) // { anchor: "fireball", step: 1 }
  * findMatchingAnchor("bugbear", anchors) // { anchor: "bugbears", step: 2 }
  * findMatchingAnchor("arcane-focus", anchors) // { anchor: "arcane-focus-varies", step: 3 }
  * findMatchingAnchor("blindness-deafness", anchors) // { anchor: "blindnessdeafness", step: 5 }
+ * findMatchingAnchor("flame-tongue-club", anchors) // { anchor: "flame-tongue", step: 9 }
+ * findMatchingAnchor("belt-of-hill-giant-strength", anchors) // { anchor: "belt-of-giant-strength", step: 10 }
  */
 export function findMatchingAnchor(
   anchor: string,
@@ -60,6 +67,31 @@ export function findMatchingAnchor(
     if (search.length > valid.length) return false;
     return search.every((word, i) => word === valid[i]);
   };
+
+  // Check if anchor words are a subset of search words (in order, allowing gaps)
+  // e.g., ["belt", "of", "giant", "strength"] is subset of ["belt", "of", "hill", "giant", "strength"]
+  const isWordSubset = (anchorWords: string[], searchWords: string[]) => {
+    if (anchorWords.length > searchWords.length) return false;
+    if (anchorWords.length < 2) return false; // Require at least 2 words to avoid false positives
+
+    let searchIdx = 0;
+    for (const word of anchorWords) {
+      // Find this word in remaining search words
+      while (
+        searchIdx < searchWords.length &&
+        searchWords[searchIdx] !== word
+      ) {
+        searchIdx++;
+      }
+      if (searchIdx >= searchWords.length) return false;
+      searchIdx++;
+    }
+    return true;
+  };
+
+  // Return longest match for reverse matching (we want the most specific anchor)
+  const findLongest = (items: ProcessedAnchor[]) =>
+    items.reduce((a, b) => (b.norm.length > a.norm.length ? b : a));
 
   // Pre-process all anchors with all normalized forms (computed once)
   const processed: ProcessedAnchor[] = validAnchors.map((original) => {
@@ -102,17 +134,29 @@ export function findMatchingAnchor(
     (p) => p.noHyphens.startsWith(searchNoHyphens), // 7. Prefix match (no hyphens)
     (p) => p.noHyphensPlural.startsWith(searchNoHyphensPlural), // 8. Prefix plural (no hyphens)
 
+    // Reverse matching (anchor contained in search - for variant items)
+    (p) => anchor.startsWith(p.norm + "-"), // 9. Reverse prefix match (flame-tongue-club → flame-tongue)
+    (p) => isWordSubset(p.words, searchWords), // 10. Word subset match (belt-of-hill-giant-strength → belt-of-giant-strength)
+    (p) => isWordSubset(p.wordsPlural, searchWordsPlural), // 11. Word subset match with plurals (potion-of-healing-greater → potions-of-healing)
+
     // Fallback: Unordered word match (only for multi-word searches)
     (p) =>
       searchWords.length >= 2 &&
       searchWordsPlural.every((sw) => p.wordsPlural.includes(sw)),
   ];
 
+  // Matchers that should use findLongest instead of findShortest (reverse matching)
+  const useLongestMatch = new Set([8, 9, 10]); // Steps 9, 10, 11 (0-indexed: 8, 9, 10)
+
   // Run matchers in order, return first match
   for (let step = 0; step < matchers.length; step++) {
     const matches = processed.filter(matchers[step]);
     if (matches.length > 0) {
-      return { anchor: findShortest(matches).original, step: step + 1 };
+      // For reverse matching, prefer longest (most specific) anchor
+      const bestMatch = useLongestMatch.has(step)
+        ? findLongest(matches)
+        : findShortest(matches);
+      return { anchor: bestMatch.original, step: step + 1 };
     }
   }
 
