@@ -107,6 +107,8 @@ The configuration system follows the XDG Base Directory specification on Linux a
 
 See [`src/config/default.json`](src/config/default.json) for the actual default values.
 
+> **Note:** The default configuration is fine-tuned for D&D 2024 rulebooks (Player's Handbook 2024, Dungeon Master's Guide 2024, Monster Manual 2025) and has been tested with these books in mind. The `urlAliases`, `excludeUrls`, and `entityLocations` settings are specifically configured to handle 2024 content, including aliasing Free Rules to PHB 2024 and excluding legacy 2014 monster stat blocks. If you're converting older sourcebooks (pre-2024), you may need to adjust these settings in your user or custom config file.
+
 Here are all available configuration options with explanations:
 
 ```jsonc
@@ -165,6 +167,12 @@ Here are all available configuration options with explanations:
       // Entity aliasing (variant items → base items)
       "/magic-items/4585-belt-of-hill-giant-strength": "/magic-items/5372-belt-of-giant-strength"
     },
+
+    // URLs to exclude from resolution (converted to fallback text)
+    "excludeUrls": [
+      "/monsters/16817-bugbear",   // Legacy 2014 stat blocks
+      "/monsters/16904-gnoll"
+    ],
 
     // Map entity types to allowed source pages
     "entityLocations": {

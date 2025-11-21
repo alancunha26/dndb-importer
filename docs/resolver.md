@@ -56,7 +56,22 @@ https://example.com                  // Non-D&D Beyond URLs
 [Bell](#Bell1GP)  →  [Bell](#bell-1-gp)
 ```
 
-### 3. Entity Link Resolution
+### 3. Excluded URL Check
+
+**URLs in `excludeUrls` config**
+
+- Checked before attempting entity/source resolution
+- Immediately converted to fallback text
+- Used for legacy content that conflicts with current content
+
+**Example:**
+
+```
+Input:  [Bugbear](/monsters/16817-bugbear)   // Legacy 2014 stat block
+Output: **Bugbear**                          // Converted to fallback (bold)
+```
+
+### 4. Entity Link Resolution
 
 **Entity paths** (e.g., `/spells/123-name`, `/monsters/456-name`)
 
@@ -72,7 +87,7 @@ Entity: /spells/2618831-arcane-vigor → {fileId: "v3k8", anchor: "arcane-vigor"
 Output: [Arcane Vigor](v3k8.md#arcane-vigor)
 ```
 
-### 4. Source Link Resolution
+### 5. Source Link Resolution
 
 **Source paths** (e.g., `/sources/dnd/phb-2024/spells#fireball`)
 
@@ -89,7 +104,7 @@ Anchor: "fireball" found in v3k8 valid anchors
 Output: [Fireball](v3k8.md#fireball)
 ```
 
-### 5. Fallback Strategy
+### 6. Fallback Strategy
 
 When resolution fails, the link is formatted based on `fallbackStyle`:
 
@@ -467,6 +482,20 @@ Maps entity types to allowed source pages:
   ]
 }
 ```
+
+### links.excludeUrls
+
+Array of URLs to exclude from resolution. URLs in this list are immediately converted to fallback text (based on `fallbackStyle`) without attempting resolution. Useful for legacy content that conflicts with current content:
+
+```json
+[
+  "/monsters/16817-bugbear",
+  "/monsters/16904-gnoll",
+  "/monsters/16907-goblin"
+]
+```
+
+The default config includes all 59 legacy 2014 monster stat blocks from the Monster Manual's Stat Block Conversions table, preventing them from conflicting with 2024 monsters.
 
 ## Error Handling
 

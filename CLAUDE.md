@@ -205,6 +205,10 @@ modules.stats(tracker, verbose); // 4. Display statistics
 - Entity Locations: `links.entityLocations` maps entity types to allowed source pages
   - Prevents spells resolving to monster pages with matching anchors
   - Example: `"spells": ["/sources/dnd/phb-2024/spell-descriptions"]`
+- Exclude URLs: `links.excludeUrls` array of URLs to exclude from resolution
+  - URLs in this list are immediately converted to fallback text (based on `fallbackStyle`)
+  - Used for legacy content that conflicts with current content (e.g., 2014 monster stat blocks)
+  - Example: `["/monsters/16817-bugbear", "/monsters/16904-gnoll"]`
 - Fallback Style: `links.fallbackStyle` controls unresolved link formatting
   - `"bold"` - Convert to bold text `**Text**` (default)
   - `"italic"` - Convert to italic text `_Text_`

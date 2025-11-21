@@ -54,6 +54,7 @@ export const LinksConfigSchema = z.object({
   fallbackStyle: z.enum(["bold", "italic", "plain", "none"]),
   maxMatchStep: z.number().min(1).max(12).optional(),
   urlAliases: z.record(z.string(), z.string()),
+  excludeUrls: z.array(z.string()),
   entityLocations: z.record(z.string(), z.array(z.string())),
 });
 

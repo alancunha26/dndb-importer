@@ -149,6 +149,7 @@ export async function resolve(ctx: ConversionContext): Promise<void> {
   // Build URL map keyed by canonical URLs
   const urlMap = new Map(files.filter((f) => f.url).map((f) => [f.url!, f]));
   const entityIndex = buildEntityIndex(files, ctx);
+  const excludeUrls = new Set(config.links.excludeUrls);
 
   /**
    * Format text using the configured fallback style
@@ -280,7 +281,11 @@ export async function resolve(ctx: ConversionContext): Promise<void> {
     // Priority 2: Smart matching
     if (!matchedAnchor) {
       const normalized = normalizeAnchor(link.anchor);
-      const result = findMatchingAnchor(normalized, fileAnchors.valid, config.links.maxMatchStep);
+      const result = findMatchingAnchor(
+        normalized,
+        fileAnchors.valid,
+        config.links.maxMatchStep,
+      );
       matchedAnchor = result?.anchor;
     }
 
@@ -308,6 +313,17 @@ export async function resolve(ctx: ConversionContext): Promise<void> {
         return result;
       } else {
         return `[${link.text}](#${link.anchor})`;
+      }
+    }
+
+    // Check if URL is excluded - apply fallback immediately
+    if (excludeUrls.has(link.path)) {
+      const fallback = formatFallback(link.text);
+      if (fallback) {
+        tracker.trackUnresolvedLink(link.original, link.text);
+        return fallback;
+      } else {
+        return `[${link.text}](${link.original})`;
       }
     }
 
