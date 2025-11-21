@@ -120,7 +120,7 @@ export class Tracker {
   private resolvedLinks = 0;
   private createdIndexes = 0;
   private issues: Issue[] = [];
-  private unresolvedLinksList: UnresolvedLink[] = [];
+  private unresolvedLinksMap: Map<string, { text: string; count: number }> = new Map();
   private startTime = new Date();
 
   // ============================================================================
@@ -164,7 +164,12 @@ export class Tracker {
   }
 
   trackUnresolvedLink(path: string, text: string): void {
-    this.unresolvedLinksList.push({ path, text });
+    const existing = this.unresolvedLinksMap.get(path);
+    if (existing) {
+      existing.count++;
+    } else {
+      this.unresolvedLinksMap.set(path, { text, count: 1 });
+    }
   }
 
   // ============================================================================
@@ -213,6 +218,12 @@ export class Tracker {
     const endTime = new Date();
     const duration = endTime.getTime() - this.startTime.getTime();
 
+    // Calculate total unresolved links (sum of all counts)
+    let unresolvedLinksTotal = 0;
+    for (const { count } of this.unresolvedLinksMap.values()) {
+      unresolvedLinksTotal += count;
+    }
+
     return {
       totalFiles: this.totalFiles,
       successfulFiles: this.successfulFiles,
@@ -222,7 +233,8 @@ export class Tracker {
       cachedImages: this.cachedImages,
       failedImages: this.failedImages,
       resolvedLinks: this.resolvedLinks,
-      unresolvedLinks: this.unresolvedLinksList.length,
+      unresolvedLinks: unresolvedLinksTotal,
+      unresolvedLinksUnique: this.unresolvedLinksMap.size,
       createdIndexes: this.createdIndexes,
       issues: this.issues,
       duration,
@@ -235,6 +247,12 @@ export class Tracker {
 
   async exportStats(outputDir: string): Promise<void> {
     const stats = this.getStats();
+
+    // Convert Map to array with count
+    const unresolvedLinks: Array<{ path: string; text: string; count: number }> = [];
+    for (const [path, { text, count }] of this.unresolvedLinksMap) {
+      unresolvedLinks.push({ path, text, count });
+    }
 
     const exported = {
       summary: {
@@ -251,7 +269,7 @@ export class Tracker {
         duration: stats.duration,
       },
       issues: this.groupIssuesByTypeAndReason(),
-      unresolvedLinks: this.unresolvedLinksList,
+      unresolvedLinks,
     };
 
     const outputPath = join(outputDir, "stats.json");

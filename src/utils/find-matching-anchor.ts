@@ -53,6 +53,7 @@ interface ProcessedAnchor {
 export function findMatchingAnchor(
   anchor: string,
   validAnchors: string[],
+  maxStep?: number,
 ): AnchorMatch | null {
   // Helper functions
   const stripPlural = (s: string) => (s.endsWith("s") ? s.slice(0, -1) : s);
@@ -149,7 +150,8 @@ export function findMatchingAnchor(
   const useLongestMatch = new Set([8, 9, 10]); // Steps 9, 10, 11 (0-indexed: 8, 9, 10)
 
   // Run matchers in order, return first match
-  for (let step = 0; step < matchers.length; step++) {
+  const maxStepLimit = maxStep ?? matchers.length;
+  for (let step = 0; step < Math.min(matchers.length, maxStepLimit); step++) {
     const matches = processed.filter(matchers[step]);
     if (matches.length > 0) {
       // For reverse matching, prefer longest (most specific) anchor

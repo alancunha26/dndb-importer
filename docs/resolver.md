@@ -196,7 +196,7 @@ D&D Beyond has multiple URLs for the same content. URL aliases normalize these t
 
 ### Quality-Based Matching
 
-The resolver uses a **9-step priority system with quality scores** (lower is better). When searching across multiple files (e.g., for entity resolution), the best quality match wins regardless of file order.
+The resolver uses a **12-step priority system with quality scores** (lower is better). When searching across multiple files (e.g., for entity resolution), the best quality match wins regardless of file order. Can be limited via `links.maxMatchStep` config option.
 
 ### Strategies
 
@@ -260,21 +260,45 @@ The resolver uses a **9-step priority system with quality scores** (lower is bet
    Match: "blindnessdeafnesssvaries" (step 8)
    ```
 
+**Reverse matching (anchor contained in search - for variant items):**
+
+9. **Reverse prefix match** (search starts with anchor)
+   ```
+   Anchor: "flame-tongue-club"
+   Valid: ["flame-tongue", ...]
+   Match: "flame-tongue" (step 9)
+   ```
+
+10. **Word subset match** (anchor words are ordered subset of search words)
+    ```
+    Anchor: "belt-of-hill-giant-strength"
+    Valid: ["belt-of-giant-strength", ...]
+    Match: "belt-of-giant-strength" (step 10)
+    ```
+
+11. **Word subset match with plurals** (plural-aware word subset)
+    ```
+    Anchor: "potion-of-healing-greater"
+    Valid: ["potions-of-healing", ...]
+    Match: "potions-of-healing" (step 11)
+    ```
+
 **Fallback:**
 
-9. **Unordered word match** (requires 2+ words)
-   ```
-   Anchor: "travelers-clothes"
-   Valid: ["clothes-travelers-2-gp", ...]
-   Match: "clothes-travelers-2-gp" (step 9)
-   ```
+12. **Unordered word match** (requires 2+ words)
+    ```
+    Anchor: "travelers-clothes"
+    Valid: ["clothes-travelers-2-gp", ...]
+    Match: "clothes-travelers-2-gp" (step 12)
+    ```
 
-10. **No match** → Apply fallback style
+13. **No match** → Apply fallback style
 
 ### Tie-Breaking
 
 When multiple anchors match at the same quality level:
-- **Shortest match wins** (by normalized length)
+- **Forward matching (steps 1-8, 12)**: Shortest match wins (by normalized length)
+- **Reverse matching (steps 9-11)**: Longest match wins (most specific anchor)
 - **First match wins** when lengths are equal (preserves document order)
 
 ## Anchor Building (Processor Stage)
@@ -401,6 +425,24 @@ Controls formatting of unresolved links:
 - `"plain"` → `Text`
 - `"none"` → Keep original link
 
+### links.maxMatchStep
+
+Limits anchor matching algorithm aggressiveness (1-12):
+
+- Lower values = stricter matching (less false positives)
+- Higher values = more lenient matching (better coverage)
+- Default: all 12 steps enabled
+
+```json
+{
+  "links": {
+    "maxMatchStep": 8
+  }
+}
+```
+
+This would stop matching before the reverse matching steps (9-11), useful if those are producing false positives for variant items.
+
 ### links.urlAliases
 
 Maps URLs to canonical forms:
@@ -433,12 +475,25 @@ Maps entity types to allowed source pages:
 Link resolution is tracked with simplified resolved/unresolved counts via `ctx.tracker`:
 
 - `incrementLinksResolved()`: Called for each successfully resolved link
-- `trackUnresolvedLink(path, text)`: Called for links that couldn't be resolved
+- `trackUnresolvedLink(path, text)`: Called for links that couldn't be resolved (deduplicated by path)
 
 The `stats.json` output includes:
 - `resolvedLinks`: Total count of resolved links
-- `unresolvedLinks`: Total count of unresolved links
-- `unresolvedLinksList`: Array of `{ path, text }` for each unresolved link
+- `unresolvedLinks`: Total count of unresolved link occurrences (sum of all counts)
+- `unresolvedLinks[]`: Array of unique unresolved links with:
+  - `path`: The URL path that couldn't be resolved
+  - `text`: The link text
+  - `count`: Number of occurrences (for deduplication)
+
+Example:
+```json
+{
+  "unresolvedLinks": [
+    { "path": "/sources/dnd/fraif", "text": "Forgotten Realms", "count": 8 },
+    { "path": "/sources/dnd/phb-2014", "text": "2014 version", "count": 2 }
+  ]
+}
+```
 
 ### Graceful Degradation
 
@@ -481,6 +536,20 @@ The `stats.json` output includes:
 ```markdown
 [Alchemist's Fire](/.../equipment#alchemists-fire)
 → [Alchemist's Fire](b4x8.md#alchemists-fire-50-gp)
+```
+
+### Reverse Prefix Matching (Variant Items)
+
+```markdown
+[Flame Tongue Club](/magic-items/9228625-flame-tongue-club)
+→ [Flame Tongue Club](dmg.md#flame-tongue)
+```
+
+### Word Subset Matching (Variant Items)
+
+```markdown
+[Belt of Hill Giant Strength](/magic-items/4585-belt-of-hill-giant-strength)
+→ [Belt of Hill Giant Strength](dmg.md#belt-of-giant-strength)
 ```
 
 ### Unordered Word Matching
@@ -527,3 +596,6 @@ The `stats.json` output includes:
 - Missing anchors
 - Single-word searches avoid false positives (cart ≠ cartographers-tools)
 - Reversed word order matching (travelers-clothes → clothes-travelers)
+- Variant items with specific names (flame-tongue-club → flame-tongue)
+- Variant items with subset words (belt-of-hill-giant-strength → belt-of-giant-strength)
+- Plural mismatches in subsets (potion-of-healing-greater → potions-of-healing)

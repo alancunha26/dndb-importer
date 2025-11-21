@@ -210,6 +210,11 @@ modules.stats(tracker, verbose); // 4. Display statistics
   - `"italic"` - Convert to italic text `_Text_`
   - `"plain"` - Convert to plain text
   - `"none"` - Keep original link (no fallback tracking)
+- Max Match Step: `links.maxMatchStep` limits anchor matching aggressiveness (1-12)
+  - Lower values = stricter matching (less false positives)
+  - Higher values = more lenient matching (better coverage)
+  - Default: all 12 steps enabled
+  - Example: Set to 8 to disable reverse matching (steps 9-11)
 
 **Input Validation and Error Tracking:**
 
@@ -227,7 +232,9 @@ modules.stats(tracker, verbose); // 4. Display statistics
     - `file` - File processing errors (parse-error, read-error, write-error)
     - `image` - Image download errors (download-failed, timeout, not-found, invalid-response)
     - `resource` - Config/metadata errors (invalid-json, schema-validation, read-error)
-  - Link tracking: `trackUnresolvedLink(path, text)` for simplified resolved/unresolved counts
+  - Link tracking: `trackUnresolvedLink(path, text)` with automatic deduplication by URL path
+    - Tracks count per unique URL (avoids duplicate entries in stats.json)
+    - `unresolvedLinks` in stats shows unique paths with occurrence counts
   - All stats retrieved via `tracker.getStats()` returning `ProcessingStats`
 - **Graceful degradation:**
   - Invalid config → Falls back to default config
@@ -323,7 +330,7 @@ The resolver transforms D&D Beyond links into local markdown links, enabling sea
 
 **Smart Anchor Matching:**
 
-Uses a 9-step priority system with quality scores (lower is better). When searching across multiple files, the best quality match wins regardless of file order.
+Uses a 12-step priority system with quality scores (lower is better). When searching across multiple files, the best quality match wins regardless of file order. Can be limited via `maxMatchStep` config option.
 
 With hyphens (preserving word boundaries):
 1. **Exact match** - `fireball` matches `fireball`
@@ -337,10 +344,15 @@ Without hyphens (for special characters like `/`):
 7. **Prefix match (no hyphens)** - `blindness-deafness` matches `blindnessdeafnessvaries`
 8. **Prefix plural (no hyphens)** - handles plural prefix variants
 
-Fallback:
-9. **Unordered word match** - `travelers-clothes` matches `clothes-travelers-2-gp` (multi-word only)
+Reverse matching (anchor contained in search - for variant items):
+9. **Reverse prefix match** - `flame-tongue-club` matches `flame-tongue`
+10. **Word subset match** - `belt-of-hill-giant-strength` matches `belt-of-giant-strength`
+11. **Word subset match with plurals** - `potion-of-healing-greater` matches `potions-of-healing`
 
-Uses shortest match if multiple candidates at same quality level, preferring the first match when lengths are equal.
+Fallback:
+12. **Unordered word match** - `travelers-clothes` matches `clothes-travelers-2-gp` (multi-word only)
+
+Uses shortest match for forward matching (steps 1-8, 12), longest match for reverse matching (steps 9-11) to prefer most specific anchors.
 
 **Anchor Building (Processor):**
 
@@ -563,6 +575,7 @@ export type SourcebookMetadata = z.infer<typeof SourcebookMetadataSchema>;
 - `UnresolvedLink` - Unresolved link data:
   - `path`: The URL path that couldn't be resolved
   - `text`: The link text
+  - `count?`: Number of occurrences (for deduplication)
 - `Issue` - Tracked issue with type discrimination:
   - `FileIssue`, `ImageIssue`, `ResourceIssue`
   - Each has `type`, `path`, `reason`, and optional `details`

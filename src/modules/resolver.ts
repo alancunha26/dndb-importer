@@ -39,7 +39,7 @@ function buildEntityIndex(
   files: FileDescriptor[],
   ctx: ConversionContext,
 ): Map<string, EntityMatch> {
-  const { entityLocations, urlAliases } = ctx.config.links;
+  const { entityLocations, urlAliases, maxMatchStep } = ctx.config.links;
   const entityIndex = new Map<string, EntityMatch>();
   const seenUrls = new Set<string>();
 
@@ -54,7 +54,7 @@ function buildEntityIndex(
     for (const file of targetFiles) {
       if (!file.anchors) continue;
 
-      const result = findMatchingAnchor(slug, file.anchors.valid);
+      const result = findMatchingAnchor(slug, file.anchors.valid, maxMatchStep);
       if (result && (!bestMatch || result.step < bestMatch.step)) {
         bestMatch = {
           fileId: file.uniqueId,
@@ -280,7 +280,7 @@ export async function resolve(ctx: ConversionContext): Promise<void> {
     // Priority 2: Smart matching
     if (!matchedAnchor) {
       const normalized = normalizeAnchor(link.anchor);
-      const result = findMatchingAnchor(normalized, fileAnchors.valid);
+      const result = findMatchingAnchor(normalized, fileAnchors.valid, config.links.maxMatchStep);
       matchedAnchor = result?.anchor;
     }
 

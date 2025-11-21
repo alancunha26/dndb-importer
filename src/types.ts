@@ -52,6 +52,7 @@ export const ImagesConfigSchema = z.object({
 export const LinksConfigSchema = z.object({
   resolveInternal: z.boolean(),
   fallbackStyle: z.enum(["bold", "italic", "plain", "none"]),
+  maxMatchStep: z.number().min(1).max(12).optional(),
   urlAliases: z.record(z.string(), z.string()),
   entityLocations: z.record(z.string(), z.array(z.string())),
 });
@@ -228,6 +229,7 @@ export type IssueType = Issue["type"];
 export interface UnresolvedLink {
   path: string;
   text: string;
+  count?: number;
 }
 
 export interface ProcessingStats {
@@ -240,6 +242,7 @@ export interface ProcessingStats {
   failedImages: number;
   resolvedLinks: number;
   unresolvedLinks: number;
+  unresolvedLinksUnique: number;
   createdIndexes: number;
   issues: Issue[];
   duration: number;

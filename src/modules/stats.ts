@@ -208,11 +208,13 @@ function displayLinksSection(stats: ProcessingStats): void {
   );
 
   if (stats.unresolvedLinks > 0) {
+    // Show unique count and total occurrences
+    const unresolvedText = `${stats.unresolvedLinksUnique} unique (${stats.unresolvedLinks} total)`;
     console.log(
       statRow(
         chalk.yellow("◉"),
         "Unresolved",
-        stats.unresolvedLinks,
+        unresolvedText,
         chalk.yellow,
       ),
     );

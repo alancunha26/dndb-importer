@@ -30,7 +30,7 @@ interface ExtractEntitiesOptions {
 }
 
 interface StatsJson {
-  unresolvedLinks: Array<{ path: string; text: string }>;
+  unresolvedLinks: Array<{ path: string; text: string; count?: number }>;
 }
 
 async function loadUnresolvedLinks(outputPath: string): Promise<Set<string>> {
