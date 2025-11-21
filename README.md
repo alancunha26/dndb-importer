@@ -2,43 +2,148 @@
 
 Convert D&D Beyond HTML sourcebooks to clean, structured Markdown files.
 
-## Overview
-
-This CLI tool converts locally downloaded D&D Beyond HTML pages into Markdown format with:
-
-**Content Features:**
+## Features
 
 - Unique 4-character ID-based file naming for conflict-free organization
-- Local image downloading with unique IDs
-- Navigation links between related content (prev/index/next)
-- D&D-specific formatting preservation (stat blocks, spell descriptions, tables)
-- YAML front matter with metadata and tags
-- Cross-reference resolution between books (optional)
-- **Customizable templates** using Handlebars (global and per-sourcebook)
-- **Sourcebook metadata** via `sourcebook.json` files
-
-**Architecture Highlights:**
-
-- Memory-efficient streaming pipeline (constant memory usage regardless of book count)
-- Processes files one at a time, writing immediately to disk
-- Link resolution with anchor validation and smart matching (plural/singular, prefix matching)
-- Modular pipeline design with shared context object
-
-## Project Status
-
-**v1.0 - Feature Complete** - Core converter with link resolution implemented and tested.
-
-See [docs/rfcs/0001-dndbeyond-html-markdown-converter.md](docs/rfcs/0001-dndbeyond-html-markdown-converter.md) for the architecture specification and [docs/roadmap.md](docs/roadmap.md) for planned features.
-
-## Requirements
-
-- Node.js 18+
+- Local image downloading with caching
+- Navigation links between chapters (prev/index/next)
+- D&D-specific formatting (stat blocks, spell descriptions, tables)
+- Cross-reference resolution between books
+- Customizable Handlebars templates
+- Memory-efficient streaming pipeline
 
 ## Installation
 
+**Requirements:** Node.js 18+
+
 ```bash
+# Clone the repository
+git clone https://github.com/alancunha26/dndbeyond-importer.git
+cd dndbeyond-importer
+
+# Install dependencies
 npm install
+
+# Optional: Install CLI globally
+npm run build
+npm link
 ```
+
+After linking, you can use `dndb-convert` directly from anywhere:
+
+```bash
+dndb-convert --input ./input --output ./output
+```
+
+## Usage
+
+```bash
+# Convert all books in input directory
+npm run dndb-convert -- --input ./input --output ./output
+
+# Convert specific book
+npm run dndb-convert -- --input ./input/players-handbook --output ./output
+
+# Verbose output (shows caching stats)
+npm run dndb-convert -- --input ./input --output ./output --verbose
+
+# Use custom config file
+npm run dndb-convert -- --input ./input --output ./output --config ./my-config.json
+
+# Show config file location
+npm run dndb-convert -- config
+```
+
+### Input Structure
+
+Place downloaded HTML files in directories by sourcebook:
+
+```
+input/
+  players-handbook/
+    sourcebook.json         # Optional metadata
+    01-introduction.html
+    02-chapter-1.html
+    ...
+  dungeon-masters-guide/
+    01-introduction.html
+    ...
+```
+
+## Configuration
+
+The tool uses a layered configuration system with deep merging:
+
+1. **Default config** - Built-in defaults
+2. **User config** - OS-specific location (see below)
+3. **Custom config** - Via `--config` flag (highest priority)
+
+### User Config Location
+
+| OS      | Path                                              |
+| ------- | ------------------------------------------------- |
+| Linux   | `~/.config/dndbeyond-importer/config.json`        |
+| macOS   | `~/Library/Preferences/dndb-importer/config.json` |
+| Windows | `%APPDATA%\dndb-importer\config.json`             |
+
+### Key Options
+
+```json
+{
+  "input": "./input",
+  "output": "./output",
+  "markdown": {
+    "headingStyle": "atx",
+    "bulletMarker": "-",
+    "emphasis": "_",
+    "strong": "**"
+  },
+  "images": {
+    "download": true,
+    "timeout": 30000,
+    "retries": 3
+  },
+  "links": {
+    "resolveInternal": true,
+    "fallbackStyle": "bold"
+  }
+}
+```
+
+See [`src/config/default.json`](src/config/default.json) for all options and [docs/configuration.md](docs/configuration.md) for detailed documentation.
+
+> **Note:** Default settings are optimized for D&D 2024 rulebooks. For older sourcebooks, you may need to adjust `urlAliases` and `entityLocations` in your config.
+
+## Templates
+
+Customize output with Handlebars templates. Templates are loaded in this order:
+
+1. **Sourcebook-specific**: `input/players-handbook/index.md.hbs`
+2. **Global**: `input/index.md.hbs`
+3. **Built-in defaults**
+
+Two template types:
+
+- `index.md.hbs` - Table of contents for each sourcebook
+- `file.md.hbs` - Individual chapter pages
+
+See [docs/templates.md](docs/templates.md) for available variables and examples.
+
+## Sourcebook Metadata
+
+Add `sourcebook.json` to customize sourcebook output:
+
+```json
+{
+  "title": "Player's Handbook 2024",
+  "edition": "5th Edition (2024)",
+  "description": "Core rulebook for creating characters",
+  "author": "Wizards of the Coast",
+  "coverImage": "cover.png"
+}
+```
+
+All fields are optional and accessible in templates via `metadata`.
 
 ## Development
 
@@ -55,282 +160,20 @@ npm run dndb-convert:dist -- --help
 # Type check
 npm run type-check
 
-# Lint code
+# Lint and format
 npm run lint
-
-# Format code
 npm run format
 ```
 
-## Usage
-
-```bash
-# Convert all books in input directory
-dndb-convert --input ./input --output ./output
-
-# Convert specific book
-dndb-convert --input ./input/players-handbook --output ./output
-
-# Verbose output
-dndb-convert --input ./input --output ./output --verbose
-
-# Use custom config file
-dndb-convert --input ./input --output ./output --config ./my-config.json
-```
-
-## Configuration
-
-The tool uses a layered configuration system:
-
-1. **Default config** - Built-in defaults from `config/default.json`
-2. **User config** - OS-specific user configuration (optional)
-3. **Custom config** - CLI `--config` flag (highest priority)
-
-### User Config Location
-
-```bash
-# Show where your user config should be located
-dndb-convert config
-```
-
-**Config locations by OS:**
-
-- **Linux:** `$XDG_CONFIG_HOME/dndb-importer/config.json` (defaults to `~/.config/dndbeyond-importer/config.json`)
-- **macOS:** `~/Library/Preferences/dndb-importer/config.json`
-- **Windows:** `%APPDATA%\dndb-importer\config.json`
-
-Create a `config.json` in your OS-specific directory to customize settings. See `src/config/default.json` for all available options.
-
-The configuration system follows the XDG Base Directory specification on Linux and platform conventions on other operating systems.
-
-### Default Configuration
-
-See [`src/config/default.json`](src/config/default.json) for the actual default values.
-
-> **Note:** The default configuration is fine-tuned for D&D 2024 rulebooks (Player's Handbook 2024, Dungeon Master's Guide 2024, Monster Manual 2025) and has been tested with these books in mind. The `urlAliases`, `excludeUrls`, and `entityLocations` settings are specifically configured to handle 2024 content, including aliasing Free Rules to PHB 2024 and excluding legacy 2014 monster stat blocks. If you're converting older sourcebooks (pre-2024), you may need to adjust these settings in your user or custom config file.
-
-Here are all available configuration options with explanations:
-
-```jsonc
-{
-  // === Input/Output Directories ===
-  "input": "./input",           // Where your downloaded HTML files are located
-  "output": "./output",         // Where to write converted markdown files
-
-  // === Unique ID Settings ===
-  "ids": {
-    "length": 4,                // Length of generated IDs (e.g., "a3f9")
-    "characters": "abc...xyz0123456789"  // Character set for IDs
-  },
-
-  // === Markdown Formatting ===
-  // Customize how your markdown is generated to match your preferred style
-  // or tool requirements (Obsidian, GitHub, CommonMark, etc.)
-  "markdown": {
-    "headingStyle": "atx",      // "atx" (# Heading) or "setext" (underlined)
-    "codeBlockStyle": "fenced", // "fenced" (```) or "indented" (4 spaces)
-    "emphasis": "_",            // "_" or "*" for italic text
-    "strong": "**",             // "**" or "__" for bold text
-    "bulletMarker": "-",        // "-", "+", or "*" for unordered lists
-    "linkStyle": "inlined",     // "inlined" [text](url) or "referenced" [text][ref]
-    "linkReferenceStyle": "full", // "full", "collapsed", or "shortcut"
-    "horizontalRule": "---",    // Any string (e.g., "---", "* * *", "___")
-    "lineBreak": "  ",          // Two spaces for soft line breaks
-    "codeFence": "```",         // "```" or "~~~" for fenced code blocks
-    "preformattedCode": false   // Preserve preformatted code blocks
-  },
-
-  // === HTML Parsing ===
-  "html": {
-    "contentSelector": ".p-article-content",  // CSS selector for main content
-    "removeSelectors": []       // CSS selectors for elements to remove
-  },
-
-  // === Image Download Settings ===
-  "images": {
-    "download": true,           // Enable/disable image downloading
-    "formats": ["png", "jpg", "jpeg", "webp", "gif"],  // Allowed formats
-    "maxSize": 10485760,        // Maximum image size in bytes (10MB)
-    "timeout": 30000,           // Download timeout in milliseconds (30s)
-    "retries": 3                // Number of retry attempts
-  },
-
-  // === Link Resolution ===
-  "links": {
-    "resolveInternal": true,    // Enable/disable link resolution
-    "fallbackStyle": "bold",    // Unresolved links: "bold", "italic", "plain", "none"
-
-    // Map URLs to canonical forms
-    "urlAliases": {
-      // Source aliasing (Free Rules → PHB)
-      "/sources/dnd/free-rules/equipment": "/sources/dnd/phb-2024/equipment",
-      // Entity aliasing (variant items → base items)
-      "/magic-items/4585-belt-of-hill-giant-strength": "/magic-items/5372-belt-of-giant-strength"
-    },
-
-    // URLs to exclude from resolution (converted to fallback text)
-    "excludeUrls": [
-      "/monsters/16817-bugbear",   // Legacy 2014 stat blocks
-      "/monsters/16904-gnoll"
-    ],
-
-    // Map entity types to allowed source pages
-    "entityLocations": {
-      "spells": ["/sources/dnd/phb-2024/spell-descriptions"],
-      "monsters": ["/sources/dnd/mm-2024/monsters-a", "/sources/dnd/mm-2024/monsters-b"],
-      "magic-items": ["/sources/dnd/dmg-2024/magic-items"]
-    }
-  }
-}
-```
-
-**Entity Matching Note:**
-
-Entity link resolution (for spells, monsters, equipment, etc.) uses smart anchor matching with plural/singular handling and prefix matching. This covers most cases but is **best-effort** - some edge cases may resolve to nearby but incorrect anchors. You can fix specific cases using `urlAliases`:
-
-```json
-{
-  "links": {
-    "urlAliases": {
-      "/equipment/544-arcane-focus": "/sources/dnd/phb-2024/equipment#arcane-focus-varies"
-    }
-  }
-}
-```
-
-**Markdown Configuration Notes:**
-
-All markdown settings are respected throughout the conversion:
-
-- **Templates**: Index and file frontmatter formatting
-- **Content**: All Turndown-converted HTML
-- **Custom Rules**: Figure captions, flexible columns, headings
-
-**Configuration Priority:**
-
-Configs are deep-merged with this priority order (lowest to highest):
-
-1. Default config (shown above)
-2. User config (OS-specific location)
-3. Custom config (via `--config` flag)
-
-**Hardcoded Values:**
-
-These settings are not configurable:
-
-- File pattern: `**/*.html`
-- File encoding: `utf-8`
-- Output extension: `.md`
-- Index creation: always enabled
-
-## Templates
-
-The converter supports customizable Handlebars templates for both index pages and individual file pages. Templates can be defined globally or per-sourcebook.
-
-### Template Locations (by precedence)
-
-1. **Sourcebook-specific** (highest priority): `input/players-handbook/index.md.hbs` or `file.md.hbs`
-2. **Global**: `input/index.md.hbs` or `file.md.hbs`
-3. **Built-in defaults** (always available if no custom templates provided)
-
-### Template Types
-
-**Index Template** (`index.md.hbs`) - Generates sourcebook table of contents
-
-Available variables:
-
-- `title` - Sourcebook title
-- `edition` - Edition string (from metadata)
-- `description` - Sourcebook description (from metadata)
-- `author` - Author name (from metadata)
-- `coverImage` - Cover image filename (from metadata)
-- `date` - Current date (YYYY-MM-DD)
-- `files` - Array of files with `title`, `filename`, `uniqueId`
-- `metadata` - Full metadata object for custom fields
-
-**File Template** (`file.md.hbs`) - Generates individual chapter/file pages
-
-Available variables:
-
-- `title` - File title (extracted from filename)
-- `date` - Current date (YYYY-MM-DD)
-- `tags` - Array of tags
-- `sourcebook` - Object with `title`, `edition`, `author`, `metadata`
-- `navigation` - Object with `prev`, `index`, `next` (markdown links)
-- `content` - Converted markdown content
-
-### Example Custom Template
-
-```handlebars
---- title: "{{{title}}}" edition: "{{{edition}}}" date:
-{{date}}
---- #
-{{{title}}}
-
-{{#if edition}}
-  **Edition:**
-  {{{edition}}}
-{{/if}}
-
-{{#if description}}
-  >
-  {{{description}}}
-{{/if}}
-
-## Contents
-
-{{#each files}}
-  {{@index}}. [{{{this.title}}}]({{{this.filename}}})
-{{/each}}
-```
-
-## Sourcebook Metadata
-
-Each sourcebook can have an optional `sourcebook.json` file in its directory to customize the output.
-
-### Location
-
-Place `sourcebook.json` alongside your HTML files:
-
-```
-input/
-  players-handbook/
-    sourcebook.json
-    01-intro.html
-    02-chapter-1.html
-```
-
-### Available Fields
-
-```json
-{
-  "title": "Player's Handbook 2024",
-  "edition": "5th Edition (2024)",
-  "description": "Core rulebook for creating characters and playing D&D",
-  "author": "Wizards of the Coast",
-  "coverImage": "cover.png"
-}
-```
-
-All fields are optional. Any custom fields you add will be available in templates via the `metadata` object.
-
-### Benefits
-
-- **Custom titles**: Override directory name with proper formatting
-- **Rich metadata**: Add edition, author, description for index pages
-- **Template flexibility**: Access metadata in custom templates
-- **Portable**: Metadata travels with the sourcebook folder
-
 ## Documentation
 
-- **[RFC 0001](docs/rfcs/0001-dndbeyond-html-markdown-converter.md)** - Architecture specification
-- **[Link Resolver](docs/resolver.md)** - Detailed resolver implementation documentation
-- **[Roadmap](docs/roadmap.md)** - Planned features and future improvements
-- **[CLAUDE.md](CLAUDE.md)** - Development guide for Claude Code
+- [Architecture RFC](docs/rfcs/0001-dndbeyond-html-markdown-converter.md)
+- [Configuration Guide](docs/configuration.md)
+- [Template Guide](docs/templates.md)
+- [Link Resolver](docs/resolver.md)
+- [Roadmap](docs/roadmap.md)
 
 ## Contributing
-
-This project follows a modular pipeline architecture. Each module is a simple function with a clear input/output contract via the `ConversionContext` object.
 
 See the [roadmap](docs/roadmap.md) for planned features and contribution ideas.
 

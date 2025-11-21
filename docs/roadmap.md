@@ -6,20 +6,29 @@ Track planned features and improvements for the D&D Beyond HTML to Markdown conv
 
 ## Done
 
-| Feature                     | Description                                                  |
-| --------------------------- | ------------------------------------------------------------ |
-| HTML to Markdown conversion | D&D-specific formatting with custom Turndown rules           |
-| Unique ID system            | 4-character IDs with persistent caching for files and images |
-| Image downloading           | Retry logic with exponential backoff                         |
-| Link resolution             | Entity-aware matching and URL aliasing                       |
-| Template system             | Handlebars templates for index and file pages                |
-| Statistics & error tracking | Comprehensive stats display and issue tracking               |
+| Feature                     | Description                                                                      |
+| --------------------------- | -------------------------------------------------------------------------------- |
+| HTML to Markdown conversion | D&D-specific formatting with custom Turndown rules                               |
+| Unique ID system            | 4-character IDs with persistent caching for files and images                     |
+| Image downloading           | Retry logic with exponential backoff                                             |
+| Link resolution             | Entity-aware matching and URL aliasing                                           |
+| Template system             | Handlebars templates for index and file pages                                    |
+| Statistics & error tracking | Comprehensive stats display and issue tracking                                   |
+| Config reference            | Complete configuration guide with all options and examples                       |
+| Template guide              | Template variables, examples, and sourcebook metadata docs                       |
+| PHB entityLocations         | Complete entity locations for PHB 2024                                           |
+| DMG entityLocations         | Entity locations for DMG 2024 (magic items, equipment)                           |
+| MM entityLocations          | Entity locations for MM 2024 (all monster chapters)                              |
+| ABOH entityLocations        | Entity locations for ABOH 2024 (all astarion book of hungers chapters)           |
+| FRHOF entityLocations       | Entity locations for FRHOF 2024 (all forgotten realms heroes of faerun chapters) |
 
 ---
 
 ## In Progress
 
-_Nothing currently in progress_
+| Feature    | Description                                                        |
+| ---------- | ------------------------------------------------------------------ |
+| Unit tests | Tests for utility functions (anchor matching done, more to follow) |
 
 ---
 
@@ -28,17 +37,11 @@ _Nothing currently in progress_
 | Feature                    | Description                                                           |
 | -------------------------- | --------------------------------------------------------------------- |
 | Auto-download HTML         | Download sourcebook HTML directly from D&D Beyond using session token |
-| Unit tests                 | Tests for utility functions (anchor generation, URL parsing, etc.)    |
 | Turndown rule tests        | Tests for custom D&D-specific Turndown rules                          |
 | Integration tests          | Full pipeline tests with sample HTML fixtures                         |
 | Progress indicators        | Progress bars for file processing and image downloads                 |
-| Improved log levels        | Colored output for info, warn, error                                  |
 | Concurrent image downloads | Worker pool for parallel downloads with configurable concurrency      |
 | SRD examples               | Add D&D 2024 SRD content in `examples/input` and `examples/output`    |
-| Expanded urlAliases        | Complete Free Rules → PHB/DMG/MM mappings                             |
-| PHB entityLocations        | Full entity locations for PHB 2024                                    |
-| DMG entityLocations        | Entity locations for DMG 2024 (magic items, etc.)                     |
-| MM entityLocations         | Entity locations for MM 2024 (monsters)                               |
 
 ---
 
@@ -72,7 +75,6 @@ _Nothing currently in progress_
 | Processing hooks       | Pre/post processing customization                           |
 | User guide             | Common workflows and tutorials                              |
 | Troubleshooting guide  | Solutions for common issues                                 |
-| Config reference       | All options explained with examples                         |
 
 ---
 
@@ -99,4 +101,5 @@ If you'd like to contribute:
 
 ## Changelog
 
+- **2025-11-21** - Added config reference, template guide, entityLocations (PHB/DMG/MM/ABOH/FRHOF), expanded urlAliases; Unit tests to In Progress
 - **2025-11-20** - Initial roadmap created for v1.0 release
