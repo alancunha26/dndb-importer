@@ -270,7 +270,7 @@ export async function process(ctx: ConversionContext): Promise<void> {
         imageMapping[src] ?? `${ctx.idGenerator.generate()}${extension}`;
       const outputPath = join(dirname(file.outputPath), path);
 
-      if (!(await fileExists(outputPath))) {
+      if (ctx.refetch || !(await fileExists(outputPath))) {
         try {
           await downloadImage(src, outputPath);
           tracker.incrementImagesDownloaded();
