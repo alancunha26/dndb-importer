@@ -346,11 +346,11 @@ export async function indexer(ctx: ConversionContext): Promise<void> {
         // Store entities in global entities map (deduplicated by URL)
         const entityUrls: string[] = [];
         for (const entity of entities) {
+          entityUrls.push(entity.url);
           mapping.entities[entity.url] = {
             name: entity.name,
             metadata: entity.metadata,
           };
-          entityUrls.push(entity.url);
         }
 
         // Cache stores only the URL references
