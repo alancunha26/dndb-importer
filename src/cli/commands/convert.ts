@@ -14,6 +14,7 @@ const ConvertOptionsSchema = z.object({
   config: z.string().optional(),
   dryRun: z.boolean().optional(),
   verbose: z.boolean().optional(),
+  refetch: z.boolean().optional(),
 });
 
 type Options = z.infer<typeof ConvertOptionsSchema>;
@@ -50,6 +51,7 @@ export async function convertCommand(opts: Options): Promise<void> {
       tracker,
       idGenerator,
       verbose: options.verbose,
+      refetch: options.refetch,
     };
 
     // Run conversion pipeline with spinner updates

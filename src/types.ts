@@ -137,6 +137,7 @@ export const SourcebookMetadataSchema = z.looseObject({
   description: z.string().optional(),
   author: z.string().optional(),
   titles: z.array(z.string()).optional(),
+  sourceId: z.number().optional(),
 });
 
 export type SourcebookMetadata = z.infer<typeof SourcebookMetadataSchema>;
@@ -257,6 +258,7 @@ export interface ConversionContext {
   globalTemplates?: TemplateSet;
   entityIndex?: Map<string, EntityMatch>;
   verbose?: boolean;
+  refetch?: boolean;
 }
 
 // ============================================================================

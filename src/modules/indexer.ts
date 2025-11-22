@@ -45,7 +45,7 @@ interface ResolvedEntity {
  * Run the indexer module
  */
 export async function indexer(ctx: ConversionContext): Promise<void> {
-  const { config } = ctx;
+  const { config, refetch } = ctx;
 
   // Skip if indexing is disabled
   if (!config.indexes.generate) {
@@ -76,6 +76,41 @@ export async function indexer(ctx: ConversionContext): Promise<void> {
   if (mapping.mappings.global) {
     const globalId = mapping.mappings.global.replace(".md", "");
     idGenerator.register(globalId);
+  }
+
+  // Collect sourceIds from converted sourcebooks for auto-filtering
+  const availableSourceIds: number[] = [];
+  if (sourcebooks) {
+    for (const sb of sourcebooks) {
+      if (sb.metadata.sourceId) {
+        availableSourceIds.push(sb.metadata.sourceId);
+      }
+    }
+  }
+
+  /**
+   * Apply source filters to URL if not already present
+   * When URL doesn't have filter-source, add filters for all converted sourcebooks
+   */
+  function applySourceFilters(url: string): string {
+    const urlObj = new URL(url);
+
+    // If URL already has filter-source, don't modify it
+    if (urlObj.searchParams.has("filter-source")) {
+      return url;
+    }
+
+    // If no sourceIds available, return original URL
+    if (availableSourceIds.length === 0) {
+      return url;
+    }
+
+    // Add filter-source for each available sourcebook
+    for (const sourceId of availableSourceIds) {
+      urlObj.searchParams.append("filter-source", sourceId.toString());
+    }
+
+    return urlObj.toString();
   }
 
   // ============================================================================
@@ -293,18 +328,22 @@ export async function indexer(ctx: ConversionContext): Promise<void> {
     const entityType = getEntityTypeFromUrl(index.url);
     if (!entityType) return null;
 
-    // Fetch and parse entities (use cache if available)
-    let entities: ParsedEntity[];
-    const cached = mapping.cache[index.url];
+    // Apply source filters if not already present
+    const fetchUrl = applySourceFilters(index.url);
 
-    if (!cached) {
+    // Fetch and parse entities (use cache if available)
+    // Cache key is the filtered URL to ensure consistency
+    let entities: ParsedEntity[];
+    const cached = mapping.cache[fetchUrl];
+
+    if (!cached || refetch) {
       try {
         // Fetch all pages and combine entities
-        entities = await fetchAllPages(index.url, entityType);
+        entities = await fetchAllPages(fetchUrl, entityType);
         const fetchedAt = new Date().toISOString();
-        mapping.cache[index.url] = { fetchedAt, entities };
+        mapping.cache[fetchUrl] = { fetchedAt, entities };
       } catch (error) {
-        tracker.trackError(index.url, error, "resource");
+        tracker.trackError(fetchUrl, error, "resource");
         return null;
       }
     } else {
