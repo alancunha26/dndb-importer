@@ -365,6 +365,9 @@ export interface ProcessingStats {
   unresolvedLinks: number;
   unresolvedLinksUnique: number;
   createdIndexes: number;
+  entityIndexes: number;
+  fetchedEntities: number;
+  cachedEntities: number;
   issues: Issue[];
   duration: number;
 }

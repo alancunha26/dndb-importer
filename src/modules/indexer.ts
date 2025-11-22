@@ -304,7 +304,7 @@ export async function indexer(ctx: ConversionContext): Promise<void> {
       const outputPath = join(config.output, filename);
       try {
         await writeFile(outputPath, markdown, "utf-8");
-        tracker.incrementCreatedIndexes();
+        tracker.incrementEntityIndexes();
         return { title: index.title, filename };
       } catch (error) {
         tracker.trackError(outputPath, error, "file");
@@ -363,6 +363,9 @@ export async function indexer(ctx: ConversionContext): Promise<void> {
 
         // Cache stores only the URL references
         mapping.cache[fetchUrl] = { fetchedAt, entityUrls };
+
+        // Track fetched entities
+        tracker.incrementFetchedEntities(entities.length);
       } catch (error) {
         tracker.trackError(fetchUrl, error, "resource");
         return null;
@@ -380,6 +383,9 @@ export async function indexer(ctx: ConversionContext): Promise<void> {
           });
         }
       }
+
+      // Track cached entities
+      tracker.incrementCachedEntities(entities.length);
     }
 
     // Resolve entities to local files
@@ -397,7 +403,7 @@ export async function indexer(ctx: ConversionContext): Promise<void> {
     const outputPath = join(config.output, filename);
     try {
       await writeFile(outputPath, markdown, "utf-8");
-      tracker.incrementCreatedIndexes();
+      tracker.incrementEntityIndexes();
       return { title: index.title, filename };
     } catch (error) {
       tracker.trackError(outputPath, error, "file");
@@ -438,7 +444,7 @@ export async function indexer(ctx: ConversionContext): Promise<void> {
     const outputPath = join(config.output, filename);
     try {
       await writeFile(outputPath, markdown, "utf-8");
-      tracker.incrementCreatedIndexes();
+      tracker.incrementEntityIndexes();
     } catch (error) {
       tracker.trackError(outputPath, error, "file");
     }
