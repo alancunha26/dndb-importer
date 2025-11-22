@@ -146,6 +146,10 @@ export class Tracker {
     this.createdIndexes = count;
   }
 
+  incrementCreatedIndexes(): void {
+    this.createdIndexes++;
+  }
+
   incrementImagesDownloaded(): void {
     this.downloadedImages++;
   }

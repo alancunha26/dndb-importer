@@ -30,6 +30,11 @@
     "timeout": 30000,
     "retries": 3
   },
+  "indexes": {
+    "generate": false,
+    "global": { "enabled": true, "title": "Global Index" },
+    "entities": []
+  },
   "links": {
     "resolveInternal": true,
     "fallbackStyle": "bold",

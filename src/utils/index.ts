@@ -9,6 +9,13 @@ export { normalizeAnchorForMatching } from "./generate-anchor-variants";
 export { findMatchingAnchor } from "./find-matching-anchor";
 export type { AnchorMatch } from "./find-matching-anchor";
 
+// Entity matching utilities
+export { resolveEntityUrl } from "./resolve-entity-url";
+export { getEntityTypeFromUrl } from "./get-entity-type-from-url";
+
+// Formatting utilities
+export { formatFallback } from "./format-fallback";
+
 // URL utilities
 export { normalizeUrl } from "./normalize-url";
 export { isEntityUrl } from "./is-entity-url";
@@ -26,9 +33,22 @@ export { filenameToTitle } from "./filename-to-title";
 export { fileExists } from "./file-exists";
 export { loadMapping } from "./load-mapping";
 export { saveMapping } from "./save-mapping";
+export {
+  loadIndexesMapping,
+  createEmptyIndexesMapping,
+} from "./load-indexes-mapping";
+export { saveIndexesMapping } from "./save-indexes-mapping";
+
+// Network utilities
+export { fetchListingPage } from "./fetch-listing-page";
+export type { FetchOptions } from "./fetch-listing-page";
 
 // Config utilities
-export { loadConfig, getUserConfigPath, loadDefaultConfig } from "./load-config";
+export {
+  loadConfig,
+  getUserConfigPath,
+  loadDefaultConfig,
+} from "./load-config";
 
 // Template utilities
 export { loadTemplate } from "./load-template";

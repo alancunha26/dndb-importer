@@ -9,7 +9,6 @@ import { load } from "cheerio";
 import type { AnyNode } from "domhandler";
 import { createTurndownService } from "../turndown";
 import {
-  IdGenerator,
   loadMapping,
   saveMapping,
   fileExists,
@@ -20,6 +19,7 @@ import {
   parseEntityUrl,
   loadIndexTemplate,
   loadFileTemplate,
+  applyAliases,
 } from "../utils";
 import type {
   ConversionContext,
@@ -47,7 +47,12 @@ export async function process(ctx: ConversionContext): Promise<void> {
   const { config, files, sourcebooks, globalTemplates, tracker } = ctx;
   const imageMappingPath = join(config.output, "images.json");
   const imageMapping = await loadMapping(imageMappingPath);
-  const idGenerator = IdGenerator.fromMapping(imageMapping);
+
+  // Register existing IDs with the context's generator
+  for (const filename of Object.values(imageMapping)) {
+    const id = filename.replace(/\.[^.]+$/, ""); // Remove extension
+    ctx.idGenerator.register(id);
+  }
 
   // ============================================================================
   // Helper Functions
@@ -113,7 +118,7 @@ export async function process(ctx: ConversionContext): Promise<void> {
     if (canonical) {
       const match = canonical.match(/dndbeyond\.com(\/.*)$/);
       if (match) {
-        canonicalUrl = match[1];
+        canonicalUrl = applyAliases(match[1], config.links.urlAliases);
         const segments = canonicalUrl.split("/").filter((s) => s.length > 0);
         if (segments.length > 1) {
           bookUrl = "/" + segments.slice(0, -1).join("/");
@@ -206,7 +211,9 @@ export async function process(ctx: ConversionContext): Promise<void> {
     content.find("a[href]").each((_i, link) => {
       const href = $(link).attr("href");
       if (href) {
-        const parsed = parseEntityUrl(href);
+        const url = applyAliases(href, config.links.urlAliases);
+        const parsed = parseEntityUrl(url);
+
         if (parsed && !seenUrls.has(parsed.url)) {
           seenUrls.add(parsed.url);
           entities.push(parsed);
@@ -259,7 +266,8 @@ export async function process(ctx: ConversionContext): Promise<void> {
 
       if (!config.images.formats.includes(format)) continue;
 
-      const path = imageMapping[src] ?? `${idGenerator.generate()}${extension}`;
+      const path =
+        imageMapping[src] ?? `${ctx.idGenerator.generate()}${extension}`;
       const outputPath = join(dirname(file.outputPath), path);
 
       if (!(await fileExists(outputPath))) {
@@ -360,7 +368,7 @@ export async function process(ctx: ConversionContext): Promise<void> {
     const mappingKey = `cover:${sourcebook.sourcebook}/${coverImage}`;
     const uniqueId = imageMapping[mappingKey]
       ? extractIdFromFilename(imageMapping[mappingKey])
-      : idGenerator.generate();
+      : ctx.idGenerator.generate();
 
     const extension = extname(coverImage);
     const localFilename = `${uniqueId}${extension}`;

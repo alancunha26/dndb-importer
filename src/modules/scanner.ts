@@ -7,7 +7,6 @@ import glob from "fast-glob";
 import path from "node:path";
 import { readFile } from "fs/promises";
 import {
-  IdGenerator,
   loadMapping,
   saveMapping,
   fileExists,
@@ -116,7 +115,13 @@ export async function scan(ctx: ConversionContext): Promise<void> {
   // 4. Load persistent file mapping (HTML path -> markdown filename)
   const fileMappingPath = path.join(ctx.config.output, "files.json");
   const fileMapping = await loadMapping(fileMappingPath);
-  const idGenerator = IdGenerator.fromMapping(fileMapping);
+
+  // Register existing IDs with the context's generator
+  for (const filename of Object.values(fileMapping)) {
+    const id = filename.replace(".md", "");
+    ctx.idGenerator.register(id);
+  }
+
   const updatedFileMapping: FileMapping = { ...fileMapping };
 
   // 5. Single pass: Process files and create sourcebooks on-demand
@@ -148,7 +153,7 @@ export async function scan(ctx: ConversionContext): Promise<void> {
         indexId = extractIdFromFilename(fileMapping[indexKey]);
       } else {
         // Generate new index ID
-        indexId = idGenerator.generate();
+        indexId = ctx.idGenerator.generate();
         // Add to updated mapping
         updatedFileMapping[indexKey] = `${indexId}.md`;
       }
@@ -182,7 +187,7 @@ export async function scan(ctx: ConversionContext): Promise<void> {
       uniqueId = extractIdFromFilename(fileMapping[relativePath]);
     } else {
       // Generate new ID
-      uniqueId = idGenerator.generate();
+      uniqueId = ctx.idGenerator.generate();
       // Add to updated mapping
       updatedFileMapping[relativePath] = `${uniqueId}.md`;
     }

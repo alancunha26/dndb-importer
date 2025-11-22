@@ -1,7 +1,7 @@
-import { ENTITY_TYPES, type ParsedEntityUrl } from "../types";
+import { ENTITY_TYPES, type ParsedEntityUrl, type EntityType } from "../types";
 
 const ENTITY_URL_REGEX = new RegExp(
-  `^\\/(${ENTITY_TYPES.join("|")})\\/(\\d+)(?:-(.+))?$`
+  `^\\/(${ENTITY_TYPES.join("|")})\\/(\\d+)(?:-(.+))?$`,
 );
 
 /**
@@ -21,10 +21,10 @@ export function parseEntityUrl(url: string): ParsedEntityUrl | null {
   const [, type, id, slug] = match;
 
   return {
-    type,
-    id,
-    slug,
+    type: type as EntityType,
     anchor: slug,
+    slug,
     url,
+    id,
   };
 }
