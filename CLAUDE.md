@@ -81,7 +81,8 @@ const ctx: ConversionContext = { config, tracker };
 await modules.scan(ctx);    // 1. File discovery
 await modules.process(ctx); // 2. Parse all, then process + write
 await modules.resolve(ctx); // 3. Resolve links (optional)
-modules.stats(tracker, verbose); // 4. Display statistics
+await modules.index(ctx);   // 4. Generate entity indexes (optional)
+modules.stats(tracker, verbose); // 5. Display statistics
 ```
 
 **Pipeline Modules** (`src/modules/`):
@@ -145,7 +146,25 @@ modules.stats(tracker, verbose); // 4. Display statistics
    - Skipped if `links.resolveInternal: false`
    - Tracks resolved/unresolved links via `ctx.tracker`
 
-4. **Stats** (`stats.ts`)
+4. **Indexer** (`indexer.ts`)
+   - Runs **after resolver has processed all files**
+   - Generates entity indexes by fetching D&D Beyond listing pages
+   - Loads cached entity data from `indexes.json` (or fetches fresh)
+   - Collects `sourceId` from converted sourcebooks for auto-filtering
+   - For each entity index configuration:
+     - Applies source filters to listing URL
+     - Fetches paginated pages (or uses cache)
+     - Parses entities using type-specific parsers (info cards, list rows, card grids)
+     - Stores entities in global map (deduplicated by URL)
+     - Resolves entities to local files via `ctx.entityIndex`
+     - Renders template with `EntityIndexTemplateContext`
+     - Writes index file
+   - Generates global index linking sourcebooks and entity indexes
+   - Saves updated mapping to `indexes.json`
+   - Skipped if `indexes.generate: false`
+   - See [Entity Indexer](docs/indexer.md) for complete documentation
+
+5. **Stats** (`stats.ts`)
    - Displays formatted summary with progress bars
    - Shows files, images, links sections
    - Breaks down link issues by reason
@@ -167,6 +186,11 @@ modules.stats(tracker, verbose); // 4. Display statistics
   - Subsequent runs: Loads mapping and reuses existing IDs for same URLs
   - Example: `"https://media.dndbeyond.com/.../image.png"` → `"m3x7.png"`
   - Mapping file location: `{output_directory}/images.json`
+- **Indexes**: Random IDs with persistent mapping stored in `indexes.json`
+  - First run: Generates random IDs and saves index title → filename mapping
+  - Subsequent runs: Loads mapping and reuses existing IDs for same indexes
+  - Also caches fetched entity data to avoid re-fetching from D&D Beyond
+  - Mapping file location: `{output_directory}/indexes.json`
 - Prevents filename conflicts and special character issues
 - Enables consistent IDs across conversion runs
 
@@ -181,7 +205,7 @@ modules.stats(tracker, verbose); // 4. Display statistics
   - Falls back to default config automatically
   - Errors displayed in final summary via `ctx.errors.resources`
 - Location: `src/config/default.json` (copied to `dist/config/` during build)
-- Structure: User-centric organization with 7 top-level sections:
+- Structure: User-centric organization with 8 top-level sections:
   - `input` - Source HTML files directory (string)
   - `output` - Output directory (string)
   - `ids` - Unique ID generation (used for files and images)
@@ -189,6 +213,7 @@ modules.stats(tracker, verbose); // 4. Display statistics
   - `html` - HTML parsing settings (content selector, etc.)
   - `images` - Image download settings
   - `links` - Link resolution configuration
+  - `indexes` - Entity index generation configuration
 - Hardcoded values (not configurable):
   - File pattern: `**/*.html`
   - Encoding: `utf-8`
@@ -268,9 +293,19 @@ modules.stats(tracker, verbose); // 4. Display statistics
   - `loadIndexTemplate()` and `loadFileTemplate()` handle precedence
   - Templates receive rich context objects (`IndexTemplateContext`, `FileTemplateContext`)
   - Built-in defaults ensure converter always works without user templates
+- **Entity index templates** (used by Indexer module):
+  - `entity-index.md.hbs` - Lists of entities (spells, monsters, etc.)
+  - `parent-index.md.hbs` - Links to child indexes
+  - `global-index.md.hbs` - Links to sourcebooks and entity indexes
+  - Context includes `type` variable for conditionals (e.g., `{{#if (eq type "spells")}}`)
+- **Handlebars comparison helpers** for conditionals:
+  - `eq`, `ne` - Equal, not equal
+  - `gt`, `lt`, `gte`, `lte` - Numeric comparisons
+  - `and`, `or`, `not` - Logical operators
 - **Template variables**:
   - Index: `title`, `edition`, `description`, `author`, `coverImage`, `date`, `files`, `metadata`
   - File: `title`, `date`, `tags`, `sourcebook`, `navigation`, `content`
+  - Entity Index: `title`, `description`, `type`, `entities` (with `name`, `url`, `metadata`, `fileId`, `anchor`, `resolved`)
 - **HTML escaping**: Use `{{{variable}}}` (triple braces) for unescaped output to preserve markdown
 
 **Sourcebook Metadata:**
@@ -600,6 +635,7 @@ src/
 │   ├── scanner.ts           # File discovery & ID assignment
 │   ├── processor.ts         # Two-pass: parse all, then process + write
 │   ├── resolver.ts          # Link resolution
+│   ├── indexer.ts           # Entity index generation
 │   ├── stats.ts             # Statistics display with formatting
 │   └── index.ts
 ├── turndown/
@@ -613,8 +649,11 @@ src/
 │   ├── find-matching-anchor.ts # Smart anchor matching
 │   ├── generate-anchor.ts   # GitHub-style anchor generation
 │   ├── generate-anchor-variants.ts # Anchor normalization for matching
+│   ├── get-default-entity-index-template.ts
 │   ├── get-default-file-template.ts
+│   ├── get-default-global-index-template.ts
 │   ├── get-default-index-template.ts
+│   ├── get-default-parent-index-template.ts
 │   ├── id-generator.ts      # Unique ID generation
 │   ├── is-entity-url.ts     # Check for entity URL patterns
 │   ├── is-image-url.ts      # Check for image URLs
@@ -622,6 +661,7 @@ src/
 │   ├── load-config.ts       # Configuration loading
 │   ├── load-file-template.ts
 │   ├── load-index-template.ts
+│   ├── load-indexes-mapping.ts # Entity index mapping persistence
 │   ├── load-mapping.ts      # JSON mapping persistence
 │   ├── load-template.ts
 │   ├── logger.ts            # Logging utilities
@@ -715,7 +755,8 @@ Utilities are organized as focused, single-purpose functions in `src/utils/`:
 - `file-exists.ts` - Check if file/directory exists
 - `filename-to-title.ts` - Convert filenames to readable titles
 - `load-template.ts` / `load-file-template.ts` / `load-index-template.ts` - Template loading
-- `get-default-file-template.ts` / `get-default-index-template.ts` - Built-in defaults
+- `get-default-file-template.ts` / `get-default-index-template.ts` - Built-in defaults for sourcebooks
+- `get-default-entity-index-template.ts` / `get-default-parent-index-template.ts` / `get-default-global-index-template.ts` - Built-in defaults for entity indexes
 
 **URL utilities:**
 - `normalize-url.ts` - Strip domain, normalize paths

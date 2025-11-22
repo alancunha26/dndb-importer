@@ -74,7 +74,26 @@ See [Link Resolver](resolver.md) for detailed documentation of the resolution al
 
 **Output:** Markdown files updated with resolved local links.
 
-### Stage 4: Statistics
+### Stage 4: Indexing
+
+The indexer generates entity indexes by fetching listing pages from D&D Beyond and creating navigable index files that link to converted content.
+
+**Responsibilities:**
+- Load cached entity data from `indexes.json` (or fetch fresh)
+- Collect source IDs from converted sourcebooks for auto-filtering
+- For each configured entity index:
+  - Fetch paginated listing pages from D&D Beyond
+  - Parse entities using type-specific parsers (info cards, list rows, card grids)
+  - Resolve entities to local files using the entity index
+  - Render index using Handlebars templates
+- Generate global index linking sourcebooks and entity indexes
+- Save updated cache to `indexes.json`
+
+**Output:** Entity index files (spells, monsters, items, etc.) and global index file.
+
+See [Entity Indexer](indexer.md) for detailed documentation.
+
+### Stage 5: Statistics
 
 Display a summary of the conversion including:
 - Files processed, indexes created
@@ -136,11 +155,12 @@ This allows users to see all problems at once rather than fixing one at a time.
 
 ## Caching Strategy
 
-Two levels of caching improve subsequent runs:
+Multiple caching layers improve subsequent runs:
 
 **ID Mappings:**
-- File paths → Markdown filenames
-- Image URLs → Local filenames
+- File paths → Markdown filenames (`files.json`)
+- Image URLs → Local filenames (`images.json`)
+- Entity index titles → Index filenames (`indexes.json`)
 
 These ensure consistent output across runs.
 
@@ -148,7 +168,12 @@ These ensure consistent output across runs.
 - Check if local file exists before downloading
 - Reuse cached images from previous runs
 
-First run downloads all images; subsequent runs are nearly instant.
+**Entity Data:**
+- Entity metadata cached in `indexes.json`
+- Avoids re-fetching from D&D Beyond on subsequent runs
+- Use `--refetch` flag to force fresh data
+
+First run downloads all images and fetches entity data; subsequent runs are nearly instant.
 
 ## Cross-Reference Resolution
 

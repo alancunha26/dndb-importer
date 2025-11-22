@@ -70,6 +70,16 @@ Run `dndb-convert config` to see your config location.
     "urlAliases": {},           // URL mappings (see below)
     "excludeUrls": [],          // URLs to skip (see below)
     "entityLocations": {}       // Entity type → allowed pages (see below)
+  },
+
+  // === Entity Indexes ===
+  "indexes": {
+    "generate": true,           // Enable/disable index generation
+    "global": {
+      "enabled": true,          // Generate global index
+      "title": "Global Index"   // Global index title
+    },
+    "entities": []              // Entity index configurations (see below)
   }
 }
 ```
@@ -182,6 +192,37 @@ This is best-effort - some edge cases may resolve incorrectly. Fix specific issu
   }
 }
 ```
+
+## Entity Indexes
+
+Generate navigable indexes of D&D entities (spells, monsters, items, etc.) by fetching listing pages from D&D Beyond.
+
+```json
+{
+  "indexes": {
+    "generate": true,
+    "global": {
+      "enabled": true,
+      "title": "D&D 5e Compendium"
+    },
+    "entities": [
+      {
+        "title": "All Spells",
+        "url": "https://www.dndbeyond.com/spells?filter-partnered-content=f",
+        "description": "Complete spell list from converted sourcebooks."
+      },
+      {
+        "title": "All Monsters",
+        "url": "https://www.dndbeyond.com/monsters?filter-partnered-content=f"
+      }
+    ]
+  }
+}
+```
+
+Entity indexes support nested structures with `children`, and can be customized with Handlebars templates.
+
+See [indexer.md](indexer.md) for complete documentation including supported entity types, auto-filtering, caching, and templates.
 
 ## Markdown Formatting
 

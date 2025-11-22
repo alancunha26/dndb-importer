@@ -68,6 +68,7 @@ export const GlobalIndexConfigSchema = z.object({
 const EntityIndexBaseSchema = z.object({
   title: z.string(),
   url: z.string().url().optional(),
+  description: z.string().optional(),
 });
 
 // Recursive schema for entity index with nested children
@@ -162,6 +163,9 @@ export interface FileDescriptor {
 export interface TemplateSet {
   index: string | null;
   file: string | null;
+  entityIndex: string | null;
+  parentIndex: string | null;
+  globalIndex: string | null;
 }
 
 export interface SourcebookInfo {
@@ -251,6 +255,41 @@ export interface FileTemplateContext {
     next?: string;
   };
   content: string;
+}
+
+export interface EntityIndexTemplateContext {
+  title: string;
+  description?: string;
+  type: EntityType;
+  entities: Array<{
+    name: string;
+    url: string;
+    metadata?: Record<string, string>;
+    fileId?: string;
+    anchor?: string;
+    resolved: boolean;
+  }>;
+}
+
+export interface ParentIndexTemplateContext {
+  title: string;
+  description?: string;
+  children: Array<{
+    title: string;
+    filename: string;
+  }>;
+}
+
+export interface GlobalIndexTemplateContext {
+  title: string;
+  sourcebooks: Array<{
+    title: string;
+    id: string;
+  }>;
+  entityIndexes: Array<{
+    title: string;
+    filename: string;
+  }>;
 }
 
 // ============================================================================

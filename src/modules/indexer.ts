@@ -17,15 +17,21 @@ import type {
   EntityIndexConfig,
   ParsedEntity,
   EntityType,
+  EntityIndexTemplateContext,
+  ParentIndexTemplateContext,
+  GlobalIndexTemplateContext,
 } from "../types";
 import {
   loadIndexesMapping,
   saveIndexesMapping,
   fetchListingPage,
-  formatFallback,
   resolveEntityUrl,
   getEntityTypeFromUrl,
   applyAliases,
+  loadTemplate,
+  getDefaultEntityIndexTemplate,
+  getDefaultParentIndexTemplate,
+  getDefaultGlobalIndexTemplate,
 } from "../utils";
 import { getParser } from "../parsers";
 
@@ -87,6 +93,21 @@ export async function indexer(ctx: ConversionContext): Promise<void> {
       }
     }
   }
+
+  // Load templates (global templates from context, or use defaults)
+  const globalTemplates = ctx.globalTemplates;
+  const entityIndexTemplate = await loadTemplate(
+    globalTemplates?.entityIndex ?? null,
+    getDefaultEntityIndexTemplate(config.markdown),
+  );
+  const parentIndexTemplate = await loadTemplate(
+    globalTemplates?.parentIndex ?? null,
+    getDefaultParentIndexTemplate(config.markdown),
+  );
+  const globalIndexTemplate = await loadTemplate(
+    globalTemplates?.globalIndex ?? null,
+    getDefaultGlobalIndexTemplate(config.markdown),
+  );
 
   /**
    * Apply source filters to URL if not already present
@@ -207,63 +228,46 @@ export async function indexer(ctx: ConversionContext): Promise<void> {
   }
 
   /**
-   * Generate markdown for an entity index
+   * Generate markdown for an entity index using template
    */
   function generateEntityIndexMarkdown(
     title: string,
+    description: string | undefined,
+    entityType: EntityType,
     entities: ResolvedEntity[],
   ): string {
-    const lines: string[] = [];
+    const context: EntityIndexTemplateContext = {
+      title,
+      description,
+      type: entityType,
+      entities: entities.map((e) => ({
+        name: e.name,
+        url: e.url,
+        metadata: e.metadata,
+        fileId: e.fileId,
+        anchor: e.anchor,
+        resolved: e.resolved,
+      })),
+    };
 
-    lines.push(`# ${title}`);
-    lines.push("");
-
-    if (entities.length === 0) {
-      lines.push("_No entities found._");
-      lines.push("");
-      return lines.join("\n");
-    }
-
-    // Generate list of entities
-    for (const entity of entities) {
-      if (entity.resolved && entity.fileId && entity.anchor) {
-        // Resolved: link to local file
-        lines.push(`- [${entity.name}](${entity.fileId}.md#${entity.anchor})`);
-      } else {
-        // Unresolved: use fallback style
-        const text = formatFallback(entity.name, config);
-        lines.push(`- ${text}`);
-      }
-    }
-
-    lines.push("");
-    return lines.join("\n");
+    return entityIndexTemplate(context);
   }
 
   /**
-   * Generate markdown for a parent index (links to child indexes)
+   * Generate markdown for a parent index using template
    */
   function generateParentIndexMarkdown(
     title: string,
+    description: string | undefined,
     children: Array<{ title: string; filename: string }>,
   ): string {
-    const lines: string[] = [];
+    const context: ParentIndexTemplateContext = {
+      title,
+      description,
+      children,
+    };
 
-    lines.push(`# ${title}`);
-    lines.push("");
-
-    if (children.length === 0) {
-      lines.push("_No child indexes._");
-      lines.push("");
-      return lines.join("\n");
-    }
-
-    for (const child of children) {
-      lines.push(`- [${child.title}](${child.filename})`);
-    }
-
-    lines.push("");
-    return lines.join("\n");
+    return parentIndexTemplate(context);
   }
 
   /**
@@ -290,7 +294,11 @@ export async function indexer(ctx: ConversionContext): Promise<void> {
       }
 
       // Generate parent index markdown
-      const markdown = generateParentIndexMarkdown(index.title, childResults);
+      const markdown = generateParentIndexMarkdown(
+        index.title,
+        index.description,
+        childResults,
+      );
 
       // Write file
       const outputPath = join(config.output, filename);
@@ -378,7 +386,12 @@ export async function indexer(ctx: ConversionContext): Promise<void> {
     const resolvedEntities = resolveEntities(entities);
 
     // Generate markdown
-    const markdown = generateEntityIndexMarkdown(index.title, resolvedEntities);
+    const markdown = generateEntityIndexMarkdown(
+      index.title,
+      index.description,
+      entityType,
+      resolvedEntities,
+    );
 
     // Write file
     const outputPath = join(config.output, filename);
@@ -406,35 +419,25 @@ export async function indexer(ctx: ConversionContext): Promise<void> {
       mapping.mappings.global = filename;
     }
 
-    const lines: string[] = [];
+    // Build template context
+    const context: GlobalIndexTemplateContext = {
+      title,
+      sourcebooks: sourcebooks
+        ? sourcebooks.map((sb) => ({
+            title: sb.title,
+            id: sb.id,
+          }))
+        : [],
+      entityIndexes,
+    };
 
-    lines.push(`# ${title}`);
-    lines.push("");
-
-    // Sourcebooks section
-    if (sourcebooks && sourcebooks.length > 0) {
-      lines.push("## Sourcebooks");
-      lines.push("");
-      for (const sb of sourcebooks) {
-        lines.push(`- [${sb.title}](${sb.id}.md)`);
-      }
-      lines.push("");
-    }
-
-    // Entity indexes section
-    if (entityIndexes.length > 0) {
-      lines.push("## Compendium");
-      lines.push("");
-      for (const idx of entityIndexes) {
-        lines.push(`- [${idx.title}](${idx.filename})`);
-      }
-      lines.push("");
-    }
+    // Render template
+    const markdown = globalIndexTemplate(context);
 
     // Write file
     const outputPath = join(config.output, filename);
     try {
-      await writeFile(outputPath, lines.join("\n"), "utf-8");
+      await writeFile(outputPath, markdown, "utf-8");
       tracker.incrementCreatedIndexes();
     } catch (error) {
       tracker.trackError(outputPath, error, "file");

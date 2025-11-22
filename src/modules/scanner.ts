@@ -25,15 +25,21 @@ import {
 
 /**
  * Detect template files in a directory
- * Returns paths to index.md.hbs and file.md.hbs if they exist
+ * Returns paths to template files if they exist
  */
 async function detectTemplates(directory: string): Promise<TemplateSet> {
   const indexPath = path.join(directory, "index.md.hbs");
   const filePath = path.join(directory, "file.md.hbs");
+  const entityIndexPath = path.join(directory, "entity-index.md.hbs");
+  const parentIndexPath = path.join(directory, "parent-index.md.hbs");
+  const globalIndexPath = path.join(directory, "global-index.md.hbs");
 
   return {
     index: (await fileExists(indexPath)) ? indexPath : null,
     file: (await fileExists(filePath)) ? filePath : null,
+    entityIndex: (await fileExists(entityIndexPath)) ? entityIndexPath : null,
+    parentIndex: (await fileExists(parentIndexPath)) ? parentIndexPath : null,
+    globalIndex: (await fileExists(globalIndexPath)) ? globalIndexPath : null,
   };
 }
 

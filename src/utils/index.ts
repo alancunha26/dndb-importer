@@ -56,6 +56,9 @@ export { loadIndexTemplate } from "./load-index-template";
 export { loadFileTemplate } from "./load-file-template";
 export { getDefaultIndexTemplate } from "./get-default-index-template";
 export { getDefaultFileTemplate } from "./get-default-file-template";
+export { getDefaultEntityIndexTemplate } from "./get-default-entity-index-template";
+export { getDefaultParentIndexTemplate } from "./get-default-parent-index-template";
+export { getDefaultGlobalIndexTemplate } from "./get-default-global-index-template";
 
 // Classes
 export { IdGenerator } from "./id-generator";

@@ -9,6 +9,7 @@ Convert D&D Beyond HTML sourcebooks to clean, structured Markdown files.
 - Navigation links between chapters (prev/index/next)
 - D&D-specific formatting (stat blocks, spell descriptions, tables)
 - Cross-reference resolution between books
+- Entity indexes (spells, monsters, items) with customizable templates
 - Customizable Handlebars templates
 - Memory-efficient streaming pipeline
 
@@ -171,6 +172,7 @@ npm run format
 - [Configuration Guide](docs/configuration.md)
 - [Template Guide](docs/templates.md)
 - [Link Resolver](docs/resolver.md)
+- [Entity Indexer](docs/indexer.md)
 - [Performance](docs/performance.md)
 - [Roadmap](docs/roadmap.md)
 
