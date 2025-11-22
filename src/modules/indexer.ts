@@ -105,8 +105,9 @@ export async function indexer(ctx: ConversionContext): Promise<void> {
       return url;
     }
 
-    // Add filter-source for each available sourcebook
-    for (const sourceId of availableSourceIds) {
+    // Add filter-source for each available sourcebook (sorted for consistent cache keys)
+    const sortedIds = [...availableSourceIds].sort((a, b) => a - b);
+    for (const sourceId of sortedIds) {
       urlObj.searchParams.append("filter-source", sourceId.toString());
     }
 
