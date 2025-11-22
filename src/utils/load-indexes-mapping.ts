@@ -11,6 +11,7 @@ export function createEmptyIndexesMapping(): IndexesMapping {
       global: undefined,
       entities: {},
     },
+    entities: {},
     cache: {},
   };
 }

@@ -191,9 +191,15 @@ export const ParsedEntitySchema = z.object({
   metadata: z.record(z.string(), z.string()).optional(),
 });
 
+// Entity stored by URL key (without url field to avoid duplication)
+export const StoredEntitySchema = z.object({
+  name: z.string(),
+  metadata: z.record(z.string(), z.string()).optional(),
+});
+
 export const CachedEntityListSchema = z.object({
   fetchedAt: z.string(),
-  entities: z.array(ParsedEntitySchema),
+  entityUrls: z.array(z.string()),
 });
 
 export const IndexesMappingSchema = z.object({
@@ -201,10 +207,12 @@ export const IndexesMappingSchema = z.object({
     global: z.string().optional(),
     entities: z.record(z.string(), z.string()),
   }),
+  entities: z.record(z.string(), StoredEntitySchema),
   cache: z.record(z.string(), CachedEntityListSchema),
 });
 
 export type ParsedEntity = z.infer<typeof ParsedEntitySchema>;
+export type StoredEntity = z.infer<typeof StoredEntitySchema>;
 export type CachedEntityList = z.infer<typeof CachedEntityListSchema>;
 export type IndexesMapping = z.infer<typeof IndexesMappingSchema>;
 

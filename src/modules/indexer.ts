@@ -342,13 +342,36 @@ export async function indexer(ctx: ConversionContext): Promise<void> {
         // Fetch all pages and combine entities
         entities = await fetchAllPages(fetchUrl, entityType);
         const fetchedAt = new Date().toISOString();
-        mapping.cache[fetchUrl] = { fetchedAt, entities };
+
+        // Store entities in global entities map (deduplicated by URL)
+        const entityUrls: string[] = [];
+        for (const entity of entities) {
+          mapping.entities[entity.url] = {
+            name: entity.name,
+            metadata: entity.metadata,
+          };
+          entityUrls.push(entity.url);
+        }
+
+        // Cache stores only the URL references
+        mapping.cache[fetchUrl] = { fetchedAt, entityUrls };
       } catch (error) {
         tracker.trackError(fetchUrl, error, "resource");
         return null;
       }
     } else {
-      entities = cached.entities;
+      // Reconstruct entities from global entities map
+      entities = [];
+      for (const url of cached.entityUrls) {
+        const stored = mapping.entities[url];
+        if (stored) {
+          entities.push({
+            url,
+            name: stored.name,
+            metadata: stored.metadata,
+          });
+        }
+      }
     }
 
     // Resolve entities to local files
