@@ -611,6 +611,7 @@ export type SourcebookMetadata = z.infer<typeof SourcebookMetadataSchema>;
   - `totalFiles`, `successfulFiles`, `failedFiles`, `skippedFiles`
   - `downloadedImages`, `cachedImages`, `failedImages`
   - `resolvedLinks`, `unresolvedLinks`, `createdIndexes`
+  - `entityIndexes`, `fetchedEntities`, `cachedEntities`
   - `issues`: Issue[] (file, image, resource issues)
   - `unresolvedLinksList`: UnresolvedLink[] (path and text of unresolved links)
   - `duration`: Conversion time in milliseconds

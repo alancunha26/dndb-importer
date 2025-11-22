@@ -480,7 +480,9 @@ Unresolved entities are rendered with fallback formatting (bold by default).
 
 The indexer tracks:
 
-- `createdIndexes`: Number of index files written
+- `entityIndexes`: Number of entity index files created
+- `fetchedEntities`: Entities fetched from D&D Beyond
+- `cachedEntities`: Entities loaded from cache
 - `resolvedLinks`: Entities successfully resolved to local files
 - `unresolvedLinks`: Entities that couldn't be resolved
 
