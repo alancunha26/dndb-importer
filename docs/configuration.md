@@ -2,6 +2,13 @@
 
 The converter uses a layered configuration system that deep-merges settings from multiple sources.
 
+**Related Documentation:**
+
+- [Architecture](architecture.md) - Pipeline and design overview
+- [Link Resolver](resolver.md) - Anchor matching algorithm
+- [Entity Indexer](indexer.md) - Entity index configuration
+- [Templates](templates.md) - Template variables and examples
+
 ## Configuration Priority
 
 1. **Default config** - Built-in defaults from `src/config/default.json`

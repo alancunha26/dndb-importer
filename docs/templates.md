@@ -2,6 +2,12 @@
 
 The converter uses Handlebars templates for customizable output. Templates can be defined globally or per-sourcebook.
 
+**Related Documentation:**
+
+- [Architecture](architecture.md) - Pipeline overview and template system
+- [Configuration](configuration.md) - Markdown formatting options
+- [Entity Indexer](indexer.md) - Entity index templates
+
 ## Template Precedence
 
 Templates are loaded in this order (highest priority first):

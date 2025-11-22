@@ -2,6 +2,11 @@
 
 Notes on memory usage and processing architecture.
 
+**Related Documentation:**
+
+- [Architecture](architecture.md) - Two-pass processing rationale
+- [Entity Indexer](indexer.md) - Entity data caching
+
 ## Two-Pass Processing
 
 The converter uses a two-pass architecture to enable correct navigation links:
@@ -52,15 +57,44 @@ Subsequent runs are faster because:
 
 ## Caching
 
-The converter maintains two cache files in the output directory:
+The converter maintains three cache files in the output directory:
 
 - **`files.json`** - Maps HTML paths to markdown filenames
 - **`images.json`** - Maps image URLs to local filenames
+- **`indexes.json`** - Maps entity index titles to filenames and caches entity data
 
 These enable:
 
 - Consistent IDs across conversion runs
 - Skipping already-downloaded images
+- Reusing fetched entity data without re-fetching from D&D Beyond
 - Faster subsequent conversions
 
-See the [Testing Strategy](../CLAUDE.md#testing-strategy) section in CLAUDE.md for cache usage guidelines.
+### Cache Usage Guidelines
+
+**Always use the same output directory** when testing to benefit from caching:
+
+```bash
+# Correct - reuses cache
+npm run dndb-convert -- --input examples/input --output examples/output
+npm run dndb-convert -- --input examples/input --output examples/output
+
+# Incorrect - loses cache
+npm run dndb-convert -- --input examples/input --output examples/output-test1
+npm run dndb-convert -- --input examples/input --output examples/output-test2
+```
+
+Use `--verbose` flag to see caching statistics:
+
+```bash
+npm run dndb-convert -- --input examples/input --output examples/output --verbose
+# Shows: "Images: 0 downloaded, 49 cached"
+```
+
+Use `--refetch` flag to force re-download of images and refetch of entity data:
+
+```bash
+npm run dndb-convert -- --input examples/input --output examples/output --refetch
+```
+
+See [Entity Indexer](indexer.md) for details on the `indexes.json` cache.

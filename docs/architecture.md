@@ -2,6 +2,14 @@
 
 This document describes the architecture and design of the D&D Beyond HTML to Markdown Converter.
 
+**Related Documentation:**
+
+- [Configuration Guide](configuration.md) - All configuration options
+- [Link Resolver](resolver.md) - Link resolution algorithm
+- [Template Guide](templates.md) - Template variables and examples
+- [Entity Indexer](indexer.md) - Entity index generation
+- [Performance](performance.md) - Memory usage and caching
+
 ## Overview
 
 The converter transforms D&D Beyond HTML sourcebooks into clean, structured Markdown files suitable for note-taking applications. It handles the complexities of D&D content including stat blocks, spell descriptions, tables, and cross-references between books.
@@ -181,7 +189,8 @@ These ensure consistent output across runs.
 
 - Entity metadata cached in `indexes.json`
 - Avoids re-fetching from D&D Beyond on subsequent runs
-- Use `--refetch` flag to force fresh data
+
+Use `--refetch` flag to force re-download of images and refetch of entity data.
 
 First run downloads all images and fetches entity data; subsequent runs are nearly instant.
 

@@ -3,6 +3,14 @@
 **Module:** `src/modules/indexer.ts`
 **Status:** Implemented and tested
 
+**Related Documentation:**
+
+- [Architecture](architecture.md) - Pipeline overview
+- [Configuration](configuration.md) - Index configuration options (`indexes.*`)
+- [Templates](templates.md) - Handlebars template basics
+- [Link Resolver](resolver.md) - Entity resolution algorithm
+- [Performance](performance.md) - Caching strategy
+
 ## Overview
 
 The Indexer module generates entity indexes by fetching listing pages from D&D Beyond, parsing them, and creating navigable index files. It runs AFTER the resolver has processed all files, enabling entity resolution to local file links.
@@ -362,13 +370,13 @@ Entities are stored once by URL in the global `entities` map. Cache entries only
 
 - **First run**: Fetches from D&D Beyond, stores in cache
 - **Subsequent runs**: Uses cached data (fast)
-- **--refetch flag**: Forces re-fetch, ignores cache
+- **--refetch flag**: Forces re-fetch of entity data and re-download of images
 
 ```bash
 # Use cache (fast)
 npm run dndb-convert -- --input input --output output
 
-# Force refetch (slow)
+# Force refetch (slow - re-downloads images and refetches entity data)
 npm run dndb-convert -- --input input --output output --refetch
 ```
 

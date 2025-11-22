@@ -3,6 +3,12 @@
 **Module:** `src/modules/resolver.ts`
 **Status:** Implemented and tested
 
+**Related Documentation:**
+
+- [Architecture](architecture.md) - Pipeline overview
+- [Configuration](configuration.md) - Link resolution options (`links.*`)
+- [Entity Indexer](indexer.md) - Entity index generation
+
 ## Overview
 
 The Resolver module transforms D&D Beyond links into local markdown links, enabling seamless cross-referencing between converted sourcebooks. It runs after all files are written to disk, reading each file, resolving links, and overwriting with the resolved content.
