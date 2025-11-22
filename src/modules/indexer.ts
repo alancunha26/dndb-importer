@@ -423,7 +423,7 @@ export async function indexer(ctx: ConversionContext): Promise<void> {
 
     // Entity indexes section
     if (entityIndexes.length > 0) {
-      lines.push("## Entity Indexes");
+      lines.push("## Compendium");
       lines.push("");
       for (const idx of entityIndexes) {
         lines.push(`- [${idx.title}](${idx.filename})`);
