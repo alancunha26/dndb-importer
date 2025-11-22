@@ -11,10 +11,12 @@
 
 import { join } from "path";
 import { writeFile } from "fs/promises";
+import * as cheerio from "cheerio";
 import type {
   ConversionContext,
   EntityIndexConfig,
   ParsedEntity,
+  EntityType,
 } from "../types";
 import {
   loadIndexesMapping,
@@ -102,6 +104,73 @@ export async function indexer(ctx: ConversionContext): Promise<void> {
   }
 
   /**
+   * Detect the last page number from pagination items
+   * Returns 1 if no pagination found
+   */
+  function detectLastPage(html: string): number {
+    const $ = cheerio.load(html);
+    const paginationItems = $(".b-pagination-item");
+
+    if (paginationItems.length < 2) {
+      return 1;
+    }
+
+    // Last page number is in the penultimate pagination item
+    const penultimate = paginationItems.eq(-2);
+    const lastPageText = penultimate.text().trim();
+    const lastPage = parseInt(lastPageText, 10);
+
+    return isNaN(lastPage) ? 1 : lastPage;
+  }
+
+  /**
+   * Add or update the page parameter in a URL
+   */
+  function setPageParam(url: string, page: number): string {
+    const urlObj = new URL(url);
+    urlObj.searchParams.set("page", page.toString());
+    return urlObj.toString();
+  }
+
+  /**
+   * Fetch all pages for a listing URL and combine parsed entities
+   */
+  async function fetchAllPages(
+    url: string,
+    entityType: EntityType,
+  ): Promise<ParsedEntity[]> {
+    const parser = getParser(entityType);
+    const allEntities: ParsedEntity[] = [];
+
+    // Fetch first page
+    const firstPageHtml = await fetchListingPage(url, {
+      timeout: config.images.timeout,
+      retries: config.images.retries,
+    });
+
+    // Parse first page
+    const firstPageEntities = parser.parse(firstPageHtml);
+    allEntities.push(...firstPageEntities);
+
+    // Detect total pages
+    const lastPage = detectLastPage(firstPageHtml);
+
+    // Fetch remaining pages
+    for (let page = 2; page <= lastPage; page++) {
+      const pageUrl = setPageParam(url, page);
+      const pageHtml = await fetchListingPage(pageUrl, {
+        timeout: config.images.timeout,
+        retries: config.images.retries,
+      });
+
+      const pageEntities = parser.parse(pageHtml);
+      allEntities.push(...pageEntities);
+    }
+
+    return allEntities;
+  }
+
+  /**
    * Generate markdown for an entity index
    */
   function generateEntityIndexMarkdown(
@@ -169,19 +238,10 @@ export async function indexer(ctx: ConversionContext): Promise<void> {
 
     if (!cached) {
       try {
-        const html = await fetchListingPage(index.url, {
-          timeout: config.images.timeout,
-          retries: config.images.retries,
-        });
-
-        const parser = getParser(entityType);
-        entities = parser.parse(html);
-
-        // Cache the result
-        mapping.cache[index.url] = {
-          fetchedAt: new Date().toISOString(),
-          entities,
-        };
+        // Fetch all pages and combine entities
+        entities = await fetchAllPages(index.url, entityType);
+        const fetchedAt = new Date().toISOString();
+        mapping.cache[index.url] = { fetchedAt, entities };
       } catch (error) {
         tracker.trackError(index.url, error, "resource");
         return null;
