@@ -1,12 +1,12 @@
 # RFC 0002: Entity and Global Indexes
 
-**Status:** Accepted
+**Status:** Done
 
 **Author:** Alan Cunha
 
 **Created:** 2025-11-21
 
-**Updated:** 2025-11-21
+**Updated:** 2025-11-22
 
 ## Summary
 

@@ -18,12 +18,12 @@ During Pass 1, all file content is loaded into memory. This enables correct navi
 ### Estimated Memory by Scale
 
 | Files | Sourcebooks | Estimated RAM |
-|-------|-------------|---------------|
-| 75 | 5 | ~30 MB |
-| 150 | 10 | ~60 MB |
-| 300 | 20 | ~120 MB |
-| 750 | 50 | ~300 MB |
-| 1500 | 100 | ~600 MB |
+| ----- | ----------- | ------------- |
+| 75    | 5           | ~30 MB        |
+| 150   | 10          | ~60 MB        |
+| 300   | 20          | ~120 MB       |
+| 750   | 50          | ~300 MB       |
+| 1500  | 100         | ~600 MB       |
 
 Based on typical D&D Beyond HTML files averaging ~400 KB each.
 
@@ -46,6 +46,7 @@ Conversion speed depends primarily on:
 3. **HTML parsing** - Cheerio DOM operations
 
 Subsequent runs are faster because:
+
 - Images are cached locally (no network requests)
 - File/image ID mappings are reused
 
@@ -57,6 +58,7 @@ The converter maintains two cache files in the output directory:
 - **`images.json`** - Maps image URLs to local filenames
 
 These enable:
+
 - Consistent IDs across conversion runs
 - Skipping already-downloaded images
 - Faster subsequent conversions

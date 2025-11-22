@@ -218,6 +218,7 @@ The resolver uses a **12-step priority system with quality scores** (lower is be
 **With hyphens (preserving word boundaries):**
 
 1. **Exact match**
+
    ```
    Anchor: "fireball"
    Valid: ["fireball", ...]
@@ -225,6 +226,7 @@ The resolver uses a **12-step priority system with quality scores** (lower is be
    ```
 
 2. **Exact plural match** (strips trailing 's')
+
    ```
    Anchor: "bugbear"
    Valid: ["bugbears", "bugbear-stalker", ...]
@@ -232,6 +234,7 @@ The resolver uses a **12-step priority system with quality scores** (lower is be
    ```
 
 3. **Word-by-word prefix match** (words must match at positions)
+
    ```
    Anchor: "arcane-focus"
    Valid: ["arcane-focus-varies", "arcane-focuses", ...]
@@ -248,6 +251,7 @@ The resolver uses a **12-step priority system with quality scores** (lower is be
 **Without hyphens (for special characters like `/` → removed):**
 
 5. **Exact match (no hyphens)**
+
    ```
    Anchor: "blindness-deafness"
    Valid: ["blindnessdeafness", ...]
@@ -255,6 +259,7 @@ The resolver uses a **12-step priority system with quality scores** (lower is be
    ```
 
 6. **Exact plural (no hyphens)**
+
    ```
    Anchor: "blindness-deafness"
    Valid: ["blindnessdeafnesss", ...]  # hypothetical
@@ -262,6 +267,7 @@ The resolver uses a **12-step priority system with quality scores** (lower is be
    ```
 
 7. **Prefix match (no hyphens)**
+
    ```
    Anchor: "blindness-deafness"
    Valid: ["blindnessdeafnessvaries", ...]
@@ -278,6 +284,7 @@ The resolver uses a **12-step priority system with quality scores** (lower is be
 **Reverse matching (anchor contained in search - for variant items):**
 
 9. **Reverse prefix match** (search starts with anchor)
+
    ```
    Anchor: "flame-tongue-club"
    Valid: ["flame-tongue", ...]
@@ -285,6 +292,7 @@ The resolver uses a **12-step priority system with quality scores** (lower is be
    ```
 
 10. **Word subset match** (anchor words are ordered subset of search words)
+
     ```
     Anchor: "belt-of-hill-giant-strength"
     Valid: ["belt-of-giant-strength", ...]
@@ -301,6 +309,7 @@ The resolver uses a **12-step priority system with quality scores** (lower is be
 **Fallback:**
 
 12. **Unordered word match** (requires 2+ words)
+
     ```
     Anchor: "travelers-clothes"
     Valid: ["clothes-travelers-2-gp", ...]
@@ -312,6 +321,7 @@ The resolver uses a **12-step priority system with quality scores** (lower is be
 ### Tie-Breaking
 
 When multiple anchors match at the same quality level:
+
 - **Forward matching (steps 1-8, 12)**: Shortest match wins (by normalized length)
 - **Reverse matching (steps 9-11)**: Longest match wins (most specific anchor)
 - **First match wins** when lengths are equal (preserves document order)
@@ -488,11 +498,7 @@ Maps entity types to allowed source pages:
 Array of URLs to exclude from resolution. URLs in this list are immediately converted to fallback text (based on `fallbackStyle`) without attempting resolution. Useful for legacy content that conflicts with current content:
 
 ```json
-[
-  "/monsters/16817-bugbear",
-  "/monsters/16904-gnoll",
-  "/monsters/16907-goblin"
-]
+["/monsters/16817-bugbear", "/monsters/16904-gnoll", "/monsters/16907-goblin"]
 ```
 
 The default config includes all 59 legacy 2014 monster stat blocks from the Monster Manual's Stat Block Conversions table, preventing them from conflicting with 2024 monsters.
@@ -507,6 +513,7 @@ Link resolution is tracked with simplified resolved/unresolved counts via `ctx.t
 - `trackUnresolvedLink(path, text)`: Called for links that couldn't be resolved (deduplicated by path)
 
 The `stats.json` output includes:
+
 - `resolvedLinks`: Total count of resolved links
 - `unresolvedLinks`: Total count of unresolved link occurrences (sum of all counts)
 - `unresolvedLinks[]`: Array of unique unresolved links with:
@@ -515,6 +522,7 @@ The `stats.json` output includes:
   - `count`: Number of occurrences (for deduplication)
 
 Example:
+
 ```json
 {
   "unresolvedLinks": [
