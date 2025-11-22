@@ -18,7 +18,7 @@ ${bullet} [{{{title}}}]({{{id}}}.md)
 
 {{/if}}
 {{#if entityIndexes.length}}
-## Entity Indexes
+## Compendium
 
 {{#each entityIndexes}}
 ${bullet} [{{{title}}}]({{{filename}}})
