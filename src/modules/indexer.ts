@@ -120,6 +120,7 @@ export async function indexer(ctx: ConversionContext): Promise<void> {
   /**
    * Resolve parsed entities to local file links
    * Applies aliases at entry point, then uses resolveEntityUrl
+   * Tracks resolved/unresolved statistics
    */
   function resolveEntities(entities: ParsedEntity[]): ResolvedEntity[] {
     return entities.map((entity) => {
@@ -128,13 +129,12 @@ export async function indexer(ctx: ConversionContext): Promise<void> {
 
       if (match) {
         entityIndex?.set(url, match);
+        tracker.incrementLinksResolved();
         return { ...entity, ...match, resolved: true };
       }
 
-      return {
-        ...entity,
-        resolved: false,
-      };
+      tracker.trackUnresolvedLink(entity.url, entity.name);
+      return { ...entity, resolved: false };
     });
   }
 
