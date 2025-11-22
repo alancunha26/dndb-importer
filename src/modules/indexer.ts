@@ -205,17 +205,85 @@ export async function indexer(ctx: ConversionContext): Promise<void> {
   }
 
   /**
+   * Generate markdown for a parent index (links to child indexes)
+   */
+  function generateParentIndexMarkdown(
+    title: string,
+    children: Array<{ title: string; filename: string }>,
+  ): string {
+    const lines: string[] = [];
+
+    lines.push(`# ${title}`);
+    lines.push("");
+
+    if (children.length === 0) {
+      lines.push("_No child indexes._");
+      lines.push("");
+      return lines.join("\n");
+    }
+
+    for (const child of children) {
+      lines.push(`- [${child.title}](${child.filename})`);
+    }
+
+    lines.push("");
+    return lines.join("\n");
+  }
+
+  /**
+   * Process an index configuration recursively
+   * Returns the processed index info, or null if failed
+   */
+  async function processIndexRecursive(
+    index: EntityIndexConfig,
+  ): Promise<{ title: string; filename: string } | null> {
+    // Get or assign filename
+    let filename = mapping.mappings.entities[index.title];
+    if (!filename) {
+      filename = `${idGenerator.generate()}.md`;
+      mapping.mappings.entities[index.title] = filename;
+    }
+
+    // If it has children, it's a parent index
+    if (index.children && index.children.length > 0) {
+      // Process all children recursively
+      const childResults: Array<{ title: string; filename: string }> = [];
+      for (const child of index.children) {
+        const result = await processIndexRecursive(child);
+        if (result) childResults.push(result);
+      }
+
+      // Generate parent index markdown
+      const markdown = generateParentIndexMarkdown(index.title, childResults);
+
+      // Write file
+      const outputPath = join(config.output, filename);
+      try {
+        await writeFile(outputPath, markdown, "utf-8");
+        tracker.incrementCreatedIndexes();
+        return { title: index.title, filename };
+      } catch (error) {
+        tracker.trackError(outputPath, error, "file");
+        return null;
+      }
+    }
+
+    // Must have a URL for entity indexes
+    if (!index.url) {
+      return null;
+    }
+
+    // It's an entity index - process it
+    return processEntityIndex(index, filename);
+  }
+
+  /**
    * Process a single entity index configuration
    */
   async function processEntityIndex(
     index: EntityIndexConfig,
+    filename: string,
   ): Promise<{ title: string; filename: string } | null> {
-    // If it has children, it's a parent index (skip for now - Phase 3)
-    if (index.children) {
-      // TODO: Phase 3 - Handle nested indexes
-      return null;
-    }
-
     // Must have a URL for entity indexes
     if (!index.url) {
       return null;
@@ -224,13 +292,6 @@ export async function indexer(ctx: ConversionContext): Promise<void> {
     // Get entity type from URL
     const entityType = getEntityTypeFromUrl(index.url);
     if (!entityType) return null;
-
-    // Get or assign filename
-    let filename = mapping.mappings.entities[index.title];
-    if (!filename) {
-      filename = `${idGenerator.generate()}.md`;
-      mapping.mappings.entities[index.title] = filename;
-    }
 
     // Fetch and parse entities (use cache if available)
     let entities: ParsedEntity[];
@@ -321,11 +382,11 @@ export async function indexer(ctx: ConversionContext): Promise<void> {
   // Main Orchestration
   // ============================================================================
 
-  // Process entity indexes
+  // Process entity indexes (only root-level indexes go to global index)
   const generatedIndexes: Array<{ title: string; filename: string }> = [];
 
   for (const indexConfig of config.indexes.entities) {
-    const result = await processEntityIndex(indexConfig);
+    const result = await processIndexRecursive(indexConfig);
     if (result) generatedIndexes.push(result);
   }
 
