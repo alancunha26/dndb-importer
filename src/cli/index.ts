@@ -24,6 +24,7 @@ program
   .option("-c, --config <path>", "Path to custom config file")
   .option("--dry-run", "Preview conversion without writing files")
   .option("-v, --verbose", "Verbose output")
+  .option("--refetch", "Force re-download images and refetch entity indexes")
   .action(convertCommand);
 
 // Config command - show config location

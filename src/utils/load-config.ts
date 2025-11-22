@@ -74,6 +74,15 @@ function mergeConfig(
         ...override.links?.urlAliases,
       },
     },
+    indexes: {
+      ...base.indexes,
+      ...override.indexes,
+      global: {
+        ...base.indexes.global,
+        ...override.indexes?.global,
+      },
+      entities: override.indexes?.entities ?? base.indexes.entities,
+    },
   };
 }
 

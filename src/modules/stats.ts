@@ -108,6 +108,9 @@ export async function stats(ctx: ConversionContext): Promise<void> {
   // Images section
   displayImagesSection(stats);
 
+  // Entity Indexes section
+  displayEntityIndexesSection(stats);
+
   // Links section
   displayLinksSection(stats);
 
@@ -187,6 +190,45 @@ function displayImagesSection(stats: ProcessingStats): void {
     console.log(
       statRow(chalk.red("◉"), "Failed", stats.failedImages, chalk.red),
     );
+  }
+}
+
+function displayEntityIndexesSection(stats: ProcessingStats): void {
+  const totalEntities = stats.fetchedEntities + stats.cachedEntities;
+
+  if (stats.entityIndexes === 0 && totalEntities === 0) {
+    return; // Skip if no entity indexes
+  }
+
+  console.log(sectionHeader("Entity Indexes"));
+
+  if (stats.entityIndexes > 0) {
+    console.log(
+      statRow(chalk.cyan("◉"), "Generated", stats.entityIndexes, chalk.cyan),
+    );
+  }
+
+  if (totalEntities > 0) {
+    // Progress bar showing fetched vs total
+    const bar = progressBar(stats.cachedEntities, totalEntities);
+    console.log(`   ${bar}`);
+
+    if (stats.fetchedEntities > 0) {
+      console.log(
+        statRow(
+          chalk.green("◉"),
+          "Fetched",
+          stats.fetchedEntities,
+          chalk.green,
+        ),
+      );
+    }
+
+    if (stats.cachedEntities > 0) {
+      console.log(
+        statRow(chalk.cyan("◉"), "Cached", stats.cachedEntities, chalk.cyan),
+      );
+    }
   }
 }
 

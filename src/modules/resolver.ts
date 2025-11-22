@@ -7,117 +7,22 @@
  */
 
 import { readFile, writeFile } from "fs/promises";
-import type { ConversionContext, FileDescriptor } from "../types";
+import type { ConversionContext, EntityMatch, FileDescriptor } from "../types";
 import {
-  normalizeUrl,
   shouldResolveUrl,
   applyAliases,
   isEntityUrl,
   normalizeAnchor,
   findMatchingAnchor,
+  formatFallback,
+  resolveEntityUrl,
 } from "../utils";
-
-/**
- * Entity location with matched anchor
- */
-interface EntityMatch {
-  fileId: string;
-  anchor: string;
-}
 
 interface LinkInfo {
   path: string;
   anchor?: string;
   text: string;
   original: string;
-}
-
-/**
- * Build entity index by matching entity slugs to file anchors
- */
-function buildEntityIndex(
-  files: FileDescriptor[],
-  ctx: ConversionContext,
-): Map<string, EntityMatch> {
-  const { entityLocations, urlAliases, maxMatchStep } = ctx.config.links;
-  const entityIndex = new Map<string, EntityMatch>();
-  const seenUrls = new Set<string>();
-
-  // Helper: Find best anchor match across all files (prioritize by match quality)
-  function findMatch(
-    slug: string,
-    targetFiles: FileDescriptor[],
-  ): EntityMatch | null {
-    let bestMatch: { fileId: string; anchor: string; step: number } | null =
-      null;
-
-    for (const file of targetFiles) {
-      if (!file.anchors) continue;
-
-      const result = findMatchingAnchor(slug, file.anchors.valid, maxMatchStep);
-      if (result && (!bestMatch || result.step < bestMatch.step)) {
-        bestMatch = {
-          fileId: file.uniqueId,
-          anchor: result.anchor,
-          step: result.step,
-        };
-        // Short-circuit if we found an exact match (step 1)
-        if (result.step === 1) break;
-      }
-    }
-
-    if (bestMatch) {
-      return { fileId: bestMatch.fileId, anchor: bestMatch.anchor };
-    }
-
-    return null;
-  }
-
-  // Helper: Get target files in priority order based on entityLocations
-  function getTargetFiles(entityType: string): FileDescriptor[] {
-    const allowedPages = entityLocations[entityType];
-    if (!allowedPages) return files;
-
-    const result: FileDescriptor[] = [];
-    for (const page of allowedPages) {
-      for (const file of files) {
-        if (!file.url) continue;
-        const canonicalUrl = applyAliases(file.url, urlAliases);
-        if (canonicalUrl.startsWith(page)) {
-          result.push(file);
-        }
-      }
-    }
-    return result;
-  }
-
-  // Process all entities from all files
-  for (const file of files) {
-    if (!file.entities) continue;
-
-    for (const entity of file.entities) {
-      // Apply aliases to get canonical URL for indexing
-      const aliasedUrl = applyAliases(entity.url, urlAliases);
-
-      // Skip if aliased to a non-entity URL (e.g., source URL)
-      if (!isEntityUrl(aliasedUrl)) continue;
-
-      const slug =
-        aliasedUrl.split("/").pop()?.replace(/^\d+-/, "") || entity.slug;
-
-      if (!slug || seenUrls.has(aliasedUrl)) continue;
-      seenUrls.add(aliasedUrl);
-
-      const targetFiles = getTargetFiles(entity.type);
-      const match = findMatch(slug, targetFiles);
-
-      if (match) {
-        entityIndex.set(aliasedUrl, match);
-      }
-    }
-  }
-
-  return entityIndex;
 }
 
 // ============================================================================
@@ -140,7 +45,7 @@ export async function resolve(ctx: ConversionContext): Promise<void> {
   }
 
   // ============================================================================
-  // Shared State (closure variables)
+  // Shared State (Variables)
   // ============================================================================
 
   const { tracker, config, sourcebooks } = ctx;
@@ -148,26 +53,23 @@ export async function resolve(ctx: ConversionContext): Promise<void> {
 
   // Build URL map keyed by canonical URLs
   const urlMap = new Map(files.filter((f) => f.url).map((f) => [f.url!, f]));
-  const entityIndex = buildEntityIndex(files, ctx);
   const excludeUrls = new Set(config.links.excludeUrls);
+  ctx.entityIndex = new Map<string, EntityMatch>();
 
-  /**
-   * Format text using the configured fallback style
-   */
-  function formatFallback(text: string): string {
-    switch (config.links.fallbackStyle) {
-      case "bold":
-        return `${config.markdown.strong}${text}${config.markdown.strong}`;
-      case "italic":
-        return `${config.markdown.emphasis}${text}${config.markdown.emphasis}`;
-      case "plain":
-        return text;
-      case "none":
-        return ""; // Signal to keep original link
-      default:
-        return `${config.markdown.strong}${text}${config.markdown.strong}`;
+  // Process all entities from all files
+  for (const file of files) {
+    if (!file.entities) continue;
+
+    for (const entity of file.entities) {
+      // Normalize and alias for consistent key
+      const match = resolveEntityUrl(entity.url, ctx);
+      if (match) ctx.entityIndex.set(entity.url, match);
     }
   }
+
+  // ============================================================================
+  // Shared State (Helpers)
+  // ============================================================================
 
   /**
    * Convert internal --N notation to standard -N for markdown output
@@ -182,8 +84,7 @@ export async function resolve(ctx: ConversionContext): Promise<void> {
    */
   function parseLink(url: string, text: string): LinkInfo {
     const original = url;
-    const normalized = normalizeUrl(url);
-    let [path, anchor] = normalized.split("#");
+    let [path, anchor] = url.split("#");
     path = applyAliases(path, config.links.urlAliases);
 
     // Re-split in case alias value contains an anchor
@@ -224,7 +125,7 @@ export async function resolve(ctx: ConversionContext): Promise<void> {
   ): string | null {
     if (!isEntityUrl(link.path)) return null;
 
-    const match = entityIndex.get(link.path);
+    const match = ctx.entityIndex!.get(link.path);
     if (!match) {
       return null;
     }
@@ -256,7 +157,7 @@ export async function resolve(ctx: ConversionContext): Promise<void> {
 
       const targetFile = urlMap.get(link.path);
       if (targetFile) {
-        const fallback = formatFallback(link.text);
+        const fallback = formatFallback(link.text, config);
         return fallback || `[${link.text}](${link.original})`;
       }
 
@@ -318,7 +219,7 @@ export async function resolve(ctx: ConversionContext): Promise<void> {
 
     // Check if URL is excluded - apply fallback immediately
     if (excludeUrls.has(link.path)) {
-      const fallback = formatFallback(link.text);
+      const fallback = formatFallback(link.text, config);
       if (fallback) {
         return fallback;
       } else {
@@ -346,7 +247,7 @@ export async function resolve(ctx: ConversionContext): Promise<void> {
     }
 
     // Fallback
-    const fallback = formatFallback(link.text);
+    const fallback = formatFallback(link.text, config);
     if (fallback) {
       tracker.trackUnresolvedLink(link.original, link.text);
       return fallback;

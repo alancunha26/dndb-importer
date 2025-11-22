@@ -2,6 +2,14 @@
 
 This document describes the architecture and design of the D&D Beyond HTML to Markdown Converter.
 
+**Related Documentation:**
+
+- [Configuration Guide](configuration.md) - All configuration options
+- [Link Resolver](resolver.md) - Link resolution algorithm
+- [Template Guide](templates.md) - Template variables and examples
+- [Entity Indexer](indexer.md) - Entity index generation
+- [Performance](performance.md) - Memory usage and caching
+
 ## Overview
 
 The converter transforms D&D Beyond HTML sourcebooks into clean, structured Markdown files suitable for note-taking applications. It handles the complexities of D&D content including stat blocks, spell descriptions, tables, and cross-references between books.
@@ -23,6 +31,7 @@ The converter uses a sequential pipeline where each stage transforms or enriches
 The scanner discovers all HTML files and prepares them for processing.
 
 **Responsibilities:**
+
 - Find HTML files in input directory using glob patterns
 - Group files by sourcebook (based on directory structure)
 - Load sourcebook metadata from `sourcebook.json` files
@@ -39,6 +48,7 @@ The processor converts HTML to Markdown and writes output files. It uses a two-p
 **Pass 1 - Extraction:**
 
 For each file, extract all metadata needed for the conversion:
+
 - Parse HTML and select main content area
 - Preprocess HTML structure to fix D&D Beyond patterns (e.g., incorrectly nested lists)
 - Extract page title using priority: metadata array → title selector → first H1
@@ -52,6 +62,7 @@ After this pass, all files have their titles extracted, enabling correct navigat
 **Pass 2 - Conversion:**
 
 For each file, perform the actual conversion:
+
 - Download images (with retry logic and caching)
 - Convert HTML to Markdown using Turndown with custom D&D rules
 - Build navigation links using extracted titles from all files
@@ -67,6 +78,7 @@ After all files are processed, generate a table of contents for each sourcebook 
 The resolver transforms D&D Beyond URLs into local Markdown links. This stage runs after all files are written because it needs the complete set of anchors from all files.
 
 See [Link Resolver](resolver.md) for detailed documentation of the resolution algorithm, including:
+
 - Link type detection and priority
 - Entity index building
 - URL aliasing system
@@ -74,9 +86,30 @@ See [Link Resolver](resolver.md) for detailed documentation of the resolution al
 
 **Output:** Markdown files updated with resolved local links.
 
-### Stage 4: Statistics
+### Stage 4: Indexing
+
+The indexer generates entity indexes by fetching listing pages from D&D Beyond and creating navigable index files that link to converted content.
+
+**Responsibilities:**
+
+- Load cached entity data from `indexes.json` (or fetch fresh)
+- Collect source IDs from converted sourcebooks for auto-filtering
+- For each configured entity index:
+  - Fetch paginated listing pages from D&D Beyond
+  - Parse entities using type-specific parsers (info cards, list rows, card grids)
+  - Resolve entities to local files using the entity index
+  - Render index using Handlebars templates
+- Generate global index linking sourcebooks and entity indexes
+- Save updated cache to `indexes.json`
+
+**Output:** Entity index files (spells, monsters, items, etc.) and global index file.
+
+See [Entity Indexer](indexer.md) for detailed documentation.
+
+### Stage 5: Statistics
 
 Display a summary of the conversion including:
+
 - Files processed, indexes created
 - Images downloaded vs cached
 - Links resolved vs unresolved
@@ -115,6 +148,7 @@ See [Configuration Guide](configuration.md) for all available options.
 Output is generated using Handlebars templates, providing flexibility for different note-taking workflows (Obsidian, Notion, etc.).
 
 Templates are loaded with precedence:
+
 1. Sourcebook-specific templates
 2. Global templates in input directory
 3. Built-in defaults
@@ -136,19 +170,29 @@ This allows users to see all problems at once rather than fixing one at a time.
 
 ## Caching Strategy
 
-Two levels of caching improve subsequent runs:
+Multiple caching layers improve subsequent runs:
 
 **ID Mappings:**
-- File paths → Markdown filenames
-- Image URLs → Local filenames
+
+- File paths → Markdown filenames (`files.json`)
+- Image URLs → Local filenames (`images.json`)
+- Entity index titles → Index filenames (`indexes.json`)
 
 These ensure consistent output across runs.
 
 **Image Downloads:**
+
 - Check if local file exists before downloading
 - Reuse cached images from previous runs
 
-First run downloads all images; subsequent runs are nearly instant.
+**Entity Data:**
+
+- Entity metadata cached in `indexes.json`
+- Avoids re-fetching from D&D Beyond on subsequent runs
+
+Use `--refetch` flag to force re-download of images and refetch of entity data.
+
+First run downloads all images and fetches entity data; subsequent runs are nearly instant.
 
 ## Cross-Reference Resolution
 
@@ -159,6 +203,7 @@ The converter supports three types of cross-references:
 3. **Source links** - Links to other sourcebook pages
 
 Resolution uses URL aliasing to handle:
+
 - Free Rules → core rulebook mappings
 - Variant items → base item mappings
 - Legacy URLs → current URLs

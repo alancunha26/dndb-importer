@@ -4,7 +4,7 @@
 
 import ora from "ora";
 import { z } from "zod";
-import { loadConfig, Tracker } from "../../utils";
+import { loadConfig, Tracker, IdGenerator } from "../../utils";
 import * as modules from "../../modules";
 import type { ConversionContext } from "../../types";
 
@@ -14,6 +14,7 @@ const ConvertOptionsSchema = z.object({
   config: z.string().optional(),
   dryRun: z.boolean().optional(),
   verbose: z.boolean().optional(),
+  refetch: z.boolean().optional(),
 });
 
 type Options = z.infer<typeof ConvertOptionsSchema>;
@@ -36,8 +37,9 @@ export async function convertCommand(opts: Options): Promise<void> {
       config.output = options.output;
     }
 
-    // Initialize tracker and context
+    // Initialize tracker and ID generator
     const tracker = new Tracker();
+    const idGenerator = new IdGenerator();
 
     // Add any config loading errors to tracker
     for (const err of errors) {
@@ -47,7 +49,9 @@ export async function convertCommand(opts: Options): Promise<void> {
     const ctx: ConversionContext = {
       config,
       tracker,
+      idGenerator,
       verbose: options.verbose,
+      refetch: options.refetch,
     };
 
     // Run conversion pipeline with spinner updates
@@ -59,6 +63,9 @@ export async function convertCommand(opts: Options): Promise<void> {
 
     spinner.text = "Resolving links...";
     await modules.resolve(ctx);
+
+    spinner.text = "Generating indexes...";
+    await modules.indexer(ctx);
 
     // Clear and stop spinner before displaying stats
     spinner.clear();

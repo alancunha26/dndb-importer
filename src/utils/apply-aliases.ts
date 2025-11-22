@@ -1,5 +1,7 @@
+import { normalizeUrl } from "./normalize-url";
+
 /**
- * Apply URL aliases to rewrite URLs to canonical form
+ * Normalize URL and apply aliases to rewrite to canonical form
  *
  * @example
  * applyAliases("/sources/dnd/free-rules/foo", {
@@ -8,8 +10,9 @@
  * // => "/sources/dnd/phb-2024/foo"
  */
 export function applyAliases(
-  urlPath: string,
+  url: string,
   aliases: Record<string, string>,
 ): string {
-  return aliases[urlPath] || urlPath;
+  const normalized = normalizeUrl(url);
+  return aliases[normalized] || normalized;
 }

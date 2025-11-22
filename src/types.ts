@@ -4,9 +4,10 @@
 
 import { z } from "zod";
 import { Tracker } from "./utils/tracker";
+import { IdGenerator } from "./utils/id-generator";
 
-// Re-export Tracker
-export { Tracker };
+// Re-export classes
+export { Tracker, IdGenerator };
 
 // ============================================================================
 // Configuration Types & Schemas
@@ -58,6 +59,36 @@ export const LinksConfigSchema = z.object({
   entityLocations: z.record(z.string(), z.array(z.string())),
 });
 
+export const GlobalIndexConfigSchema = z.object({
+  enabled: z.boolean(),
+  title: z.string(),
+});
+
+// Base schema for entity index entries (without children for recursion)
+const EntityIndexBaseSchema = z.object({
+  title: z.string(),
+  url: z.string().url().optional(),
+  description: z.string().optional(),
+});
+
+// Recursive schema for entity index with nested children
+export type EntityIndexConfig = z.infer<typeof EntityIndexBaseSchema> & {
+  children?: EntityIndexConfig[];
+};
+
+export const EntityIndexConfigSchema: z.ZodType<EntityIndexConfig> =
+  EntityIndexBaseSchema.extend({
+    children: z.lazy(() => z.array(EntityIndexConfigSchema)).optional(),
+  }).refine((data) => data.url || data.children, {
+    message: "Entity index must have either 'url' or 'children'",
+  });
+
+export const IndexesConfigSchema = z.object({
+  generate: z.boolean(),
+  global: GlobalIndexConfigSchema,
+  entities: z.array(EntityIndexConfigSchema),
+});
+
 export const ConversionConfigSchema = z.object({
   input: InputConfigSchema,
   output: OutputConfigSchema,
@@ -66,6 +97,7 @@ export const ConversionConfigSchema = z.object({
   html: HtmlConfigSchema,
   images: ImagesConfigSchema,
   links: LinksConfigSchema,
+  indexes: IndexesConfigSchema,
 });
 
 export const PartialConversionConfigSchema =
@@ -75,6 +107,12 @@ export const PartialConversionConfigSchema =
     html: HtmlConfigSchema.partial().optional(),
     images: ImagesConfigSchema.partial().optional(),
     links: LinksConfigSchema.partial().optional(),
+    indexes: IndexesConfigSchema.partial()
+      .extend({
+        global: GlobalIndexConfigSchema.partial().optional(),
+        entities: z.array(EntityIndexConfigSchema).optional(),
+      })
+      .optional(),
   });
 
 export type InputConfig = z.infer<typeof InputConfigSchema>;
@@ -84,6 +122,9 @@ export type MarkdownConfig = z.infer<typeof MarkdownConfigSchema>;
 export type HtmlConfig = z.infer<typeof HtmlConfigSchema>;
 export type ImagesConfig = z.infer<typeof ImagesConfigSchema>;
 export type LinksConfig = z.infer<typeof LinksConfigSchema>;
+export type GlobalIndexConfig = z.infer<typeof GlobalIndexConfigSchema>;
+// EntityIndexConfig is already exported as a type above (for recursion)
+export type IndexesConfig = z.infer<typeof IndexesConfigSchema>;
 export type ConversionConfig = z.infer<typeof ConversionConfigSchema>;
 
 // ============================================================================
@@ -97,6 +138,7 @@ export const SourcebookMetadataSchema = z.looseObject({
   description: z.string().optional(),
   author: z.string().optional(),
   titles: z.array(z.string()).optional(),
+  sourceId: z.number().optional(),
 });
 
 export type SourcebookMetadata = z.infer<typeof SourcebookMetadataSchema>;
@@ -121,6 +163,9 @@ export interface FileDescriptor {
 export interface TemplateSet {
   index: string | null;
   file: string | null;
+  entityIndex: string | null;
+  parentIndex: string | null;
+  globalIndex: string | null;
 }
 
 export interface SourcebookInfo {
@@ -139,6 +184,41 @@ export interface FileAnchors {
 }
 
 export type FileMapping = Record<string, string>;
+
+// ============================================================================
+// Indexes Mapping & Cache Types
+// ============================================================================
+
+export const ParsedEntitySchema = z.object({
+  name: z.string(),
+  url: z.string(),
+  metadata: z.record(z.string(), z.string()).optional(),
+});
+
+// Entity stored by URL key (without url field to avoid duplication)
+export const StoredEntitySchema = z.object({
+  name: z.string(),
+  metadata: z.record(z.string(), z.string()).optional(),
+});
+
+export const CachedEntityListSchema = z.object({
+  fetchedAt: z.string(),
+  entityUrls: z.array(z.string()),
+});
+
+export const IndexesMappingSchema = z.object({
+  mappings: z.object({
+    global: z.string().optional(),
+    entities: z.record(z.string(), z.string()),
+  }),
+  entities: z.record(z.string(), StoredEntitySchema),
+  cache: z.record(z.string(), CachedEntityListSchema),
+});
+
+export type ParsedEntity = z.infer<typeof ParsedEntitySchema>;
+export type StoredEntity = z.infer<typeof StoredEntitySchema>;
+export type CachedEntityList = z.infer<typeof CachedEntityListSchema>;
+export type IndexesMapping = z.infer<typeof IndexesMappingSchema>;
 
 // ============================================================================
 // Template Context Types
@@ -177,6 +257,41 @@ export interface FileTemplateContext {
   content: string;
 }
 
+export interface EntityIndexTemplateContext {
+  title: string;
+  description?: string;
+  type: EntityType;
+  entities: Array<{
+    name: string;
+    url: string;
+    metadata?: Record<string, string>;
+    fileId?: string;
+    anchor?: string;
+    resolved: boolean;
+  }>;
+}
+
+export interface ParentIndexTemplateContext {
+  title: string;
+  description?: string;
+  children: Array<{
+    title: string;
+    filename: string;
+  }>;
+}
+
+export interface GlobalIndexTemplateContext {
+  title: string;
+  sourcebooks: Array<{
+    title: string;
+    id: string;
+  }>;
+  entityIndexes: Array<{
+    title: string;
+    filename: string;
+  }>;
+}
+
 // ============================================================================
 // Context Types
 // ============================================================================
@@ -184,10 +299,13 @@ export interface FileTemplateContext {
 export interface ConversionContext {
   config: ConversionConfig;
   tracker: Tracker;
+  idGenerator: IdGenerator;
   files?: FileDescriptor[];
   sourcebooks?: SourcebookInfo[];
   globalTemplates?: TemplateSet;
+  entityIndex?: Map<string, EntityMatch>;
   verbose?: boolean;
+  refetch?: boolean;
 }
 
 // ============================================================================
@@ -247,6 +365,9 @@ export interface ProcessingStats {
   unresolvedLinks: number;
   unresolvedLinksUnique: number;
   createdIndexes: number;
+  entityIndexes: number;
+  fetchedEntities: number;
+  cachedEntities: number;
   issues: Issue[];
   duration: number;
 }
@@ -256,7 +377,7 @@ export interface ProcessingStats {
 // ============================================================================
 
 export interface ParsedEntityUrl {
-  type: string;
+  type: EntityType;
   id: string;
   slug?: string;
   anchor?: string;
@@ -274,9 +395,26 @@ export const ENTITY_TYPES = [
   "backgrounds",
 ] as const;
 
+export type EntityType = (typeof ENTITY_TYPES)[number];
+
+/**
+ * Parser interface for entity listing pages
+ */
+export interface EntityParser {
+  /**
+   * Parse HTML from a D&D Beyond listing page and extract entities
+   */
+  parse(html: string): ParsedEntity[];
+}
+
 // ============================================================================
 // Resolver Types
 // ============================================================================
+
+export interface EntityMatch {
+  fileId: string;
+  anchor: string;
+}
 
 export interface LinkResolutionResult {
   resolved: boolean;

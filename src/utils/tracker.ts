@@ -118,6 +118,9 @@ export class Tracker {
   private failedImages = 0;
   private resolvedLinks = 0;
   private createdIndexes = 0;
+  private entityIndexes = 0;
+  private fetchedEntities = 0;
+  private cachedEntities = 0;
   private issues: Issue[] = [];
   private unresolvedLinksMap: Map<string, { text: string; count: number }> = new Map();
   private startTime = new Date();
@@ -146,6 +149,10 @@ export class Tracker {
     this.createdIndexes = count;
   }
 
+  incrementCreatedIndexes(): void {
+    this.createdIndexes++;
+  }
+
   incrementImagesDownloaded(): void {
     this.downloadedImages++;
   }
@@ -160,6 +167,18 @@ export class Tracker {
 
   incrementLinksResolved(): void {
     this.resolvedLinks++;
+  }
+
+  incrementEntityIndexes(): void {
+    this.entityIndexes++;
+  }
+
+  incrementFetchedEntities(count: number = 1): void {
+    this.fetchedEntities += count;
+  }
+
+  incrementCachedEntities(count: number = 1): void {
+    this.cachedEntities += count;
   }
 
   trackUnresolvedLink(path: string, text: string): void {
@@ -235,6 +254,9 @@ export class Tracker {
       unresolvedLinks: unresolvedLinksTotal,
       unresolvedLinksUnique: this.unresolvedLinksMap.size,
       createdIndexes: this.createdIndexes,
+      entityIndexes: this.entityIndexes,
+      fetchedEntities: this.fetchedEntities,
+      cachedEntities: this.cachedEntities,
       issues: this.issues,
       duration,
     };
@@ -265,6 +287,9 @@ export class Tracker {
         resolvedLinks: stats.resolvedLinks,
         unresolvedLinks: stats.unresolvedLinks,
         createdIndexes: stats.createdIndexes,
+        entityIndexes: stats.entityIndexes,
+        fetchedEntities: stats.fetchedEntities,
+        cachedEntities: stats.cachedEntities,
         duration: stats.duration,
       },
       issues: this.groupIssuesByTypeAndReason(),

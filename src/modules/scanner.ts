@@ -7,7 +7,6 @@ import glob from "fast-glob";
 import path from "node:path";
 import { readFile } from "fs/promises";
 import {
-  IdGenerator,
   loadMapping,
   saveMapping,
   fileExists,
@@ -26,15 +25,21 @@ import {
 
 /**
  * Detect template files in a directory
- * Returns paths to index.md.hbs and file.md.hbs if they exist
+ * Returns paths to template files if they exist
  */
 async function detectTemplates(directory: string): Promise<TemplateSet> {
   const indexPath = path.join(directory, "index.md.hbs");
   const filePath = path.join(directory, "file.md.hbs");
+  const entityIndexPath = path.join(directory, "entity-index.md.hbs");
+  const parentIndexPath = path.join(directory, "parent-index.md.hbs");
+  const globalIndexPath = path.join(directory, "global-index.md.hbs");
 
   return {
     index: (await fileExists(indexPath)) ? indexPath : null,
     file: (await fileExists(filePath)) ? filePath : null,
+    entityIndex: (await fileExists(entityIndexPath)) ? entityIndexPath : null,
+    parentIndex: (await fileExists(parentIndexPath)) ? parentIndexPath : null,
+    globalIndex: (await fileExists(globalIndexPath)) ? globalIndexPath : null,
   };
 }
 
@@ -116,7 +121,13 @@ export async function scan(ctx: ConversionContext): Promise<void> {
   // 4. Load persistent file mapping (HTML path -> markdown filename)
   const fileMappingPath = path.join(ctx.config.output, "files.json");
   const fileMapping = await loadMapping(fileMappingPath);
-  const idGenerator = IdGenerator.fromMapping(fileMapping);
+
+  // Register existing IDs with the context's generator
+  for (const filename of Object.values(fileMapping)) {
+    const id = filename.replace(".md", "");
+    ctx.idGenerator.register(id);
+  }
+
   const updatedFileMapping: FileMapping = { ...fileMapping };
 
   // 5. Single pass: Process files and create sourcebooks on-demand
@@ -148,7 +159,7 @@ export async function scan(ctx: ConversionContext): Promise<void> {
         indexId = extractIdFromFilename(fileMapping[indexKey]);
       } else {
         // Generate new index ID
-        indexId = idGenerator.generate();
+        indexId = ctx.idGenerator.generate();
         // Add to updated mapping
         updatedFileMapping[indexKey] = `${indexId}.md`;
       }
@@ -182,7 +193,7 @@ export async function scan(ctx: ConversionContext): Promise<void> {
       uniqueId = extractIdFromFilename(fileMapping[relativePath]);
     } else {
       // Generate new ID
-      uniqueId = idGenerator.generate();
+      uniqueId = ctx.idGenerator.generate();
       // Add to updated mapping
       updatedFileMapping[relativePath] = `${uniqueId}.md`;
     }

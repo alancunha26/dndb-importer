@@ -23,11 +23,11 @@ For current implementation details, refer to:
 
 ## RFC Index
 
-| Number                                            | Title                                 | Status   | Author     | Date       |
-| ------------------------------------------------- | ------------------------------------- | -------- | ---------- | ---------- |
-| [0000](0000-template.md)                          | Template                              | -        | -          | -          |
-| [0001](0001-dndbeyond-html-markdown-converter.md) | D&D Beyond HTML to Markdown Converter | Done     | Alan Cunha | 2025-11-15 |
-| [0002](0002-entity-and-global-indexes.md)         | Entity and Global Indexes             | Accepted | Alan Cunha | 2025-11-21 |
+| Number                                            | Title                                 | Status | Author     | Date       |
+| ------------------------------------------------- | ------------------------------------- | ------ | ---------- | ---------- |
+| [0000](0000-template.md)                          | Template                              | -      | -          | -          |
+| [0001](0001-dndbeyond-html-markdown-converter.md) | D&D Beyond HTML to Markdown Converter | Done   | Alan Cunha | 2025-11-15 |
+| [0002](0002-entity-and-global-indexes.md)         | Entity and Global Indexes             | Done   | Alan Cunha | 2025-11-21 |
 
 ## Status Definitions
 

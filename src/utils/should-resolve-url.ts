@@ -1,6 +1,7 @@
 import { isImageUrl } from "./is-image-url";
 import { isEntityUrl } from "./is-entity-url";
 import { isSourceUrl } from "./is-source-url";
+import { isDndBeyondUrl } from "./is-dnd-beyond-url";
 
 const LOCAL_MD_FILE_PATTERN = /^[a-z0-9]{4}\.md/;
 
@@ -25,10 +26,7 @@ export function shouldResolveUrl(url: string): boolean {
     return false;
   }
 
-  if (
-    url.startsWith("https://www.dndbeyond.com/") ||
-    url.startsWith("http://www.dndbeyond.com/")
-  ) {
+  if (isDndBeyondUrl(url)) {
     return true;
   }
 

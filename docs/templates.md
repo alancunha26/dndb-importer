@@ -2,6 +2,12 @@
 
 The converter uses Handlebars templates for customizable output. Templates can be defined globally or per-sourcebook.
 
+**Related Documentation:**
+
+- [Architecture](architecture.md) - Pipeline overview and template system
+- [Configuration](configuration.md) - Markdown formatting options
+- [Entity Indexer](indexer.md) - Entity index templates
+
 ## Template Precedence
 
 Templates are loaded in this order (highest priority first):
@@ -18,23 +24,23 @@ Generates the table of contents for each sourcebook.
 
 **Available Variables:**
 
-| Variable | Type | Description |
-|----------|------|-------------|
-| `title` | string | Sourcebook title |
-| `edition` | string | Edition string (from metadata) |
+| Variable      | Type   | Description                            |
+| ------------- | ------ | -------------------------------------- |
+| `title`       | string | Sourcebook title                       |
+| `edition`     | string | Edition string (from metadata)         |
 | `description` | string | Sourcebook description (from metadata) |
-| `author` | string | Author name (from metadata) |
-| `coverImage` | string | Cover image filename (from metadata) |
-| `date` | string | Current date (YYYY-MM-DD) |
-| `files` | array | Array of file objects |
-| `metadata` | object | Full metadata object |
+| `author`      | string | Author name (from metadata)            |
+| `coverImage`  | string | Cover image filename (from metadata)   |
+| `date`        | string | Current date (YYYY-MM-DD)              |
+| `files`       | array  | Array of file objects                  |
+| `metadata`    | object | Full metadata object                   |
 
 **File Object Properties:**
 
-| Property | Description |
-|----------|-------------|
-| `title` | File title |
-| `filename` | Output filename |
+| Property   | Description           |
+| ---------- | --------------------- |
+| `title`    | File title            |
+| `filename` | Output filename       |
 | `uniqueId` | 4-character unique ID |
 
 ### File Template (`file.md.hbs`)
@@ -43,72 +49,72 @@ Generates individual chapter/file pages.
 
 **Available Variables:**
 
-| Variable | Type | Description |
-|----------|------|-------------|
-| `title` | string | File title |
-| `date` | string | Current date (YYYY-MM-DD) |
-| `tags` | array | Array of tag strings |
-| `sourcebook` | object | Sourcebook info object |
-| `navigation` | object | Navigation links object |
-| `content` | string | Converted markdown content |
+| Variable     | Type   | Description                |
+| ------------ | ------ | -------------------------- |
+| `title`      | string | File title                 |
+| `date`       | string | Current date (YYYY-MM-DD)  |
+| `tags`       | array  | Array of tag strings       |
+| `sourcebook` | object | Sourcebook info object     |
+| `navigation` | object | Navigation links object    |
+| `content`    | string | Converted markdown content |
 
 **Sourcebook Object Properties:**
 
-| Property | Description |
-|----------|-------------|
-| `title` | Sourcebook title |
-| `edition` | Edition string |
-| `author` | Author name |
+| Property   | Description          |
+| ---------- | -------------------- |
+| `title`    | Sourcebook title     |
+| `edition`  | Edition string       |
+| `author`   | Author name          |
 | `metadata` | Full metadata object |
 
 **Navigation Object Properties:**
 
-| Property | Description |
-|----------|-------------|
-| `prev` | Previous file link (markdown) |
-| `index` | Index file link (markdown) |
-| `next` | Next file link (markdown) |
+| Property | Description                   |
+| -------- | ----------------------------- |
+| `prev`   | Previous file link (markdown) |
+| `index`  | Index file link (markdown)    |
+| `next`   | Next file link (markdown)     |
 
 ## Example Templates
 
 ### Index Template
 
 ```handlebars
----
-title: "{{{title}}}"
-edition: "{{{edition}}}"
-date: {{date}}
----
-
-# {{{title}}}
+--- title: "{{{title}}}" edition: "{{{edition}}}" date:
+{{date}}
+--- #
+{{{title}}}
 
 {{#if edition}}
-**Edition:** {{{edition}}}
+  **Edition:**
+  {{{edition}}}
 {{/if}}
 
 {{#if description}}
-> {{{description}}}
+  >
+  {{{description}}}
 {{/if}}
 
 ## Contents
 
 {{#each files}}
-{{@index}}. [{{{this.title}}}]({{{this.filename}}})
+  {{@index}}. [{{{this.title}}}]({{{this.filename}}})
 {{/each}}
 ```
 
 ### File Template
 
 ```handlebars
----
-title: "{{{title}}}"
-date: {{date}}
-tags: [{{#each tags}}"{{{this}}}"{{#unless @last}}, {{/unless}}{{/each}}]
----
+--- title: "{{{title}}}" date:
+{{date}}
+tags: [{{#each tags}}"{{{this}}}"{{#unless @last}}, {{/unless}}{{/each}}] --- #
+{{{title}}}
 
-# {{{title}}}
-
-{{{navigation.prev}}} | {{{navigation.index}}} | {{{navigation.next}}}
+{{{navigation.prev}}}
+|
+{{{navigation.index}}}
+|
+{{{navigation.next}}}
 
 {{{content}}}
 ```
@@ -116,16 +122,15 @@ tags: [{{#each tags}}"{{{this}}}"{{#unless @last}}, {{/unless}}{{/each}}]
 ### Custom Obsidian Template
 
 ```handlebars
----
-title: "{{{title}}}"
-aliases: ["{{{title}}}"]
-cssclass: dnd-sourcebook
----
+--- title: "{{{title}}}" aliases: ["{{{title}}}"] cssclass: dnd-sourcebook --- #
+{{{title}}}
 
-# {{{title}}}
-
-> [!info] Navigation
-> {{{navigation.prev}}} | {{{navigation.index}}} | {{{navigation.next}}}
+> [!info] Navigation >
+{{{navigation.prev}}}
+|
+{{{navigation.index}}}
+|
+{{{navigation.next}}}
 
 {{{content}}}
 ```
@@ -144,7 +149,8 @@ Double braces `{{variable}}` will HTML-escape the output.
 
 ```handlebars
 {{#if edition}}
-**Edition:** {{{edition}}}
+  **Edition:**
+  {{{edition}}}
 {{/if}}
 
 {{#unless @last}}, {{/unless}}
@@ -154,7 +160,7 @@ Double braces `{{variable}}` will HTML-escape the output.
 
 ```handlebars
 {{#each files}}
-- [{{{this.title}}}]({{{this.filename}}})
+  - [{{{this.title}}}]({{{this.filename}}})
 {{/each}}
 ```
 
@@ -166,11 +172,13 @@ Any custom fields in `sourcebook.json` are accessible via the `metadata` object:
 
 ```handlebars
 {{#if metadata.publisher}}
-**Publisher:** {{{metadata.publisher}}}
+  **Publisher:**
+  {{{metadata.publisher}}}
 {{/if}}
 
 {{#if metadata.isbn}}
-**ISBN:** {{{metadata.isbn}}}
+  **ISBN:**
+  {{{metadata.isbn}}}
 {{/if}}
 ```
 
@@ -213,14 +221,14 @@ All fields are optional.
 
 ### Field Descriptions
 
-| Field | Description |
-|-------|-------------|
-| `title` | Sourcebook title (overrides directory name) |
-| `edition` | Edition string for templates |
-| `description` | Sourcebook description |
-| `author` | Author or publisher name |
-| `coverImage` | Cover image filename |
-| `titles` | Array of page titles in file sort order |
+| Field         | Description                                 |
+| ------------- | ------------------------------------------- |
+| `title`       | Sourcebook title (overrides directory name) |
+| `edition`     | Edition string for templates                |
+| `description` | Sourcebook description                      |
+| `author`      | Author or publisher name                    |
+| `coverImage`  | Cover image filename                        |
+| `titles`      | Array of page titles in file sort order     |
 
 ### Titles Array
 
@@ -246,7 +254,8 @@ Access custom fields in templates via `metadata`:
 
 ```handlebars
 {{#if metadata.isbn}}
-**ISBN:** {{{metadata.isbn}}}
+  **ISBN:**
+  {{{metadata.isbn}}}
 {{/if}}
 ```
 

@@ -2,6 +2,13 @@
 
 The converter uses a layered configuration system that deep-merges settings from multiple sources.
 
+**Related Documentation:**
+
+- [Architecture](architecture.md) - Pipeline and design overview
+- [Link Resolver](resolver.md) - Anchor matching algorithm
+- [Entity Indexer](indexer.md) - Entity index configuration
+- [Templates](templates.md) - Template variables and examples
+
 ## Configuration Priority
 
 1. **Default config** - Built-in defaults from `src/config/default.json`
@@ -10,69 +17,79 @@ The converter uses a layered configuration system that deep-merges settings from
 
 ## User Config Location
 
-| OS | Path |
-|----|------|
-| Linux | `$XDG_CONFIG_HOME/dndb-importer/config.json` (defaults to `~/.config/dndb-importer/config.json`) |
-| macOS | `~/Library/Preferences/dndb-importer/config.json` |
-| Windows | `%APPDATA%\dndb-importer\config.json` |
+| OS      | Path                                                                                             |
+| ------- | ------------------------------------------------------------------------------------------------ |
+| Linux   | `$XDG_CONFIG_HOME/dndb-importer/config.json` (defaults to `~/.config/dndb-importer/config.json`) |
+| macOS   | `~/Library/Preferences/dndb-importer/config.json`                                                |
+| Windows | `%APPDATA%\dndb-importer\config.json`                                                            |
 
 Run `dndb-convert config` to see your config location.
 
 ## Complete Configuration Reference
 
-```jsonc
+````jsonc
 {
   // === Input/Output Directories ===
-  "input": "./input",           // Source HTML files directory
-  "output": "./output",         // Output markdown files directory
+  "input": "./input", // Source HTML files directory
+  "output": "./output", // Output markdown files directory
 
   // === Unique ID Settings ===
   "ids": {
-    "length": 4,                // Length of generated IDs (e.g., "a3f9")
-    "characters": "abcdefghijklmnopqrstuvwxyz0123456789"
+    "length": 4, // Length of generated IDs (e.g., "a3f9")
+    "characters": "abcdefghijklmnopqrstuvwxyz0123456789",
   },
 
   // === Markdown Formatting ===
   "markdown": {
-    "headingStyle": "atx",      // "atx" (# Heading) or "setext" (underlined)
+    "headingStyle": "atx", // "atx" (# Heading) or "setext" (underlined)
     "codeBlockStyle": "fenced", // "fenced" (```) or "indented" (4 spaces)
-    "emphasis": "_",            // "_" or "*" for italic text
-    "strong": "**",             // "**" or "__" for bold text
-    "bulletMarker": "-",        // "-", "+", or "*" for unordered lists
-    "linkStyle": "inlined",     // "inlined" [text](url) or "referenced" [text][ref]
+    "emphasis": "_", // "_" or "*" for italic text
+    "strong": "**", // "**" or "__" for bold text
+    "bulletMarker": "-", // "-", "+", or "*" for unordered lists
+    "linkStyle": "inlined", // "inlined" [text](url) or "referenced" [text][ref]
     "linkReferenceStyle": "full", // "full", "collapsed", or "shortcut"
-    "horizontalRule": "---",    // Any string (e.g., "---", "* * *", "___")
-    "lineBreak": "  ",          // Two spaces for soft line breaks
-    "codeFence": "```",         // "```" or "~~~" for fenced code blocks
-    "preformattedCode": false   // Preserve preformatted code blocks
+    "horizontalRule": "---", // Any string (e.g., "---", "* * *", "___")
+    "lineBreak": "  ", // Two spaces for soft line breaks
+    "codeFence": "```", // "```" or "~~~" for fenced code blocks
+    "preformattedCode": false, // Preserve preformatted code blocks
   },
 
   // === HTML Parsing ===
   "html": {
-    "contentSelector": ".p-article-content",  // CSS selector for main content
-    "removeSelectors": []       // CSS selectors for elements to remove
+    "contentSelector": ".p-article-content", // CSS selector for main content
+    "removeSelectors": [], // CSS selectors for elements to remove
   },
 
   // === Image Download Settings ===
   "images": {
-    "download": true,           // Enable/disable image downloading
+    "download": true, // Enable/disable image downloading
     "formats": ["png", "jpg", "jpeg", "webp", "gif"],
-    "maxSize": 10485760,        // Maximum size in bytes (10MB)
-    "timeout": 30000,           // Timeout in milliseconds (30s)
-    "retries": 3                // Number of retry attempts
+    "maxSize": 10485760, // Maximum size in bytes (10MB)
+    "timeout": 30000, // Timeout in milliseconds (30s)
+    "retries": 3, // Number of retry attempts
   },
 
   // === Link Resolution ===
   "links": {
-    "resolveInternal": true,    // Enable/disable link resolution
-    "fallbackStyle": "bold",    // "bold", "italic", "plain", or "none"
-    "maxMatchStep": 12,         // Anchor matching aggressiveness (1-12)
-    "urlAliases": {},           // URL mappings (see below)
-    "excludeUrls": [],          // URLs to skip (see below)
-    "entityLocations": {}       // Entity type → allowed pages (see below)
-  }
+    "resolveInternal": true, // Enable/disable link resolution
+    "fallbackStyle": "bold", // "bold", "italic", "plain", or "none"
+    "maxMatchStep": 12, // Anchor matching aggressiveness (1-12)
+    "urlAliases": {}, // URL mappings (see below)
+    "excludeUrls": [], // URLs to skip (see below)
+    "entityLocations": {}, // Entity type → allowed pages (see below)
+  },
+
+  // === Entity Indexes ===
+  "indexes": {
+    "generate": true, // Enable/disable index generation
+    "global": {
+      "enabled": true, // Generate global index
+      "title": "Global Index", // Global index title
+    },
+    "entities": [], // Entity index configurations (see below)
+  },
 }
-```
+````
 
 ## Hardcoded Values
 
@@ -116,7 +133,7 @@ Skip specific URLs and convert them to fallback text:
 {
   "links": {
     "excludeUrls": [
-      "/monsters/16817-bugbear",   // Legacy 2014 stat blocks
+      "/monsters/16817-bugbear", // Legacy 2014 stat blocks
       "/monsters/16904-gnoll"
     ]
   }
@@ -183,6 +200,37 @@ This is best-effort - some edge cases may resolve incorrectly. Fix specific issu
 }
 ```
 
+## Entity Indexes
+
+Generate navigable indexes of D&D entities (spells, monsters, items, etc.) by fetching listing pages from D&D Beyond.
+
+```json
+{
+  "indexes": {
+    "generate": true,
+    "global": {
+      "enabled": true,
+      "title": "D&D 5e Compendium"
+    },
+    "entities": [
+      {
+        "title": "All Spells",
+        "url": "https://www.dndbeyond.com/spells?filter-partnered-content=f",
+        "description": "Complete spell list from converted sourcebooks."
+      },
+      {
+        "title": "All Monsters",
+        "url": "https://www.dndbeyond.com/monsters?filter-partnered-content=f"
+      }
+    ]
+  }
+}
+```
+
+Entity indexes support nested structures with `children`, and can be customized with Handlebars templates.
+
+See [indexer.md](indexer.md) for complete documentation including supported entity types, auto-filtering, caching, and templates.
+
 ## Markdown Formatting
 
 All markdown settings apply throughout conversion:
@@ -222,6 +270,7 @@ For older sourcebooks (pre-2024), adjust these settings in your config.
 ```
 
 This config:
+
 - Uses `*` for bullets and emphasis
 - Disables image downloading
 - Sets unresolved links to italic
