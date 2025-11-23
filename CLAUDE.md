@@ -100,9 +100,9 @@ modules.stats(tracker, verbose); // 5. Display statistics
    - Updates `ctx.files` with anchors, entities, and written status
 
 3. **Resolver** (`resolver.ts`)
+   - Creates `LinkResolver` class instance (`link-resolver.ts`)
    - Resolves D&D Beyond links to local markdown links
-   - Builds entity index (entity URL → file location)
-   - Builds URL map (canonical URL → file)
+   - All URL normalization, aliasing, and resolution logic in LinkResolver
    - Uses smart anchor matching with 12-step priority system
    - See `docs/resolver.md` for complete algorithm
 
@@ -163,8 +163,7 @@ Uses Handlebars with precedence: sourcebook-specific → global → built-in def
 
 - `index.md.hbs` - Sourcebook table of contents
 - `file.md.hbs` - Individual chapter pages
-- `entity-index.md.hbs` - Entity index pages
-- `parent-index.md.hbs` - Parent index with children
+- `entity-index.md.hbs` - Entity index pages (also used for parent indexes with children)
 - `global-index.md.hbs` - Global index
 
 See `docs/templates.md` for variables and examples.
@@ -324,13 +323,15 @@ src/
 
 ### Utilities Overview
 
-**Core:** `id-generator.ts`, `load-config.ts`, `tracker.ts`, `logger.ts`
+**Core:** `id-generator.ts`, `load-config.ts`, `tracker.ts`, `link-resolver.ts`
 
 **File operations:** `load-mapping.ts`, `save-mapping.ts`, `file-exists.ts`, template loaders
 
-**URL handling:** `normalize-url.ts`, `apply-aliases.ts`, `is-entity-url.ts`, `is-source-url.ts`, `parse-entity-url.ts`
+**URL/Entity handling:** `parse-entity-url.ts`, `get-entity-type-from-url.ts`, `is-image-url.ts`
 
-**Anchor handling:** `generate-anchor.ts`, `normalize-anchor.ts`, `find-matching-anchor.ts`
+**Anchor handling:** `generate-anchor.ts`, `find-matching-anchor.ts`
+
+Note: URL normalization, aliasing, and link classification are internalized in `LinkResolver` class.
 
 ### Build System
 

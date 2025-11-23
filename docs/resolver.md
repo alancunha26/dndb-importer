@@ -1,6 +1,7 @@
 # Link Resolver Documentation
 
 **Module:** `src/modules/resolver.ts`
+**Class:** `src/utils/link-resolver.ts`
 **Status:** Implemented and tested
 
 **Related Documentation:**
@@ -13,19 +14,22 @@
 
 The Resolver module transforms D&D Beyond links into local markdown links, enabling seamless cross-referencing between converted sourcebooks. It runs after all files are written to disk, reading each file, resolving links, and overwriting with the resolved content.
 
+The core logic is centralized in the `LinkResolver` class (`src/utils/link-resolver.ts`), which handles URL normalization, aliasing, entity resolution, and anchor matching. The resolver module (`src/modules/resolver.ts`) orchestrates the file I/O and delegates link resolution to the class.
+
 ## Processing Flow
 
 ```
 1. Processor completes → All files written to disk with:
    - FileAnchors (valid anchors + HTML ID mappings)
-   - Entity URLs extracted from tooltip links
+   - Entity URLs extracted from tooltip links (raw, unaliased)
 
 2. Resolver runs:
-   a. Build entity index (entity URL → file location)
-   b. Build URL map (canonical URL → file)
-   c. For each file:
+   a. Create LinkResolver instance, which:
+      - Builds URL maps with aliased keys (file URL → file, book URL → sourcebook)
+      - Builds entity index from file entities (entity URL → file location)
+   b. For each file:
       - Read markdown from disk
-      - Resolve D&D Beyond links
+      - Resolve D&D Beyond links via LinkResolver.resolve()
       - Write resolved content back
 ```
 

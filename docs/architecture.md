@@ -77,12 +77,19 @@ After all files are processed, generate a table of contents for each sourcebook 
 
 The resolver transforms D&D Beyond URLs into local Markdown links. This stage runs after all files are written because it needs the complete set of anchors from all files.
 
-See [Link Resolver](resolver.md) for detailed documentation of the resolution algorithm, including:
+**Architecture:**
 
-- Link type detection and priority
-- Entity index building
-- URL aliasing system
-- Smart anchor matching
+The resolver module (`resolver.ts`) creates a `LinkResolver` instance (`link-resolver.ts`) that centralizes all resolution logic:
+
+- URL normalization and aliasing
+- Entity index building from file entities
+- URL map building (file URLs, book URLs)
+- Link classification (entity, source, internal anchor)
+- Smart anchor matching with 12-step priority
+
+The module handles file I/O while the class handles all resolution logic.
+
+See [Link Resolver](resolver.md) for detailed documentation of the resolution algorithm.
 
 **Output:** Markdown files updated with resolved local links.
 
