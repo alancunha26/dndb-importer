@@ -10,6 +10,7 @@ import { ENTITY_TYPES } from "../types";
 import type { Tracker } from "./tracker";
 import { findMatchingAnchor } from "./find-matching-anchor";
 import { getEntityTypeFromUrl } from "./get-entity-type-from-url";
+import { isImageUrl } from "./is-image-url";
 
 // Patterns for URL classification
 const ENTITY_PATH_PATTERN = new RegExp(`^\\/(${ENTITY_TYPES.join("|")})\\/`);
@@ -132,7 +133,7 @@ export class LinkResolver {
       return false;
     }
 
-    if (this.isImageUrl(url)) {
+    if (isImageUrl(url)) {
       return false;
     }
 
@@ -159,13 +160,6 @@ export class LinkResolver {
    */
   private isSourceUrl(urlPath: string): boolean {
     return SOURCE_URL_PATTERN.test(urlPath);
-  }
-
-  /**
-   * Check if a URL points to an image
-   */
-  private isImageUrl(url: string): boolean {
-    return /\.(jpe?g|png|gif|webp|svg)$/i.test(url);
   }
 
   /**
