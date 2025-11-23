@@ -14,7 +14,7 @@ export { resolveEntityUrl } from "./resolve-entity-url";
 export { getEntityTypeFromUrl } from "./get-entity-type-from-url";
 
 // Formatting utilities
-export { formatFallback } from "./format-fallback";
+// formatFallback is now a private method in LinkResolver
 
 // URL utilities
 export { normalizeUrl } from "./normalize-url";
@@ -63,3 +63,4 @@ export { getDefaultGlobalIndexTemplate } from "./get-default-global-index-templa
 // Classes
 export { IdGenerator } from "./id-generator";
 export { Tracker } from "./tracker";
+export { LinkResolver } from "./link-resolver";

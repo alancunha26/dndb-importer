@@ -32,7 +32,7 @@ tags:
 |-------{{#unless ../filters.school}}|--------{{/unless}}|--------------|----------|------------|------------|---------|
 {{#each this}}
 {{#if resolved}}
-| [{{{name}}}]({{{fileId}}}.md#{{{anchor}}}) {{#unless ../../filters.school}}| {{{capitalize metadata.school}}} {{/unless}}| {{{metadata.castingTime}}} | {{{metadata.duration}}} | {{{metadata.range}}}{{#if metadata.area}} ({{{metadata.area}}}){{/if}} | {{{metadata.components}}} | {{{spellSpecial metadata}}} |
+| {{{link}}} {{#unless ../../filters.school}}| {{{capitalize metadata.school}}} {{/unless}}| {{{metadata.castingTime}}} | {{{metadata.duration}}} | {{{metadata.range}}}{{#if metadata.area}} ({{{metadata.area}}}){{/if}} | {{{metadata.components}}} | {{{spellSpecial metadata}}} |
 {{/if}}
 {{/each}}
 
@@ -47,7 +47,7 @@ tags:
 |------{{#unless ../filters.type}}|------{{/unless}}{{#unless ../filters.size}}|------{{/unless}}|-----------|
 {{#each this}}
 {{#if resolved}}
-| [{{{name}}}]({{{fileId}}}.md#{{{anchor}}}) {{#unless ../../filters.type}}| {{{metadata.type}}}{{#if metadata.subtype}} ({{{metadata.subtype}}}){{/if}} {{/unless}}{{#unless ../../filters.size}}| {{{metadata.size}}} {{/unless}}| {{{metadata.alignment}}} |
+| {{{link}}} {{#unless ../../filters.type}}| {{{metadata.type}}}{{#if metadata.subtype}} ({{{metadata.subtype}}}){{/if}} {{/unless}}{{#unless ../../filters.size}}| {{{metadata.size}}} {{/unless}}| {{{metadata.alignment}}} |
 {{/if}}
 {{/each}}
 
@@ -57,7 +57,7 @@ tags:
 |----|------{{#unless filters.type}}|------{{/unless}}{{#unless filters.size}}|------{{/unless}}|-----------|
 {{#each entities}}
 {{#if resolved}}
-| {{{metadata.cr}}} | [{{{name}}}]({{{fileId}}}.md#{{{anchor}}}) {{#unless ../filters.type}}| {{{metadata.type}}}{{#if metadata.subtype}} ({{{metadata.subtype}}}){{/if}} {{/unless}}{{#unless ../filters.size}}| {{{metadata.size}}} {{/unless}}| {{{metadata.alignment}}} |
+| {{{metadata.cr}}} | {{{link}}} {{#unless ../filters.type}}| {{{metadata.type}}}{{#if metadata.subtype}} ({{{metadata.subtype}}}){{/if}} {{/unless}}{{#unless ../filters.size}}| {{{metadata.size}}} {{/unless}}| {{{metadata.alignment}}} |
 {{/if}}
 {{/each}}
 {{/if}}
@@ -67,7 +67,7 @@ tags:
 |------{{#unless filters.rarity}}|--------{{/unless}}{{#unless filters.type}}|------{{/unless}}|------------|
 {{#each entities}}
 {{#if resolved}}
-| [{{{name}}}]({{{fileId}}}.md#{{{anchor}}}) {{#unless ../filters.rarity}}| {{{metadata.rarity}}} {{/unless}}{{#unless ../filters.type}}| {{{metadata.type}}} {{/unless}}| {{{metadata.attunement}}} |
+| {{{link}}} {{#unless ../filters.rarity}}| {{{metadata.rarity}}} {{/unless}}{{#unless ../filters.type}}| {{{metadata.type}}} {{/unless}}| {{{metadata.attunement}}} |
 {{/if}}
 {{/each}}
 
@@ -76,7 +76,7 @@ tags:
 |-----------|------|------|--------|
 {{#each entities}}
 {{#if resolved}}
-| [{{{name}}}]({{{fileId}}}.md#{{{anchor}}}) | {{{metadata.type}}} | {{{metadata.cost}}} | {{{metadata.weight}}} |
+| {{{link}}} | {{{metadata.type}}} | {{{metadata.cost}}} | {{{metadata.weight}}} |
 {{/if}}
 {{/each}}
 
@@ -86,7 +86,7 @@ tags:
 
 {{#each this}}
 {{#if resolved}}
-${bullet} [{{{name}}}]({{{fileId}}}.md#{{{anchor}}})
+${bullet} {{{link}}}
 {{/if}}
 {{/each}}
 
@@ -95,28 +95,28 @@ ${bullet} [{{{name}}}]({{{fileId}}}.md#{{{anchor}}})
 {{else if (eq type "backgrounds")}}
 {{#each entities}}
 {{#if resolved}}
-- [{{{name}}}]({{{fileId}}}.md#{{{anchor}}})
+- {{{link}}}
 {{/if}}
 {{/each}}
 
 {{else if (eq type "species")}}
 {{#each entities}}
 {{#if resolved}}
-${bullet} [{{{name}}}]({{{fileId}}}.md#{{{anchor}}})
+${bullet} {{{link}}}
 {{/if}}
 {{/each}}
 
 {{else if (eq type "classes")}}
 {{#each entities}}
 {{#if resolved}}
-${bullet} [{{{name}}}]({{{fileId}}}.md#{{{anchor}}})
+${bullet} {{{link}}}
 {{/if}}
 {{/each}}
 
 {{else}}
 {{#each entities}}
 {{#if resolved}}
-${bullet} [{{{name}}}]({{{fileId}}}.md#{{{anchor}}})
+${bullet} {{{link}}}
 {{/if}}
 {{/each}}
 {{/if}}

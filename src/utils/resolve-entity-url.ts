@@ -74,7 +74,7 @@ export function resolveEntityUrl(
   if (!files || !entityType) return null;
 
   // Check existing entityIndex first (optimization)
-  const existing = ctx.entityIndex?.get(url);
+  const existing = ctx.linkResolver?.getEntityIndex().get(url);
   if (existing) return existing;
 
   // Extract slug from URL

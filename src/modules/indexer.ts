@@ -25,9 +25,7 @@ import {
   loadIndexesMapping,
   saveIndexesMapping,
   fetchListingPage,
-  resolveEntityUrl,
   getEntityTypeFromUrl,
-  applyAliases,
   loadTemplate,
   getDefaultEntityIndexTemplate,
   getDefaultParentIndexTemplate,
@@ -42,8 +40,7 @@ interface ResolvedEntity {
   name: string;
   url: string;
   metadata?: Record<string, string>;
-  fileId?: string;
-  anchor?: string;
+  link: string;
   resolved: boolean;
 }
 
@@ -67,8 +64,13 @@ export async function indexer(ctx: ConversionContext): Promise<void> {
   // Shared State (closure variables)
   // ============================================================================
 
-  const { tracker, entityIndex, idGenerator, sourcebooks } = ctx;
-  const excludeUrls = new Set(config.links.excludeUrls);
+  const { tracker, idGenerator, sourcebooks } = ctx;
+
+  if (!ctx.linkResolver) {
+    throw new Error("LinkResolver must be created by resolver before indexer");
+  }
+
+  const linkResolver = ctx.linkResolver;
 
   // Current date for frontmatter
   const date = new Date().toISOString().split("T")[0];
@@ -165,29 +167,14 @@ export async function indexer(ctx: ConversionContext): Promise<void> {
 
   /**
    * Resolve parsed entities to local file links
-   * Applies aliases at entry point, then uses resolveEntityUrl
-   * Respects excludeUrls configuration
+   * Uses LinkResolver to handle aliasing, exclusions, and both entity/source URLs
    * Tracks resolved/unresolved statistics
    */
   function resolveEntities(entities: ParsedEntity[]): ResolvedEntity[] {
     return entities.map((entity) => {
-      const url = applyAliases(entity.url, config.links.urlAliases);
-
-      // Check if URL is excluded
-      if (excludeUrls.has(url)) {
-        return { ...entity, resolved: false };
-      }
-
-      const match = resolveEntityUrl(url, ctx);
-
-      if (match) {
-        entityIndex?.set(url, match);
-        tracker.incrementLinksResolved();
-        return { ...entity, ...match, resolved: true };
-      }
-
-      tracker.trackUnresolvedLink(url, entity.name);
-      return { ...entity, resolved: false };
+      const link = linkResolver.resolveToMarkdown(entity.url, entity.name);
+      const resolved = link.includes(".md");
+      return { ...entity, link, resolved };
     });
   }
 
@@ -277,11 +264,10 @@ export async function indexer(ctx: ConversionContext): Promise<void> {
       parent,
       type: entityType,
       entities: entities.map((e) => ({
-        name: e.name,
         url: e.url,
+        name: e.name,
+        link: e.link,
         metadata: e.metadata,
-        fileId: e.fileId,
-        anchor: e.anchor,
         resolved: e.resolved,
       })),
     };

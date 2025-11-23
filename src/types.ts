@@ -5,6 +5,7 @@
 import { z } from "zod";
 import { Tracker } from "./utils/tracker";
 import { IdGenerator } from "./utils/id-generator";
+import { LinkResolver } from "./utils";
 
 // Re-export classes
 export { Tracker, IdGenerator };
@@ -271,8 +272,7 @@ export interface EntityIndexTemplateContext {
     name: string;
     url: string;
     metadata?: Record<string, string>;
-    fileId?: string;
-    anchor?: string;
+    link: string;
     resolved: boolean;
   }>;
 }
@@ -315,7 +315,7 @@ export interface ConversionContext {
   files?: FileDescriptor[];
   sourcebooks?: SourcebookInfo[];
   globalTemplates?: TemplateSet;
-  entityIndex?: Map<string, EntityMatch>;
+  linkResolver?: LinkResolver;
   verbose?: boolean;
   refetch?: boolean;
 }
