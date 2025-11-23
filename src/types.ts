@@ -165,7 +165,6 @@ export interface TemplateSet {
   index: string | null;
   file: string | null;
   entityIndex: string | null;
-  parentIndex: string | null;
   globalIndex: string | null;
 }
 
@@ -262,32 +261,22 @@ export interface EntityIndexTemplateContext {
   title: string;
   description?: string;
   date: string;
-  type: EntityType;
+  type?: EntityType;
   filters?: Record<string, string>;
   parent?: {
     title: string;
     filename: string;
   };
-  entities: Array<{
+  children?: Array<{
+    title: string;
+    filename: string;
+  }>;
+  entities?: Array<{
     name: string;
     url: string;
     metadata?: Record<string, string>;
     link: string;
     resolved: boolean;
-  }>;
-}
-
-export interface ParentIndexTemplateContext {
-  title: string;
-  description?: string;
-  date: string;
-  parent?: {
-    title: string;
-    filename: string;
-  };
-  children: Array<{
-    title: string;
-    filename: string;
   }>;
 }
 

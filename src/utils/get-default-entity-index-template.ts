@@ -23,6 +23,14 @@ tags:
 
 {{{description}}}
 {{/if}}
+{{#if children}}
+
+## Contents
+{{#each children}}
+${bullet} [{{{title}}}]({{{filename}}})
+{{/each}}
+{{/if}}
+{{#if type}}
 
 {{#if (eq type "spells")}}
 {{#each (sortKeys (groupBy entities "metadata.level") "Cantrip")}}
@@ -119,6 +127,7 @@ ${bullet} {{{link}}}
 ${bullet} {{{link}}}
 {{/if}}
 {{/each}}
+{{/if}}
 {{/if}}
 `;
 }

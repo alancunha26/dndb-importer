@@ -18,7 +18,6 @@ import type {
   ParsedEntity,
   EntityType,
   EntityIndexTemplateContext,
-  ParentIndexTemplateContext,
   GlobalIndexTemplateContext,
 } from "../types";
 import {
@@ -28,7 +27,6 @@ import {
   getEntityTypeFromUrl,
   loadTemplate,
   getDefaultEntityIndexTemplate,
-  getDefaultParentIndexTemplate,
   getDefaultGlobalIndexTemplate,
 } from "../utils";
 import { getParser } from "../parsers";
@@ -105,10 +103,6 @@ export async function indexer(ctx: ConversionContext): Promise<void> {
   const entityIndexTemplate = await loadTemplate(
     globalTemplates?.entityIndex ?? null,
     getDefaultEntityIndexTemplate(config.markdown),
-  );
-  const parentIndexTemplate = await loadTemplate(
-    globalTemplates?.parentIndex ?? null,
-    getDefaultParentIndexTemplate(config.markdown),
   );
   const globalIndexTemplate = await loadTemplate(
     globalTemplates?.globalIndex ?? null,
@@ -246,24 +240,29 @@ export async function indexer(ctx: ConversionContext): Promise<void> {
   }
 
   /**
-   * Generate markdown for an entity index using template
+   * Generate markdown for an index using template
+   * Supports both children (subcategories) and entities (from URL)
    */
-  function generateEntityIndexMarkdown(
+  function generateIndexMarkdown(
     title: string,
     description: string | undefined,
-    entityType: EntityType,
-    entities: ResolvedEntity[],
-    filters?: Record<string, string>,
-    parent?: { title: string; filename: string },
+    options: {
+      entityType?: EntityType;
+      entities?: ResolvedEntity[];
+      filters?: Record<string, string>;
+      children?: Array<{ title: string; filename: string }>;
+      parent?: { title: string; filename: string };
+    },
   ): string {
     const context: EntityIndexTemplateContext = {
       date,
       title,
       description,
-      filters,
-      parent,
-      type: entityType,
-      entities: entities.map((e) => ({
+      filters: options.filters,
+      parent: options.parent,
+      children: options.children,
+      type: options.entityType,
+      entities: options.entities?.map((e) => ({
         url: e.url,
         name: e.name,
         link: e.link,
@@ -276,30 +275,11 @@ export async function indexer(ctx: ConversionContext): Promise<void> {
   }
 
   /**
-   * Generate markdown for a parent index using template
-   */
-  function generateParentIndexMarkdown(
-    title: string,
-    description: string | undefined,
-    children: Array<{ title: string; filename: string }>,
-    parent?: { title: string; filename: string },
-  ): string {
-    const context: ParentIndexTemplateContext = {
-      title,
-      description,
-      date,
-      parent,
-      children,
-    };
-
-    return parentIndexTemplate(context);
-  }
-
-  /**
    * Process an index configuration recursively
+   * Handles both children (subcategories) and URL (entities)
    * Returns the processed index info, or null if failed
    */
-  async function processIndexRecursive(
+  async function processIndex(
     index: EntityIndexConfig,
     parent?: { title: string; filename: string },
   ): Promise<{ title: string; filename: string } | null> {
@@ -310,128 +290,97 @@ export async function indexer(ctx: ConversionContext): Promise<void> {
       mapping.mappings.entities[index.title] = filename;
     }
 
-    // If it has children, it's a parent index
+    // Process children recursively if any
+    let childResults: Array<{ title: string; filename: string }> | undefined;
     if (index.children && index.children.length > 0) {
-      // Process all children recursively with this index as parent
-      const childResults: Array<{ title: string; filename: string }> = [];
+      childResults = [];
       const currentAsParent = { title: index.title, filename };
       for (const child of index.children) {
-        const result = await processIndexRecursive(child, currentAsParent);
+        const result = await processIndex(child, currentAsParent);
         if (result) childResults.push(result);
       }
+    }
 
-      // Generate parent index markdown
-      const markdown = generateParentIndexMarkdown(
-        index.title,
-        index.description,
-        childResults,
-        parent,
-      );
+    // Process URL/entities if present
+    let resolvedEntities: ResolvedEntity[] | undefined;
+    let entityType: EntityType | undefined;
+    let filters: Record<string, string> | undefined;
 
-      // Write file
-      const outputPath = join(config.output, filename);
-      try {
-        await writeFile(outputPath, markdown, "utf-8");
-        tracker.incrementEntityIndexes();
-        return { title: index.title, filename };
-      } catch (error) {
-        tracker.trackError(outputPath, error, "file");
-        return null;
+    if (index.url) {
+      entityType = getEntityTypeFromUrl(index.url) ?? undefined;
+      if (entityType) {
+        // Parse filters from original URL (before adding source filters)
+        filters = parseUrlFilters(index.url);
+
+        // Apply source filters if not already present
+        const fetchUrl = applySourceFilters(index.url);
+
+        // Fetch and parse entities (use cache if available)
+        let entities: ParsedEntity[];
+        const cached = mapping.cache[fetchUrl];
+
+        if (!cached || refetch) {
+          try {
+            // Fetch all pages and combine entities
+            entities = await fetchAllPages(fetchUrl, entityType);
+            const fetchedAt = new Date().toISOString();
+
+            // Store entities in global entities map (deduplicated by URL)
+            const entityUrls: string[] = [];
+            for (const entity of entities) {
+              entityUrls.push(entity.url);
+              mapping.entities[entity.url] = {
+                name: entity.name,
+                metadata: entity.metadata,
+              };
+            }
+
+            // Cache stores only the URL references
+            mapping.cache[fetchUrl] = { fetchedAt, entityUrls };
+
+            // Track fetched entities
+            tracker.incrementFetchedEntities(entities.length);
+          } catch (error) {
+            tracker.trackError(fetchUrl, error, "resource");
+            // Continue with children only if URL fetch fails
+            entities = [];
+          }
+        } else {
+          // Reconstruct entities from global entities map
+          entities = [];
+          for (const url of cached.entityUrls) {
+            const stored = mapping.entities[url];
+            if (stored) {
+              entities.push({
+                url,
+                name: stored.name,
+                metadata: stored.metadata,
+              });
+            }
+          }
+
+          // Track cached entities
+          tracker.incrementCachedEntities(entities.length);
+        }
+
+        // Resolve entities to local files
+        resolvedEntities = resolveEntities(entities);
       }
     }
 
-    // Must have a URL for entity indexes
-    if (!index.url) {
+    // Must have either children or entities
+    if (!childResults && !resolvedEntities) {
       return null;
     }
 
-    // It's an entity index - process it
-    return processEntityIndex(index, filename, parent);
-  }
-
-  /**
-   * Process a single entity index configuration
-   */
-  async function processEntityIndex(
-    index: EntityIndexConfig,
-    filename: string,
-    parent?: { title: string; filename: string },
-  ): Promise<{ title: string; filename: string } | null> {
-    // Must have a URL for entity indexes
-    if (!index.url) {
-      return null;
-    }
-
-    // Get entity type from URL
-    const entityType = getEntityTypeFromUrl(index.url);
-    if (!entityType) return null;
-
-    // Parse filters from original URL (before adding source filters)
-    const filters = parseUrlFilters(index.url);
-
-    // Apply source filters if not already present
-    const fetchUrl = applySourceFilters(index.url);
-
-    // Fetch and parse entities (use cache if available)
-    // Cache key is the filtered URL to ensure consistency
-    let entities: ParsedEntity[];
-    const cached = mapping.cache[fetchUrl];
-
-    if (!cached || refetch) {
-      try {
-        // Fetch all pages and combine entities
-        entities = await fetchAllPages(fetchUrl, entityType);
-        const fetchedAt = new Date().toISOString();
-
-        // Store entities in global entities map (deduplicated by URL)
-        const entityUrls: string[] = [];
-        for (const entity of entities) {
-          entityUrls.push(entity.url);
-          mapping.entities[entity.url] = {
-            name: entity.name,
-            metadata: entity.metadata,
-          };
-        }
-
-        // Cache stores only the URL references
-        mapping.cache[fetchUrl] = { fetchedAt, entityUrls };
-
-        // Track fetched entities
-        tracker.incrementFetchedEntities(entities.length);
-      } catch (error) {
-        tracker.trackError(fetchUrl, error, "resource");
-        return null;
-      }
-    } else {
-      // Reconstruct entities from global entities map
-      entities = [];
-      for (const url of cached.entityUrls) {
-        const stored = mapping.entities[url];
-        if (stored) {
-          entities.push({
-            url,
-            name: stored.name,
-            metadata: stored.metadata,
-          });
-        }
-      }
-
-      // Track cached entities
-      tracker.incrementCachedEntities(entities.length);
-    }
-
-    // Resolve entities to local files
-    const resolvedEntities = resolveEntities(entities);
-
-    // Generate markdown
-    const markdown = generateEntityIndexMarkdown(
-      index.title,
-      index.description,
+    // Generate markdown with both children and entities
+    const markdown = generateIndexMarkdown(index.title, index.description, {
       entityType,
-      resolvedEntities,
+      entities: resolvedEntities,
       filters,
+      children: childResults,
       parent,
-    );
+    });
 
     // Write file
     const outputPath = join(config.output, filename);
@@ -512,7 +461,7 @@ export async function indexer(ctx: ConversionContext): Promise<void> {
   }
 
   for (const indexConfig of config.indexes.entities) {
-    const result = await processIndexRecursive(indexConfig, globalParent);
+    const result = await processIndex(indexConfig, globalParent);
     if (result) generatedIndexes.push(result);
   }
 
