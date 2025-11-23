@@ -4,15 +4,17 @@ import type {
   EntityMatch,
   FileDescriptor,
   SourcebookInfo,
+  EntityType,
 } from "../types";
+import { ENTITY_TYPES } from "../types";
 import type { Tracker } from "./tracker";
-import { applyAliases } from "./apply-aliases";
-import { isEntityUrl } from "./is-entity-url";
-import { isSourceUrl } from "./is-source-url";
-import { normalizeAnchor } from "./normalize-anchor";
 import { findMatchingAnchor } from "./find-matching-anchor";
-import { resolveEntityUrl } from "./resolve-entity-url";
-import { shouldResolveUrl } from "./should-resolve-url";
+import { getEntityTypeFromUrl } from "./get-entity-type-from-url";
+
+// Patterns for URL classification
+const ENTITY_PATH_PATTERN = new RegExp(`^\\/(${ENTITY_TYPES.join("|")})\\/`);
+const SOURCE_URL_PATTERN = /^\/sources\//;
+const LOCAL_MD_FILE_PATTERN = /^[a-z0-9]{4}\.md/;
 
 /**
  * Unified link resolver for both entity and source URLs
@@ -22,11 +24,11 @@ export class LinkResolver {
   private config: ConversionConfig;
   private tracker: Tracker;
   private files: FileDescriptor[];
-  private sourcebooks: SourcebookInfo[];
-  private urlMap: Map<string, FileDescriptor>;
+  private fileUrlMap: Map<string, FileDescriptor>;
+  private bookUrlMap: Map<string, SourcebookInfo>;
   private fileIdMap: Map<string, FileDescriptor>;
-  private excludeUrls: Set<string>;
   private entityIndex: Map<string, EntityMatch>;
+  private excludeUrls: Set<string>;
 
   constructor(ctx: ConversionContext) {
     if (!ctx.files) {
@@ -38,22 +40,21 @@ export class LinkResolver {
 
     this.config = ctx.config;
     this.tracker = ctx.tracker;
-    // Only use written files for resolution
     this.files = ctx.files.filter((f) => f.written);
-    this.sourcebooks = ctx.sourcebooks ?? [];
 
-    // Build URL map for source link resolution
-    this.urlMap = new Map(
-      this.files.filter((f) => f.url).map((f) => [f.url!, f]),
-    );
-
-    // Build file ID map for looking up files by uniqueId
+    // Build lookup maps with aliased URLs (normalize all URLs upfront)
     this.fileIdMap = new Map(this.files.map((f) => [f.uniqueId, f]));
-
-    // Build exclude URLs set
     this.excludeUrls = new Set(this.config.links.excludeUrls);
 
-    // Initialize and build entityIndex
+    // URL map: aliased page URL -> file
+    const filesUrl = this.files.filter((f) => f.url);
+    this.fileUrlMap = new Map(filesUrl.map((f) => [this.getAlias(f.url!), f]));
+
+    // Book URL map: aliased book URL -> sourcebook
+    const books = (ctx.sourcebooks ?? []).filter((sb) => sb.bookUrl);
+    this.bookUrlMap = new Map(books.map((b) => [this.getAlias(b.bookUrl!), b]));
+
+    // Build entityIndex from file entities
     this.entityIndex = new Map();
     this.buildEntityIndex();
   }
@@ -67,27 +68,11 @@ export class LinkResolver {
       if (!file.entities) continue;
 
       for (const entity of file.entities) {
-        const match = this.resolveEntityInternal(entity.url);
-        if (match) {
-          this.entityIndex.set(entity.url, match);
-        }
+        const aliased = this.getAlias(entity.url);
+        const match = this.resolveEntityInternal(aliased);
+        if (match) this.entityIndex.set(aliased, match);
       }
     }
-  }
-
-  /**
-   * Add an entity to the index
-   * Used by indexer when resolving entities from listing pages
-   */
-  addEntity(url: string, match: EntityMatch): void {
-    this.entityIndex.set(url, match);
-  }
-
-  /**
-   * Get read-only access to the entity index
-   */
-  getEntityIndex(): ReadonlyMap<string, EntityMatch> {
-    return this.entityIndex;
   }
 
   /**
@@ -95,9 +80,9 @@ export class LinkResolver {
    * Main method for resolving links
    * Also adds resolved entities to the entityIndex
    */
-  resolveToMarkdown(url: string, text: string, fileId?: string): string {
+  resolve(url: string, text: string, fileId?: string): string {
     // Don't resolve external URLs, images, etc.
-    if (!shouldResolveUrl(url)) {
+    if (!this.shouldResolveUrl(url)) {
       return `[${text}](${url})`;
     }
 
@@ -117,11 +102,9 @@ export class LinkResolver {
     // Try to resolve the link
     let match: EntityMatch | null = null;
 
-    if (isEntityUrl(path)) {
+    if (this.isEntityUrl(path)) {
       match = this.resolveEntity(path, anchor);
-    }
-
-    if (isSourceUrl(path)) {
+    } else if (this.isSourceUrl(path)) {
       match = this.resolveSource(path, anchor);
     }
 
@@ -134,15 +117,128 @@ export class LinkResolver {
   }
 
   // ============================================================================
-  // Private Helper Methods
+  // URL Classification Methods
   // ============================================================================
+
+  /**
+   * Check if a URL should be resolved
+   */
+  private shouldResolveUrl(url: string): boolean {
+    if (url.startsWith("#")) {
+      return true;
+    }
+
+    if (url.endsWith(".md") || LOCAL_MD_FILE_PATTERN.test(url)) {
+      return false;
+    }
+
+    if (this.isImageUrl(url)) {
+      return false;
+    }
+
+    if (this.isDndBeyondUrl(url)) {
+      return true;
+    }
+
+    if (this.isSourceUrl(url) || this.isEntityUrl(url)) {
+      return true;
+    }
+
+    return false;
+  }
+
+  /**
+   * Check if a URL is an entity URL
+   */
+  private isEntityUrl(urlPath: string): boolean {
+    return ENTITY_PATH_PATTERN.test(urlPath);
+  }
+
+  /**
+   * Check if a URL is a source URL
+   */
+  private isSourceUrl(urlPath: string): boolean {
+    return SOURCE_URL_PATTERN.test(urlPath);
+  }
+
+  /**
+   * Check if a URL points to an image
+   */
+  private isImageUrl(url: string): boolean {
+    return /\.(jpe?g|png|gif|webp|svg)$/i.test(url);
+  }
+
+  /**
+   * Check if a URL is a D&D Beyond URL
+   */
+  private isDndBeyondUrl(url: string): boolean {
+    return (
+      url.startsWith("https://www.dndbeyond.com") ||
+      url.startsWith("http://www.dndbeyond.com")
+    );
+  }
+
+  // ============================================================================
+  // URL Normalization Methods
+  // ============================================================================
+
+  /**
+   * Normalize D&D Beyond URL
+   */
+  private normalizeUrl(url: string): string {
+    let normalized = url;
+
+    // Strip D&D Beyond domain
+    if (normalized.startsWith("https://www.dndbeyond.com/")) {
+      normalized = normalized.replace("https://www.dndbeyond.com/", "");
+    } else if (normalized.startsWith("http://www.dndbeyond.com/")) {
+      normalized = normalized.replace("http://www.dndbeyond.com/", "");
+    }
+
+    // Remove trailing slashes
+    normalized = normalized.replace(/\/(?=#)/, "");
+    if (normalized.length > 1 && normalized.endsWith("/")) {
+      normalized = normalized.slice(0, -1);
+    }
+
+    // Ensure leading slash
+    if (
+      normalized &&
+      !normalized.startsWith("/") &&
+      !normalized.startsWith("#")
+    ) {
+      normalized = "/" + normalized;
+    }
+
+    return normalized;
+  }
+
+  /**
+   * Apply URL aliases
+   */
+  private getAlias(url: string): string {
+    const normalized = this.normalizeUrl(url);
+    return this.config.links.urlAliases[normalized] || normalized;
+  }
+
+  /**
+   * Normalize anchor to markdown format
+   */
+  private normalizeAnchor(anchor: string): string {
+    return anchor
+      .replace(/([a-z])([A-Z])/g, "$1-$2")
+      .toLowerCase()
+      .replace(/[^a-z0-9-]/g, "-")
+      .replace(/-+/g, "-")
+      .replace(/^-|-$/g, "");
+  }
 
   /**
    * Parse URL and apply aliases
    */
   private parseAndAlias(url: string): { path: string; anchor?: string } {
     let [path, anchor] = url.split("#");
-    path = applyAliases(path, this.config.links.urlAliases);
+    path = this.getAlias(path);
 
     // Re-split in case alias value contains an anchor
     if (path.includes("#")) {
@@ -153,6 +249,10 @@ export class LinkResolver {
 
     return { path, anchor };
   }
+
+  // ============================================================================
+  // Formatting Methods
+  // ============================================================================
 
   /**
    * Resolve internal anchor (same-page #link)
@@ -265,15 +365,73 @@ export class LinkResolver {
    * Internal entity resolution without checking entityIndex
    */
   private resolveEntityInternal(url: string): EntityMatch | null {
-    // Create a minimal context for resolveEntityUrl
-    const ctx: ConversionContext = {
-      config: this.config,
-      tracker: this.tracker,
-      idGenerator: null as never,
-      files: this.files,
-    };
+    const entityType = getEntityTypeFromUrl(url);
+    if (!entityType) return null;
 
-    return resolveEntityUrl(url, ctx);
+    // Extract slug from URL
+    const slug = url.split("/").pop()?.replace(/^\d+-/, "");
+    if (!slug) return null;
+
+    // Get target files for this entity type
+    const targetFiles = this.getTargetFiles(entityType);
+
+    // Find best match
+    return this.findBestMatch(slug, targetFiles);
+  }
+
+  /**
+   * Get target files for an entity type based on entityLocations config
+   */
+  private getTargetFiles(entityType: EntityType): FileDescriptor[] {
+    const { entityLocations } = this.config.links;
+    const allowedPages = entityLocations[entityType];
+
+    if (!allowedPages) return this.files;
+
+    const result: FileDescriptor[] = [];
+    for (const page of allowedPages) {
+      for (const file of this.files) {
+        if (!file.url) continue;
+        const url = this.getAlias(file.url);
+
+        if (url.startsWith(page)) {
+          result.push(file);
+        }
+      }
+    }
+
+    return result;
+  }
+
+  /**
+   * Find best anchor match for a slug across target files
+   */
+  private findBestMatch(
+    slug: string,
+    targetFiles: FileDescriptor[],
+  ): EntityMatch | null {
+    const maxMatchStep = this.config.links.maxMatchStep;
+    let bestMatch: { fileId: string; anchor: string; step: number } | null =
+      null;
+
+    for (const file of targetFiles) {
+      if (!file.anchors) continue;
+
+      const result = findMatchingAnchor(slug, file.anchors.valid, maxMatchStep);
+      if (result && (!bestMatch || result.step < bestMatch.step)) {
+        bestMatch = {
+          fileId: file.uniqueId,
+          anchor: result.anchor,
+          step: result.step,
+        };
+        // Short-circuit if we found an exact match (step 1)
+        if (result.step === 1) break;
+      }
+    }
+
+    return bestMatch
+      ? { fileId: bestMatch.fileId, anchor: bestMatch.anchor }
+      : null;
   }
 
   /**
@@ -283,7 +441,8 @@ export class LinkResolver {
     // No anchor - check for book-level or page-level match
     if (!anchor) {
       // Check if it's a sourcebook URL
-      const sourcebook = this.sourcebooks.find((sb) => sb.bookUrl === path);
+      const sourcebook = this.bookUrlMap.get(path);
+
       if (sourcebook) {
         return {
           fileId: sourcebook.id,
@@ -292,7 +451,7 @@ export class LinkResolver {
       }
 
       // Check URL map for page
-      const targetFile = this.urlMap.get(path);
+      const targetFile = this.fileUrlMap.get(path);
       if (targetFile) {
         return {
           fileId: targetFile.uniqueId,
@@ -304,7 +463,7 @@ export class LinkResolver {
     }
 
     // Has anchor - look up in URL mapping
-    const targetFile = this.urlMap.get(path);
+    const targetFile = this.fileUrlMap.get(path);
     if (!targetFile) {
       return null;
     }
@@ -320,7 +479,7 @@ export class LinkResolver {
 
     // Priority 2: Smart matching
     if (!matchedAnchor) {
-      const normalized = normalizeAnchor(anchor);
+      const normalized = this.normalizeAnchor(anchor);
       const result = findMatchingAnchor(
         normalized,
         fileAnchors.valid,

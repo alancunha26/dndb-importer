@@ -19,7 +19,6 @@ import {
   parseEntityUrl,
   loadIndexTemplate,
   loadFileTemplate,
-  applyAliases,
 } from "../utils";
 import type {
   ConversionContext,
@@ -118,7 +117,7 @@ export async function process(ctx: ConversionContext): Promise<void> {
     if (canonical) {
       const match = canonical.match(/dndbeyond\.com(\/.*)$/);
       if (match) {
-        canonicalUrl = applyAliases(match[1], config.links.urlAliases);
+        canonicalUrl = match[1];
         const segments = canonicalUrl.split("/").filter((s) => s.length > 0);
         if (segments.length > 1) {
           bookUrl = "/" + segments.slice(0, -1).join("/");
@@ -211,8 +210,7 @@ export async function process(ctx: ConversionContext): Promise<void> {
     content.find("a[href]").each((_i, link) => {
       const href = $(link).attr("href");
       if (href) {
-        const url = applyAliases(href, config.links.urlAliases);
-        const parsed = parseEntityUrl(url);
+        const parsed = parseEntityUrl(href);
 
         if (parsed && !seenUrls.has(parsed.url)) {
           seenUrls.add(parsed.url);

@@ -32,6 +32,14 @@ import {
 import { getParser } from "../parsers";
 
 /**
+ * Index file reference (title + filename)
+ */
+interface IndexInfo {
+  title: string;
+  filename: string;
+}
+
+/**
  * Resolved entity with local file link
  */
 interface ResolvedEntity {
@@ -166,7 +174,7 @@ export async function indexer(ctx: ConversionContext): Promise<void> {
    */
   function resolveEntities(entities: ParsedEntity[]): ResolvedEntity[] {
     return entities.map((entity) => {
-      const link = linkResolver.resolveToMarkdown(entity.url, entity.name);
+      const link = linkResolver.resolve(entity.url, entity.name);
       const resolved = link.includes(".md");
       return { ...entity, link, resolved };
     });
@@ -250,8 +258,8 @@ export async function indexer(ctx: ConversionContext): Promise<void> {
       entityType?: EntityType;
       entities?: ResolvedEntity[];
       filters?: Record<string, string>;
-      children?: Array<{ title: string; filename: string }>;
-      parent?: { title: string; filename: string };
+      children?: IndexInfo[];
+      parent?: IndexInfo;
     },
   ): string {
     const context: EntityIndexTemplateContext = {
@@ -281,8 +289,8 @@ export async function indexer(ctx: ConversionContext): Promise<void> {
    */
   async function processIndex(
     index: EntityIndexConfig,
-    parent?: { title: string; filename: string },
-  ): Promise<{ title: string; filename: string } | null> {
+    parent?: IndexInfo,
+  ): Promise<IndexInfo | null> {
     // Get or assign filename
     let filename = mapping.mappings.entities[index.title];
     if (!filename) {
@@ -291,10 +299,10 @@ export async function indexer(ctx: ConversionContext): Promise<void> {
     }
 
     // Process children recursively if any
-    let childResults: Array<{ title: string; filename: string }> | undefined;
+    let childResults: IndexInfo[] | undefined;
     if (index.children && index.children.length > 0) {
       childResults = [];
-      const currentAsParent = { title: index.title, filename };
+      const currentAsParent: IndexInfo = { title: index.title, filename };
       for (const child of index.children) {
         const result = await processIndex(child, currentAsParent);
         if (result) childResults.push(result);
@@ -399,7 +407,7 @@ export async function indexer(ctx: ConversionContext): Promise<void> {
    */
   async function generateGlobalIndex(
     title: string,
-    entityIndexes: Array<{ title: string; filename: string }>,
+    entityIndexes: IndexInfo[],
   ): Promise<void> {
     // Use pre-assigned filename (set during parent determination)
     const filename = mapping.mappings.global;
@@ -439,26 +447,30 @@ export async function indexer(ctx: ConversionContext): Promise<void> {
     }
   }
 
+  /**
+   * Get or create global index as parent for top-level entity indexes
+   */
+  function getGlobalParent(): IndexInfo | undefined {
+    if (!config.indexes.global.enabled) {
+      return undefined;
+    }
+
+    let filename = mapping.mappings.global;
+    if (!filename) {
+      filename = `${idGenerator.generate()}.md`;
+      mapping.mappings.global = filename;
+    }
+
+    return { title: config.indexes.global.title, filename };
+  }
+
   // ============================================================================
   // Main Orchestration
   // ============================================================================
 
-  // Process entity indexes (only root-level indexes go to global index)
-  const generatedIndexes: Array<{ title: string; filename: string }> = [];
-
-  // Determine global index as parent for top-level entity indexes
-  let globalParent: { title: string; filename: string } | undefined;
-  if (config.indexes.global.enabled) {
-    let globalFilename = mapping.mappings.global;
-    if (!globalFilename) {
-      globalFilename = `${idGenerator.generate()}.md`;
-      mapping.mappings.global = globalFilename;
-    }
-    globalParent = {
-      title: config.indexes.global.title,
-      filename: globalFilename,
-    };
-  }
+  // Process all entity indexes
+  const globalParent = getGlobalParent();
+  const generatedIndexes: IndexInfo[] = [];
 
   for (const indexConfig of config.indexes.entities) {
     const result = await processIndex(indexConfig, globalParent);
@@ -466,8 +478,8 @@ export async function indexer(ctx: ConversionContext): Promise<void> {
   }
 
   // Generate global index if enabled
-  if (config.indexes.global.enabled && generatedIndexes.length > 0) {
-    await generateGlobalIndex(config.indexes.global.title, generatedIndexes);
+  if (globalParent && generatedIndexes.length > 0) {
+    await generateGlobalIndex(globalParent.title, generatedIndexes);
   }
 
   // Save updated mapping

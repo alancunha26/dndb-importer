@@ -4,25 +4,15 @@
 
 // Anchor utilities
 export { generateAnchor } from "./generate-anchor";
-export { normalizeAnchor } from "./normalize-anchor";
 export { normalizeAnchorForMatching } from "./generate-anchor-variants";
 export { findMatchingAnchor } from "./find-matching-anchor";
 export type { AnchorMatch } from "./find-matching-anchor";
 
 // Entity matching utilities
-export { resolveEntityUrl } from "./resolve-entity-url";
 export { getEntityTypeFromUrl } from "./get-entity-type-from-url";
 
-// Formatting utilities
-// formatFallback is now a private method in LinkResolver
-
 // URL utilities
-export { normalizeUrl } from "./normalize-url";
-export { isEntityUrl } from "./is-entity-url";
-export { isSourceUrl } from "./is-source-url";
 export { isImageUrl } from "./is-image-url";
-export { shouldResolveUrl } from "./should-resolve-url";
-export { applyAliases } from "./apply-aliases";
 export { parseEntityUrl } from "./parse-entity-url";
 
 // Path/filename utilities

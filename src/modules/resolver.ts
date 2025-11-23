@@ -43,7 +43,7 @@ export async function resolve(ctx: ConversionContext): Promise<void> {
       .map((line) => {
         // Find all markdown links and resolve them
         return line.replace(/\[([^\]]+)\]\(([^)]+)\)/g, (_match, text, url) => {
-          return linkResolver.resolveToMarkdown(url, text, fileId);
+          return linkResolver.resolve(url, text, fileId);
         });
       })
       .join("\n");
