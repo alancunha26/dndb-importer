@@ -68,6 +68,10 @@ export async function indexer(ctx: ConversionContext): Promise<void> {
   // ============================================================================
 
   const { tracker, entityIndex, idGenerator, sourcebooks } = ctx;
+  const excludeUrls = new Set(config.links.excludeUrls);
+
+  // Current date for frontmatter
+  const date = new Date().toISOString().split("T")[0];
 
   // Load existing mapping
   const mappingPath = join(config.output, "indexes.json");
@@ -110,8 +114,30 @@ export async function indexer(ctx: ConversionContext): Promise<void> {
   );
 
   /**
+   * Parse filter parameters from URL
+   * Extracts all filter-* parameters and converts to camelCase keys
+   */
+  function parseUrlFilters(url: string): Record<string, string> {
+    const urlObj = new URL(url);
+    const filters: Record<string, string> = {};
+
+    for (const [key, value] of urlObj.searchParams.entries()) {
+      if (key.startsWith("filter-")) {
+        // Convert filter-school to school, filter-partnered-content to partneredContent
+        const filterName = key
+          .replace("filter-", "")
+          .replace(/-([a-z])/g, (_, letter) => letter.toUpperCase());
+        filters[filterName] = value;
+      }
+    }
+
+    return filters;
+  }
+
+  /**
    * Apply source filters to URL if not already present
    * When URL doesn't have filter-source, add filters for all converted sourcebooks
+   * Always includes source 148 (Basic Rules 2024) for core entities
    */
   function applySourceFilters(url: string): string {
     const urlObj = new URL(url);
@@ -121,13 +147,11 @@ export async function indexer(ctx: ConversionContext): Promise<void> {
       return url;
     }
 
-    // If no sourceIds available, return original URL
-    if (availableSourceIds.length === 0) {
-      return url;
-    }
+    // Always include Basic Rules 2024 (148) plus available sourcebooks
+    const sourceIds = new Set([148, ...availableSourceIds]);
+    const sortedIds = [...sourceIds].sort((a, b) => a - b);
 
-    // Add filter-source for each available sourcebook (sorted for consistent cache keys)
-    const sortedIds = [...availableSourceIds].sort((a, b) => a - b);
+    // Add filter-source for each sourcebook (sorted for consistent cache keys)
     for (const sourceId of sortedIds) {
       urlObj.searchParams.append("filter-source", sourceId.toString());
     }
@@ -142,11 +166,18 @@ export async function indexer(ctx: ConversionContext): Promise<void> {
   /**
    * Resolve parsed entities to local file links
    * Applies aliases at entry point, then uses resolveEntityUrl
+   * Respects excludeUrls configuration
    * Tracks resolved/unresolved statistics
    */
   function resolveEntities(entities: ParsedEntity[]): ResolvedEntity[] {
     return entities.map((entity) => {
       const url = applyAliases(entity.url, config.links.urlAliases);
+
+      // Check if URL is excluded
+      if (excludeUrls.has(url)) {
+        return { ...entity, resolved: false };
+      }
+
       const match = resolveEntityUrl(url, ctx);
 
       if (match) {
@@ -155,7 +186,7 @@ export async function indexer(ctx: ConversionContext): Promise<void> {
         return { ...entity, ...match, resolved: true };
       }
 
-      tracker.trackUnresolvedLink(entity.url, entity.name);
+      tracker.trackUnresolvedLink(url, entity.name);
       return { ...entity, resolved: false };
     });
   }
@@ -235,10 +266,15 @@ export async function indexer(ctx: ConversionContext): Promise<void> {
     description: string | undefined,
     entityType: EntityType,
     entities: ResolvedEntity[],
+    filters?: Record<string, string>,
+    parent?: { title: string; filename: string },
   ): string {
     const context: EntityIndexTemplateContext = {
+      date,
       title,
       description,
+      filters,
+      parent,
       type: entityType,
       entities: entities.map((e) => ({
         name: e.name,
@@ -260,10 +296,13 @@ export async function indexer(ctx: ConversionContext): Promise<void> {
     title: string,
     description: string | undefined,
     children: Array<{ title: string; filename: string }>,
+    parent?: { title: string; filename: string },
   ): string {
     const context: ParentIndexTemplateContext = {
       title,
       description,
+      date,
+      parent,
       children,
     };
 
@@ -276,6 +315,7 @@ export async function indexer(ctx: ConversionContext): Promise<void> {
    */
   async function processIndexRecursive(
     index: EntityIndexConfig,
+    parent?: { title: string; filename: string },
   ): Promise<{ title: string; filename: string } | null> {
     // Get or assign filename
     let filename = mapping.mappings.entities[index.title];
@@ -286,10 +326,11 @@ export async function indexer(ctx: ConversionContext): Promise<void> {
 
     // If it has children, it's a parent index
     if (index.children && index.children.length > 0) {
-      // Process all children recursively
+      // Process all children recursively with this index as parent
       const childResults: Array<{ title: string; filename: string }> = [];
+      const currentAsParent = { title: index.title, filename };
       for (const child of index.children) {
-        const result = await processIndexRecursive(child);
+        const result = await processIndexRecursive(child, currentAsParent);
         if (result) childResults.push(result);
       }
 
@@ -298,6 +339,7 @@ export async function indexer(ctx: ConversionContext): Promise<void> {
         index.title,
         index.description,
         childResults,
+        parent,
       );
 
       // Write file
@@ -318,7 +360,7 @@ export async function indexer(ctx: ConversionContext): Promise<void> {
     }
 
     // It's an entity index - process it
-    return processEntityIndex(index, filename);
+    return processEntityIndex(index, filename, parent);
   }
 
   /**
@@ -327,6 +369,7 @@ export async function indexer(ctx: ConversionContext): Promise<void> {
   async function processEntityIndex(
     index: EntityIndexConfig,
     filename: string,
+    parent?: { title: string; filename: string },
   ): Promise<{ title: string; filename: string } | null> {
     // Must have a URL for entity indexes
     if (!index.url) {
@@ -336,6 +379,9 @@ export async function indexer(ctx: ConversionContext): Promise<void> {
     // Get entity type from URL
     const entityType = getEntityTypeFromUrl(index.url);
     if (!entityType) return null;
+
+    // Parse filters from original URL (before adding source filters)
+    const filters = parseUrlFilters(index.url);
 
     // Apply source filters if not already present
     const fetchUrl = applySourceFilters(index.url);
@@ -397,6 +443,8 @@ export async function indexer(ctx: ConversionContext): Promise<void> {
       index.description,
       entityType,
       resolvedEntities,
+      filters,
+      parent,
     );
 
     // Write file
@@ -418,23 +466,29 @@ export async function indexer(ctx: ConversionContext): Promise<void> {
     title: string,
     entityIndexes: Array<{ title: string; filename: string }>,
   ): Promise<void> {
-    // Get or assign filename for global index
-    let filename = mapping.mappings.global;
+    // Use pre-assigned filename (set during parent determination)
+    const filename = mapping.mappings.global;
     if (!filename) {
-      filename = `${idGenerator.generate()}.md`;
-      mapping.mappings.global = filename;
+      // This shouldn't happen as filename is set before processing
+      return;
     }
 
     // Build template context
+    // Sort sourcebooks by sourceId for consistent ordering
+    const sortedSourcebooks = [...(sourcebooks ?? [])].sort((a, b) => {
+      const idA = a.metadata.sourceId ?? Infinity;
+      const idB = b.metadata.sourceId ?? Infinity;
+      return idA - idB;
+    });
+
     const context: GlobalIndexTemplateContext = {
       title,
-      sourcebooks: sourcebooks
-        ? sourcebooks.map((sb) => ({
-            title: sb.title,
-            id: sb.id,
-          }))
-        : [],
+      date,
       entityIndexes,
+      sourcebooks: sortedSourcebooks.map((sb) => ({
+        title: sb.title,
+        id: sb.id,
+      })),
     };
 
     // Render template
@@ -457,8 +511,22 @@ export async function indexer(ctx: ConversionContext): Promise<void> {
   // Process entity indexes (only root-level indexes go to global index)
   const generatedIndexes: Array<{ title: string; filename: string }> = [];
 
+  // Determine global index as parent for top-level entity indexes
+  let globalParent: { title: string; filename: string } | undefined;
+  if (config.indexes.global.enabled) {
+    let globalFilename = mapping.mappings.global;
+    if (!globalFilename) {
+      globalFilename = `${idGenerator.generate()}.md`;
+      mapping.mappings.global = globalFilename;
+    }
+    globalParent = {
+      title: config.indexes.global.title,
+      filename: globalFilename,
+    };
+  }
+
   for (const indexConfig of config.indexes.entities) {
-    const result = await processIndexRecursive(indexConfig);
+    const result = await processIndexRecursive(indexConfig, globalParent);
     if (result) generatedIndexes.push(result);
   }
 

@@ -260,7 +260,13 @@ export interface FileTemplateContext {
 export interface EntityIndexTemplateContext {
   title: string;
   description?: string;
+  date: string;
   type: EntityType;
+  filters?: Record<string, string>;
+  parent?: {
+    title: string;
+    filename: string;
+  };
   entities: Array<{
     name: string;
     url: string;
@@ -274,6 +280,11 @@ export interface EntityIndexTemplateContext {
 export interface ParentIndexTemplateContext {
   title: string;
   description?: string;
+  date: string;
+  parent?: {
+    title: string;
+    filename: string;
+  };
   children: Array<{
     title: string;
     filename: string;
@@ -282,6 +293,7 @@ export interface ParentIndexTemplateContext {
 
 export interface GlobalIndexTemplateContext {
   title: string;
+  date: string;
   sourcebooks: Array<{
     title: string;
     id: string;

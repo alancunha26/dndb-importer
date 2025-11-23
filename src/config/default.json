@@ -32,8 +32,439 @@
   },
   "indexes": {
     "generate": false,
-    "global": { "enabled": true, "title": "Global Index" },
-    "entities": []
+    "global": { "enabled": true, "title": "Dungeon's & Dragons 5e (2024)" },
+    "entities": [
+      {
+        "title": "Classes",
+        "url": "https://www.dndbeyond.com/classes",
+        "description": "Character classes define your adventurer's capabilities, from martial prowess to spellcasting abilities."
+      },
+      {
+        "title": "Species",
+        "url": "https://www.dndbeyond.com/species",
+        "description": "Playable species that determine your character's innate traits and abilities."
+      },
+      {
+        "title": "Backgrounds",
+        "url": "https://www.dndbeyond.com/backgrounds?filter-partnered-content=f",
+        "description": "Backgrounds represent your character's history before becoming an adventurer."
+      },
+      {
+        "title": "Feats",
+        "url": "https://www.dndbeyond.com/feats?filter-partnered-content=f",
+        "description": "Special talents and abilities that grant unique capabilities beyond normal class features."
+      },
+      {
+        "title": "Spells",
+        "description": "Magical incantations that harness arcane, divine, and primal forces.",
+        "children": [
+          {
+            "title": "All Spells",
+            "url": "https://www.dndbeyond.com/spells?filter-partnered-content=f",
+            "description": "Complete list of all available spells across all classes and schools."
+          },
+          {
+            "title": "Spells by Class",
+            "description": "Spells organized by the class that can cast them.",
+            "children": [
+              {
+                "title": "Bard Spells",
+                "url": "https://www.dndbeyond.com/spells?filter-class=2190876&filter-partnered-content=f",
+                "description": "Spells available to bards, masters of music and magic."
+              },
+              {
+                "title": "Cleric Spells",
+                "url": "https://www.dndbeyond.com/spells?filter-class=2190877&filter-partnered-content=f",
+                "description": "Divine spells granted to clerics by their deities."
+              },
+              {
+                "title": "Druid Spells",
+                "url": "https://www.dndbeyond.com/spells?filter-class=2190878&filter-partnered-content=f",
+                "description": "Primal magic wielded by druids to command nature."
+              },
+              {
+                "title": "Paladin Spells",
+                "url": "https://www.dndbeyond.com/spells?filter-class=2190881&filter-partnered-content=f",
+                "description": "Sacred oaths that grant paladins divine spellcasting."
+              },
+              {
+                "title": "Ranger Spells",
+                "url": "https://www.dndbeyond.com/spells?filter-class=2190882&filter-partnered-content=f",
+                "description": "Nature magic available to rangers for hunting and survival."
+              },
+              {
+                "title": "Sorcerer Spells",
+                "url": "https://www.dndbeyond.com/spells?filter-class=2190884&filter-partnered-content=f",
+                "description": "Innate arcane power channeled by sorcerers."
+              },
+              {
+                "title": "Warlock Spells",
+                "url": "https://www.dndbeyond.com/spells?filter-class=2190885&filter-partnered-content=f",
+                "description": "Eldritch magic granted through otherworldly pacts."
+              },
+              {
+                "title": "Wizard Spells",
+                "url": "https://www.dndbeyond.com/spells?filter-class=2190886&filter-partnered-content=f",
+                "description": "Arcane spells mastered through study and intellect."
+              }
+            ]
+          },
+          {
+            "title": "Spells by School",
+            "description": "Spells organized by their school of magic.",
+            "children": [
+              {
+                "title": "Abjuration Spells",
+                "url": "https://www.dndbeyond.com/spells?filter-school=3&filter-partnered-content=f",
+                "description": "Protective magic that blocks, banishes, or wards."
+              },
+              {
+                "title": "Conjuration Spells",
+                "url": "https://www.dndbeyond.com/spells?filter-school=4&filter-partnered-content=f",
+                "description": "Magic that summons creatures or transports objects."
+              },
+              {
+                "title": "Divination Spells",
+                "url": "https://www.dndbeyond.com/spells?filter-school=5&filter-partnered-content=f",
+                "description": "Spells that reveal information and pierce illusions."
+              },
+              {
+                "title": "Enchantment Spells",
+                "url": "https://www.dndbeyond.com/spells?filter-school=6&filter-partnered-content=f",
+                "description": "Magic that influences minds and controls behavior."
+              },
+              {
+                "title": "Evocation Spells",
+                "url": "https://www.dndbeyond.com/spells?filter-school=7&filter-partnered-content=f",
+                "description": "Spells that manipulate energy to create powerful effects."
+              },
+              {
+                "title": "Illusion Spells",
+                "url": "https://www.dndbeyond.com/spells?filter-school=8&filter-partnered-content=f",
+                "description": "Magic that deceives the senses and creates phantasms."
+              },
+              {
+                "title": "Necromancy Spells",
+                "url": "https://www.dndbeyond.com/spells?filter-school=9&filter-partnered-content=f",
+                "description": "Dark magic that manipulates life force and undeath."
+              },
+              {
+                "title": "Transmutation Spells",
+                "url": "https://www.dndbeyond.com/spells?filter-school=10&filter-partnered-content=f",
+                "description": "Magic that transforms matter and alters physical forms."
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "title": "Items",
+        "description": "Gear, equipment, and magical treasures for adventurers.",
+        "children": [
+          {
+            "title": "Equipment",
+            "url": "https://www.dndbeyond.com/equipment?filter-partnered-content=f",
+            "description": "Mundane gear, weapons, armor, and adventuring supplies for your journey."
+          },
+          {
+            "title": "All Magic Items",
+            "url": "https://www.dndbeyond.com/magic-items?filter-partnered-content=f",
+            "description": "Complete catalog of all magical items across all types and rarities."
+          },
+          {
+            "title": "Magic Items by Type",
+            "description": "Magic items organized by their category.",
+            "children": [
+              {
+                "title": "Armors (Magic Items)",
+                "description": "Enchanted armor providing magical protection.",
+                "url": "https://www.dndbeyond.com/magic-items?filter-type=1&filter-partnered-content=f"
+              },
+              {
+                "title": "Potions (Magic Items)",
+                "description": "Magical liquids with temporary beneficial effects.",
+                "url": "https://www.dndbeyond.com/magic-items?filter-type=3&filter-partnered-content=f"
+              },
+              {
+                "title": "Rings (Magic Items)",
+                "description": "Magical rings worn for various enchantments.",
+                "url": "https://www.dndbeyond.com/magic-items?filter-type=4&filter-partnered-content=f"
+              },
+              {
+                "title": "Rods (Magic Items)",
+                "description": "Scepter-like items channeling magical power.",
+                "url": "https://www.dndbeyond.com/magic-items?filter-type=5&filter-partnered-content=f"
+              },
+              {
+                "title": "Scrolls (Magic Items)",
+                "description": "Spell scrolls containing single-use magic.",
+                "url": "https://www.dndbeyond.com/magic-items?filter-type=6&filter-partnered-content=f"
+              },
+              {
+                "title": "Staffs (Magic Items)",
+                "description": "Arcane implements wielded by spellcasters.",
+                "url": "https://www.dndbeyond.com/magic-items?filter-type=7&filter-partnered-content=f"
+              },
+              {
+                "title": "Wands (Magic Items)",
+                "description": "Slender rods that store and cast spells.",
+                "url": "https://www.dndbeyond.com/magic-items?filter-type=8&filter-partnered-content=f"
+              },
+              {
+                "title": "Weapons (Magic Items)",
+                "description": "Enchanted weapons with magical properties.",
+                "url": "https://www.dndbeyond.com/magic-items?filter-type=9&filter-partnered-content=f"
+              },
+              {
+                "title": "Wondrous (Magic Items)",
+                "description": "Miscellaneous magical items of various forms.",
+                "url": "https://www.dndbeyond.com/magic-items?filter-type=10&filter-partnered-content=f"
+              }
+            ]
+          },
+          {
+            "title": "Magic Items by Rarity",
+            "description": "Magic items organized by their rarity level.",
+            "children": [
+              {
+                "title": "Common (Magic Items)",
+                "description": "Easily found items with minor magical effects.",
+                "url": "https://www.dndbeyond.com/magic-items?filter-rarity=1&filter-partnered-content=f"
+              },
+              {
+                "title": "Uncommon (Magic Items)",
+                "description": "Somewhat rare items with useful enchantments.",
+                "url": "https://www.dndbeyond.com/magic-items?filter-rarity=2&filter-partnered-content=f"
+              },
+              {
+                "title": "Rare (Magic Items)",
+                "description": "Hard to find items with significant power.",
+                "url": "https://www.dndbeyond.com/magic-items?filter-rarity=3&filter-partnered-content=f"
+              },
+              {
+                "title": "Very Rare (Magic Items)",
+                "description": "Exceptionally scarce items of great magical might.",
+                "url": "https://www.dndbeyond.com/magic-items?filter-rarity=4&filter-partnered-content=f"
+              },
+              {
+                "title": "Legendary (Magic Items)",
+                "description": "Items of immense power known throughout the realms.",
+                "url": "https://www.dndbeyond.com/magic-items?filter-rarity=5&filter-partnered-content=f"
+              },
+              {
+                "title": "Artifact (Magic Items)",
+                "description": "Unique items of world-altering significance.",
+                "url": "https://www.dndbeyond.com/magic-items?filter-rarity=7&filter-partnered-content=f"
+              },
+              {
+                "title": "Varies Rarity (Magic Items)",
+                "description": "Items that exist in multiple rarity versions.",
+                "url": "https://www.dndbeyond.com/magic-items?filter-rarity=9&filter-partnered-content=f"
+              },
+              {
+                "title": "Unknown Rarity (Magic Items)",
+                "description": "Items with unspecified rarity classification.",
+                "url": "https://www.dndbeyond.com/magic-items?filter-rarity=10&filter-partnered-content=f"
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "title": "Bestiary",
+        "description": "Creatures, monsters, and adversaries that populate the worlds of D&D.",
+        "children": [
+          {
+            "title": "All Monsters",
+            "url": "https://www.dndbeyond.com/monsters?filter-partnered-content=f",
+            "description": "Complete collection of all creatures and monsters."
+          },
+          {
+            "title": "Monsters by CR",
+            "description": "Monsters organized by Challenge Rating.",
+            "url": "https://www.dndbeyond.com/monsters?filter-partnered-content=f"
+          },
+          {
+            "title": "Monsters by Type",
+            "description": "Monsters organized by their creature type.",
+            "children": [
+              {
+                "title": "Aberration Monsters",
+                "url": "https://www.dndbeyond.com/monsters?filter-type=1&filter-partnered-content=f",
+                "description": "Alien creatures from beyond the planes of existence."
+              },
+              {
+                "title": "Beast Monsters",
+                "url": "https://www.dndbeyond.com/monsters?filter-type=2&filter-partnered-content=f",
+                "description": "Natural animals and nonmagical creatures."
+              },
+              {
+                "title": "Celestial Monsters",
+                "url": "https://www.dndbeyond.com/monsters?filter-type=3&filter-partnered-content=f",
+                "description": "Divine beings from the Upper Planes."
+              },
+              {
+                "title": "Construct Monsters",
+                "url": "https://www.dndbeyond.com/monsters?filter-type=4&filter-partnered-content=f",
+                "description": "Magically created artificial beings."
+              },
+              {
+                "title": "Dragon Monsters",
+                "url": "https://www.dndbeyond.com/monsters?filter-type=6&filter-partnered-content=f",
+                "description": "Ancient winged reptilian creatures of great power."
+              },
+              {
+                "title": "Elemental Monsters",
+                "url": "https://www.dndbeyond.com/monsters?filter-type=7&filter-partnered-content=f",
+                "description": "Beings composed of elemental forces."
+              },
+              {
+                "title": "Fey Monsters",
+                "url": "https://www.dndbeyond.com/monsters?filter-type=8&filter-partnered-content=f",
+                "description": "Magical creatures tied to nature and the Feywild."
+              },
+              {
+                "title": "Fiend Monsters",
+                "url": "https://www.dndbeyond.com/monsters?filter-type=9&filter-partnered-content=f",
+                "description": "Evil creatures from the Lower Planes."
+              },
+              {
+                "title": "Giant Monsters",
+                "url": "https://www.dndbeyond.com/monsters?filter-type=10&filter-partnered-content=f",
+                "description": "Humanoid creatures of enormous size."
+              },
+              {
+                "title": "Humanoid Monsters",
+                "url": "https://www.dndbeyond.com/monsters?filter-type=11&filter-partnered-content=f",
+                "description": "Bipedal peoples including humans and other races."
+              },
+              {
+                "title": "Monstrosity Monsters",
+                "url": "https://www.dndbeyond.com/monsters?filter-type=13&filter-partnered-content=f",
+                "description": "Unnatural creatures not fitting other categories."
+              },
+              {
+                "title": "Ooze Monsters",
+                "url": "https://www.dndbeyond.com/monsters?filter-type=14&filter-partnered-content=f",
+                "description": "Amorphous creatures that dissolve and consume."
+              },
+              {
+                "title": "Plant Monsters",
+                "url": "https://www.dndbeyond.com/monsters?filter-type=15&filter-partnered-content=f",
+                "description": "Animated vegetation with monstrous properties."
+              },
+              {
+                "title": "Undead Monsters",
+                "url": "https://www.dndbeyond.com/monsters?filter-type=16&filter-partnered-content=f",
+                "description": "Creatures animated by necromantic energy."
+              }
+            ]
+          },
+          {
+            "title": "Monsters by Size",
+            "description": "Monsters organized by their size category.",
+            "children": [
+              {
+                "title": "Tiny Monsters",
+                "url": "https://www.dndbeyond.com/monsters?filter-size=2&filter-partnered-content=f",
+                "description": "Creatures occupying less than a 5-foot space."
+              },
+              {
+                "title": "Small Monsters",
+                "url": "https://www.dndbeyond.com/monsters?filter-size=3&filter-partnered-content=f",
+                "description": "Creatures occupying a 5-foot space."
+              },
+              {
+                "title": "Medium Monsters",
+                "url": "https://www.dndbeyond.com/monsters?filter-size=4&filter-partnered-content=f",
+                "description": "Human-sized creatures occupying a 5-foot space."
+              },
+              {
+                "title": "Large Monsters",
+                "url": "https://www.dndbeyond.com/monsters?filter-size=5&filter-partnered-content=f",
+                "description": "Creatures occupying a 10-foot space."
+              },
+              {
+                "title": "Huge Monsters",
+                "url": "https://www.dndbeyond.com/monsters?filter-size=6&filter-partnered-content=f",
+                "description": "Creatures occupying a 15-foot space."
+              },
+              {
+                "title": "Gargantuan Monsters",
+                "url": "https://www.dndbeyond.com/monsters?filter-size=7&filter-partnered-content=f",
+                "description": "Creatures occupying a 20-foot or larger space."
+              }
+            ]
+          },
+          {
+            "title": "Monsters by Habitat",
+            "description": "Monsters organized by the environments where they are typically found.",
+            "children": [
+              {
+                "title": "Any Habitat Monsters",
+                "url": "https://www.dndbeyond.com/monsters?filter-environment=13&filter-partnered-content=f",
+                "description": "Creatures found in any environment."
+              },
+              {
+                "title": "Arctic Monsters",
+                "url": "https://www.dndbeyond.com/monsters?filter-environment=1&filter-partnered-content=f",
+                "description": "Creatures adapted to frozen tundras and polar regions."
+              },
+              {
+                "title": "Coastal Monsters",
+                "url": "https://www.dndbeyond.com/monsters?filter-environment=2&filter-partnered-content=f",
+                "description": "Creatures dwelling along shorelines and beaches."
+              },
+              {
+                "title": "Desert Monsters",
+                "url": "https://www.dndbeyond.com/monsters?filter-environment=3&filter-partnered-content=f",
+                "description": "Creatures thriving in arid wastelands and dunes."
+              },
+              {
+                "title": "Forest Monsters",
+                "url": "https://www.dndbeyond.com/monsters?filter-environment=4&filter-partnered-content=f",
+                "description": "Creatures inhabiting woodlands and dense forests."
+              },
+              {
+                "title": "Grassland Monsters",
+                "url": "https://www.dndbeyond.com/monsters?filter-environment=5&filter-partnered-content=f",
+                "description": "Creatures roaming plains and open prairies."
+              },
+              {
+                "title": "Hill Monsters",
+                "url": "https://www.dndbeyond.com/monsters?filter-environment=6&filter-partnered-content=f",
+                "description": "Creatures found in hilly and rolling terrain."
+              },
+              {
+                "title": "Mountain Monsters",
+                "url": "https://www.dndbeyond.com/monsters?filter-environment=7&filter-partnered-content=f",
+                "description": "Creatures dwelling in high peaks and alpine regions."
+              },
+              {
+                "title": "Swamp Monsters",
+                "url": "https://www.dndbeyond.com/monsters?filter-environment=8&filter-partnered-content=f",
+                "description": "Creatures lurking in marshes and wetlands."
+              },
+              {
+                "title": "Underdark Monsters",
+                "url": "https://www.dndbeyond.com/monsters?filter-environment=9&filter-partnered-content=f",
+                "description": "Creatures from the vast underground realm."
+              },
+              {
+                "title": "Underwater Monsters",
+                "url": "https://www.dndbeyond.com/monsters?filter-environment=10&filter-partnered-content=f",
+                "description": "Creatures dwelling in oceans, lakes, and rivers."
+              },
+              {
+                "title": "Urban Monsters",
+                "url": "https://www.dndbeyond.com/monsters?filter-environment=11&filter-partnered-content=f",
+                "description": "Creatures found in cities and settlements."
+              }
+            ]
+          }
+        ]
+      }
+    ]
   },
   "links": {
     "resolveInternal": true,
@@ -53,6 +484,21 @@
       "/sources/dnd/free-rules/spells": "/sources/dnd/phb-2024/spells",
       "/sources/dnd/free-rules/the-multiverse": "/sources/dnd/phb-2024/the-multiverse",
       "/sources/dnd/free-rules/welcome-to-adventure": "/sources/dnd/phb-2024/welcome-to-adventure",
+
+      "/sources/dnd/basic-rules/character-classes": "/sources/dnd/phb-2024/character-classes",
+      "/sources/dnd/basic-rules/character-classes-continued": "/sources/dnd/phb-2024/character-classes-continued",
+      "/sources/dnd/basic-rules/character-origins": "/sources/dnd/phb-2024/character-origins",
+      "/sources/dnd/basic-rules/creating-a-character": "/sources/dnd/phb-2024/creating-a-character",
+      "/sources/dnd/basic-rules/creature-stat-blocks": "/sources/dnd/phb-2024/creature-stat-blocks",
+      "/sources/dnd/basic-rules/credits": "/sources/dnd/phb-2024/credits",
+      "/sources/dnd/basic-rules/equipment": "/sources/dnd/phb-2024/equipment",
+      "/sources/dnd/basic-rules/feats": "/sources/dnd/phb-2024/feats",
+      "/sources/dnd/basic-rules/playing-the-game": "/sources/dnd/phb-2024/playing-the-game",
+      "/sources/dnd/basic-rules/rules-glossary": "/sources/dnd/phb-2024/rules-glossary",
+      "/sources/dnd/basic-rules/spell-descriptions": "/sources/dnd/phb-2024/spell-descriptions",
+      "/sources/dnd/basic-rules/spells": "/sources/dnd/phb-2024/spells",
+      "/sources/dnd/basic-rules/the-multiverse": "/sources/dnd/phb-2024/the-multiverse",
+      "/sources/dnd/basic-rules/welcome-to-adventure": "/sources/dnd/phb-2024/welcome-to-adventure",
 
       "/sources/dnd/br-2024/character-classes": "/sources/dnd/phb-2024/character-classes",
       "/sources/dnd/br-2024/character-classes-continued": "/sources/dnd/phb-2024/character-classes-continued",

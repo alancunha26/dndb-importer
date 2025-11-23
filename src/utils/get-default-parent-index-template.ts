@@ -7,7 +7,18 @@ import type { MarkdownConfig } from "../types";
 export function getDefaultParentIndexTemplate(config: MarkdownConfig): string {
   const bullet = config.bulletMarker;
 
-  return `# {{{title}}}
+  return `---
+title: "{{{title}}}"
+date: {{date}}
+tags:
+  - dnd/index
+---
+
+# {{{title}}}
+{{#if parent}}
+
+← [Back to {{{parent.title}}}]({{parent.filename}})
+{{/if}}
 {{#if description}}
 
 {{{description}}}
