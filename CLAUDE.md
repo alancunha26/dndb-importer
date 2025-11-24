@@ -78,8 +78,8 @@ const ctx: ConversionContext = { config, tracker };
 
 await modules.scan(ctx); // 1. File discovery
 await modules.process(ctx); // 2. Parse all, then process + write
-await modules.resolve(ctx); // 3. Resolve links (optional)
-await modules.index(ctx); // 4. Generate entity indexes (optional)
+await modules.indexer(ctx); // 3. Generate entity indexes (optional)
+await modules.resolve(ctx); // 4. Resolve links (optional)
 modules.stats(tracker, verbose); // 5. Display statistics
 ```
 
@@ -99,20 +99,22 @@ modules.stats(tracker, verbose); // 5. Display statistics
    - Generates index file per sourcebook
    - Updates `ctx.files` with anchors, entities, and written status
 
-3. **Resolver** (`resolver.ts`)
-   - Creates `LinkResolver` class instance (`link-resolver.ts`)
-   - Resolves D&D Beyond links to local markdown links
-   - All URL normalization, aliasing, and resolution logic in LinkResolver
-   - Uses smart anchor matching with 12-step priority system
-   - See `docs/resolver.md` for complete algorithm
-
-4. **Indexer** (`indexer.ts`)
+3. **Indexer** (`indexer.ts`)
+   - Creates `LinkResolver` class instance (shared with resolver via context)
    - Fetches D&D Beyond listing pages
    - Parses entities (spells, monsters, items, etc.)
+   - Resolves entity URLs to local file links
    - Generates entity index files
    - Generates global index
    - Caches entity data in `indexes.json`
    - See `docs/indexer.md` for configuration
+
+4. **Resolver** (`resolver.ts`)
+   - Reuses `LinkResolver` instance from indexer (or creates if needed)
+   - Resolves D&D Beyond links to local markdown links
+   - All URL normalization, aliasing, and resolution logic in LinkResolver
+   - Uses smart anchor matching with 12-step priority system
+   - See `docs/resolver.md` for complete algorithm
 
 5. **Stats** (`stats.ts`)
    - Displays formatted summary with progress bars
@@ -165,6 +167,16 @@ Uses Handlebars with precedence: sourcebook-specific → global → built-in def
 - `file.md.hbs` - Individual chapter pages
 - `entity-index.md.hbs` - Entity index pages (also used for parent indexes with children)
 - `global-index.md.hbs` - Global index
+
+**Custom Handlebars helpers:**
+
+- `sortKeys` - Alphabetical sorting with optional priority keys
+- `sortNumeric` - Numeric sorting for integers and fractions (e.g., CR: 1/8, 1/4, 1/2, 1, 2)
+- `groupBy` - Group array by field path
+- `spellLevel` - Format spell level display
+- `spellSpecial` - Build spell special column (R=Ritual, C=Concentration)
+- Comparison helpers: `eq`, `ne`, `gt`, `lt`, `gte`, `lte`, `and`, `or`, `not`
+- String helpers: `capitalize`, `contains`
 
 See `docs/templates.md` for variables and examples.
 
@@ -274,6 +286,8 @@ import { loadConfig } from "./utils/config.js";
 
 - Nested lists fix: D&D Beyond uses `<ol><li>...</li><ul>...</ul></ol>` pattern
 - Moves misplaced lists into previous `<li>` element
+- Title extraction: Uses multiple selectors (longest match), then updates first H1 in content to match
+- This ensures navigation/index titles match file content titles
 
 **Current Turndown rules:**
 

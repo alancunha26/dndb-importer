@@ -259,6 +259,110 @@ Access custom fields in templates via `metadata`:
 {{/if}}
 ```
 
+## Custom Handlebars Helpers
+
+The converter provides custom Handlebars helpers for common template operations:
+
+### Sorting Helpers
+
+#### `sortKeys`
+
+Sort object keys alphabetically with optional priority keys.
+
+```handlebars
+{{#each (sortKeys (groupBy entities "metadata.tags") "Origin" "General")}}
+  ## {{{@key}}}
+  {{#each this}}
+    - {{{name}}}
+  {{/each}}
+{{/each}}
+```
+
+Sorts alphabetically, but "Origin" and "General" appear first in that order.
+
+#### `sortNumeric`
+
+Sort object keys numerically, handling both integers and fractions.
+
+```handlebars
+{{#each (sortNumeric (groupBy entities "metadata.cr"))}}
+  ## CR {{@key}}
+  {{#each this}}
+    - {{{name}}}
+  {{/each}}
+{{/each}}
+```
+
+Correctly sorts Challenge Ratings: 0, 1/8, 1/4, 1/2, 1, 2, ..., 30
+
+Also handles prefixes like "CR 1/8" or "Level 5" by extracting the numeric part.
+
+### Data Transformation
+
+#### `groupBy`
+
+Group array items by a field path.
+
+```handlebars
+{{#each (groupBy entities "metadata.school")}}
+  ## {{{@key}}} Spells
+  {{#each this}}
+    - {{{name}}}
+  {{/each}}
+{{/each}}
+```
+
+### Formatting Helpers
+
+#### `spellLevel`
+
+Format spell level for display.
+
+```handlebars
+{{spellLevel "cantrip"}} → "Cantrip"
+{{spellLevel "1"}}       → "1 Level"
+{{spellLevel "9"}}       → "9 Level"
+```
+
+#### `spellSpecial`
+
+Build spell special column (R=Ritual, C=Concentration).
+
+```handlebars
+{{spellSpecial metadata}} → "R, C"  (if both apply)
+{{spellSpecial metadata}} → "R"     (if only ritual)
+{{spellSpecial metadata}} → ""      (if neither)
+```
+
+### Comparison Helpers
+
+- `eq` - Equality: `{{#if (eq type "spells")}}`
+- `ne` - Not equal: `{{#if (ne status "completed")}}`
+- `gt` / `lt` - Greater/less than: `{{#if (gt count 10)}}`
+- `gte` / `lte` - Greater/less or equal
+- `and` / `or` - Logical operators: `{{#if (and resolved (eq type "spell"))}}`
+- `not` - Logical not: `{{#if (not resolved)}}`
+
+### String Helpers
+
+#### `capitalize`
+
+Capitalize first letter.
+
+```handlebars
+{{capitalize "fire"}} → "Fire"
+```
+
+#### `contains`
+
+Case-insensitive substring check.
+
+```handlebars
+{{#if (contains title "by CR")}}
+  Monsters grouped by Challenge Rating
+{{/if}}
+```
+
 ## Benefits
 
 - **Custom titles** - Override directory name with proper formatting

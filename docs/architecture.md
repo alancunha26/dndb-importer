@@ -73,29 +73,17 @@ For each file, perform the actual conversion:
 
 After all files are processed, generate a table of contents for each sourcebook using the index template.
 
-### Stage 3: Resolution
+### Stage 3: Indexing
 
-The resolver transforms D&D Beyond URLs into local Markdown links. This stage runs after all files are written because it needs the complete set of anchors from all files.
+The indexer generates entity indexes by fetching listing pages from D&D Beyond and creating navigable index files that link to converted content. This stage runs before resolution to allow entity index files to have their links resolved along with all other files.
 
 **Architecture:**
 
-The resolver module (`resolver.ts`) creates a `LinkResolver` instance (`link-resolver.ts`) that centralizes all resolution logic:
+The indexer module (`indexer.ts`) creates a `LinkResolver` instance (stored in context for sharing with resolver) that:
 
-- URL normalization and aliasing
-- Entity index building from file entities
-- URL map building (file URLs, book URLs)
-- Link classification (entity, source, internal anchor)
-- Smart anchor matching with 12-step priority
-
-The module handles file I/O while the class handles all resolution logic.
-
-See [Link Resolver](resolver.md) for detailed documentation of the resolution algorithm.
-
-**Output:** Markdown files updated with resolved local links.
-
-### Stage 4: Indexing
-
-The indexer generates entity indexes by fetching listing pages from D&D Beyond and creating navigable index files that link to converted content.
+- Builds entity index from file entities
+- Builds URL maps (file URLs, book URLs)
+- Resolves entity URLs to local files during index generation
 
 **Responsibilities:**
 
@@ -104,7 +92,7 @@ The indexer generates entity indexes by fetching listing pages from D&D Beyond a
 - For each configured entity index:
   - Fetch paginated listing pages from D&D Beyond
   - Parse entities using type-specific parsers (info cards, list rows, card grids)
-  - Resolve entities to local files using the entity index
+  - Resolve entities to local files using LinkResolver
   - Render index using Handlebars templates
 - Generate global index linking sourcebooks and entity indexes
 - Save updated cache to `indexes.json`
@@ -112,6 +100,26 @@ The indexer generates entity indexes by fetching listing pages from D&D Beyond a
 **Output:** Entity index files (spells, monsters, items, etc.) and global index file.
 
 See [Entity Indexer](indexer.md) for detailed documentation.
+
+### Stage 4: Resolution
+
+The resolver transforms D&D Beyond URLs into local Markdown links in all converted files (sourcebook files and entity indexes). This stage runs after indexing and after all files are written because it needs the complete set of anchors from all files.
+
+**Architecture:**
+
+The resolver module (`resolver.ts`) reuses the `LinkResolver` instance created by the indexer (or creates one if indexer was skipped). The class centralizes all resolution logic:
+
+- URL normalization and aliasing
+- Entity index building from file entities (already done by indexer)
+- URL map building (file URLs, book URLs) (already done by indexer)
+- Link classification (entity, source, internal anchor)
+- Smart anchor matching with 12-step priority
+
+The module handles file I/O while the class handles all resolution logic.
+
+See [Link Resolver](resolver.md) for detailed documentation of the resolution algorithm.
+
+**Output:** Markdown files updated with resolved local links.
 
 ### Stage 5: Statistics
 
