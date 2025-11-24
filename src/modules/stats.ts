@@ -202,22 +202,31 @@ function displayEntityIndexesSection(stats: ProcessingStats): void {
 
   console.log(sectionHeader("Entity Indexes"));
 
+  // Progress bar showing cache hit rate (if we have entity data)
+  if (totalEntities > 0) {
+    const bar = progressBar(stats.cachedEntities, totalEntities);
+    console.log(`   ${bar}`);
+  }
+
+  // Index files generated
   if (stats.entityIndexes > 0) {
     console.log(
-      statRow(chalk.cyan("◉"), "Generated", stats.entityIndexes, chalk.cyan),
+      statRow(
+        chalk.cyan("◉"),
+        "Files generated",
+        stats.entityIndexes,
+        chalk.cyan,
+      ),
     );
   }
 
+  // Entity data (from D&D Beyond listings)
   if (totalEntities > 0) {
-    // Progress bar showing fetched vs total
-    const bar = progressBar(stats.cachedEntities, totalEntities);
-    console.log(`   ${bar}`);
-
     if (stats.fetchedEntities > 0) {
       console.log(
         statRow(
           chalk.green("◉"),
-          "Fetched",
+          "Entities fetched",
           stats.fetchedEntities,
           chalk.green,
         ),
@@ -226,7 +235,12 @@ function displayEntityIndexesSection(stats: ProcessingStats): void {
 
     if (stats.cachedEntities > 0) {
       console.log(
-        statRow(chalk.cyan("◉"), "Cached", stats.cachedEntities, chalk.cyan),
+        statRow(
+          chalk.cyan("◉"),
+          "Entities cached",
+          stats.cachedEntities,
+          chalk.cyan,
+        ),
       );
     }
   }
