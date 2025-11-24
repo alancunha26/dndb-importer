@@ -83,6 +83,10 @@ function mergeConfig(
       },
       entities: override.indexes?.entities ?? base.indexes.entities,
     },
+    sources: {
+      ...base.sources,
+      ...override.sources,
+    },
   };
 }
 

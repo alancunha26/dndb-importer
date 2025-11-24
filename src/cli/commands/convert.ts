@@ -61,11 +61,11 @@ export async function convertCommand(opts: Options): Promise<void> {
     spinner.text = "Processing files...";
     await modules.process(ctx);
 
-    spinner.text = "Resolving links...";
-    await modules.resolve(ctx);
-
     spinner.text = "Generating indexes...";
     await modules.indexer(ctx);
+
+    spinner.text = "Resolving links...";
+    await modules.resolve(ctx);
 
     // Clear and stop spinner before displaying stats
     spinner.clear();

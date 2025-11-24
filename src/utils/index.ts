@@ -11,7 +11,6 @@ export { getEntityTypeFromUrl } from "./get-entity-type-from-url";
 
 // URL utilities
 export { isImageUrl } from "./is-image-url";
-export { parseEntityUrl } from "./parse-entity-url";
 
 // Path/filename utilities
 export { extractIdFromFilename } from "./extract-id-from-filename";

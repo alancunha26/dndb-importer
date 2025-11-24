@@ -39,7 +39,7 @@ export const MarkdownConfigSchema = z.object({
 
 export const HtmlConfigSchema = z.object({
   contentSelector: z.string(),
-  titleSelector: z.string(),
+  titleSelectors: z.array(z.string()),
   removeSelectors: z.array(z.string()),
 });
 
@@ -90,6 +90,12 @@ export const IndexesConfigSchema = z.object({
   entities: z.array(EntityIndexConfigSchema),
 });
 
+export const SourceDataSchema = z.object({
+  ddbSourceId: z.number(),
+}).passthrough(); // Allow additional custom fields
+
+export const SourcesSchema = z.record(z.string(), SourceDataSchema);
+
 export const ConversionConfigSchema = z.object({
   input: InputConfigSchema,
   output: OutputConfigSchema,
@@ -98,6 +104,7 @@ export const ConversionConfigSchema = z.object({
   html: HtmlConfigSchema,
   images: ImagesConfigSchema,
   links: LinksConfigSchema,
+  sources: SourcesSchema,
   indexes: IndexesConfigSchema,
 });
 
@@ -126,36 +133,25 @@ export type LinksConfig = z.infer<typeof LinksConfigSchema>;
 export type GlobalIndexConfig = z.infer<typeof GlobalIndexConfigSchema>;
 // EntityIndexConfig is already exported as a type above (for recursion)
 export type IndexesConfig = z.infer<typeof IndexesConfigSchema>;
+export type SourceData = z.infer<typeof SourceDataSchema>;
+export type Sources = z.infer<typeof SourcesSchema>;
 export type ConversionConfig = z.infer<typeof ConversionConfigSchema>;
 
 // ============================================================================
 // File Types
 // ============================================================================
 
-export const SourcebookMetadataSchema = z.looseObject({
-  title: z.string().optional(),
-  edition: z.string().optional(),
-  coverImage: z.string().optional(),
-  description: z.string().optional(),
-  author: z.string().optional(),
-  titles: z.array(z.string()).optional(),
-  sourceId: z.number().optional(),
-});
-
-export type SourcebookMetadata = z.infer<typeof SourcebookMetadataSchema>;
-
 export interface FileDescriptor {
-  sourcePath: string;
+  inputPath: string;
   relativePath: string;
   outputPath: string;
-  sourcebook: string;
+  directory: string;
   sourcebookId: string;
   filename: string;
-  uniqueId: string;
+  id: string;
   url?: string;
   title?: string;
   anchors?: FileAnchors;
-  entities?: ParsedEntityUrl[];
   content?: string;
   images?: string[];
   written?: boolean;
@@ -171,9 +167,9 @@ export interface TemplateSet {
 export interface SourcebookInfo {
   id: string;
   title: string;
-  sourcebook: string;
+  directory: string;
   outputPath: string;
-  metadata: SourcebookMetadata;
+  ddbSourceId?: number;
   templates: TemplateSet;
   bookUrl?: string;
 }
@@ -227,15 +223,11 @@ export type IndexesMapping = z.infer<typeof IndexesMappingSchema>;
 export interface IndexTemplateContext {
   title: string;
   date: string;
-  edition?: string;
-  description?: string;
-  author?: string;
   coverImage?: string;
-  metadata: SourcebookMetadata;
   files: Array<{
     title: string;
     filename: string;
-    uniqueId: string;
+    id: string;
   }>;
 }
 
@@ -245,9 +237,6 @@ export interface FileTemplateContext {
   tags: string[];
   sourcebook: {
     title: string;
-    edition?: string;
-    author?: string;
-    metadata: SourcebookMetadata;
   };
   navigation: {
     prev?: string;
@@ -376,14 +365,6 @@ export interface ProcessingStats {
 // ============================================================================
 // URL Types
 // ============================================================================
-
-export interface ParsedEntityUrl {
-  type: EntityType;
-  id: string;
-  slug?: string;
-  anchor?: string;
-  url: string;
-}
 
 export const ENTITY_TYPES = [
   "spells",

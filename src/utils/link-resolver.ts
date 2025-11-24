@@ -17,6 +17,27 @@ const ENTITY_PATH_PATTERN = new RegExp(`^\\/(${ENTITY_TYPES.join("|")})\\/`);
 const SOURCE_URL_PATTERN = /^\/sources\//;
 const LOCAL_MD_FILE_PATTERN = /^[a-z0-9]{4}\.md/;
 
+// Entities that have source available when indexing
+const ENTITY_TYPES_WITH_VALID_SOURCES = [
+  "species",
+  "classes",
+  "monsters",
+  "backgrounds",
+  "feats",
+];
+
+/**
+ * Options for link resolution
+ */
+export interface ResolveOptions {
+  /** The file ID containing the link (for same-file anchor detection) */
+  fileId?: string;
+  /** Restrict entity resolution to files in this sourcebook */
+  sourcebookId?: string;
+  /** Flag to know when is resolving during indexer */
+  indexing?: boolean;
+}
+
 /**
  * Unified link resolver for both entity and source URLs
  * Single source of truth for all link resolution, normalization, and formatting
@@ -30,6 +51,7 @@ export class LinkResolver {
   private fileIdMap: Map<string, FileDescriptor>;
   private entityIndex: Map<string, EntityMatch>;
   private excludeUrls: Set<string>;
+  private indexing: boolean = false;
 
   constructor(ctx: ConversionContext) {
     if (!ctx.files) {
@@ -44,7 +66,7 @@ export class LinkResolver {
     this.files = ctx.files.filter((f) => f.written);
 
     // Build lookup maps with aliased URLs (normalize all URLs upfront)
-    this.fileIdMap = new Map(this.files.map((f) => [f.uniqueId, f]));
+    this.fileIdMap = new Map(this.files.map((f) => [f.id, f]));
     this.excludeUrls = new Set(this.config.links.excludeUrls);
 
     // URL map: aliased page URL -> file
@@ -57,23 +79,6 @@ export class LinkResolver {
 
     // Build entityIndex from file entities
     this.entityIndex = new Map();
-    this.buildEntityIndex();
-  }
-
-  /**
-   * Build entityIndex from all file entities
-   * Called automatically in constructor
-   */
-  private buildEntityIndex(): void {
-    for (const file of this.files) {
-      if (!file.entities) continue;
-
-      for (const entity of file.entities) {
-        const aliased = this.getAlias(entity.url);
-        const match = this.resolveEntityInternal(aliased);
-        if (match) this.entityIndex.set(aliased, match);
-      }
-    }
   }
 
   /**
@@ -81,7 +86,10 @@ export class LinkResolver {
    * Main method for resolving links
    * Also adds resolved entities to the entityIndex
    */
-  resolve(url: string, text: string, fileId?: string): string {
+  resolve(url: string, text: string, options?: ResolveOptions): string {
+    const { fileId, sourcebookId, indexing } = options ?? {};
+    this.indexing = Boolean(indexing);
+
     // Don't resolve external URLs, images, etc.
     if (!this.shouldResolveUrl(url)) {
       return `[${text}](${url})`;
@@ -104,7 +112,7 @@ export class LinkResolver {
     let match: EntityMatch | null = null;
 
     if (this.isEntityUrl(path)) {
-      match = this.resolveEntity(path, anchor);
+      match = this.resolveEntity(path, sourcebookId);
     } else if (this.isSourceUrl(path)) {
       match = this.resolveSource(path, anchor);
     }
@@ -286,7 +294,7 @@ export class LinkResolver {
     const anchor = match.anchor.replace(/--(\d+)(?=\)|$)/g, "-$1");
 
     // If linking to same file, use just the anchor
-    if (fileId && match.fileId === fileId) {
+    if (fileId && fileId === match.fileId) {
       return anchor ? `[${text}](#${anchor})` : `[${text}](#)`;
     }
 
@@ -333,65 +341,60 @@ export class LinkResolver {
   /**
    * Resolve an entity URL (checks entityIndex first)
    */
-  private resolveEntity(path: string, anchor?: string): EntityMatch | null {
-    // First check entityIndex
+  private resolveEntity(
+    path: string,
+    sourcebookId?: string,
+  ): EntityMatch | null {
+    // First check entityIndex (only if not scoped to sourcebook)
     const existing = this.entityIndex.get(path);
-    if (existing) {
-      return {
-        fileId: existing.fileId,
-        anchor: anchor || existing.anchor,
-      };
-    }
+    if (existing) return existing;
 
-    // Fall back to internal resolution
-    const match = this.resolveEntityInternal(path);
-    if (match) {
-      return {
-        fileId: match.fileId,
-        anchor: anchor || match.anchor,
-      };
-    }
-
-    return null;
-  }
-
-  /**
-   * Internal entity resolution without checking entityIndex
-   */
-  private resolveEntityInternal(url: string): EntityMatch | null {
-    const entityType = getEntityTypeFromUrl(url);
+    // Extract entity type from url
+    const entityType = getEntityTypeFromUrl(path);
     if (!entityType) return null;
 
+    // Prevent matching when indexing and no sourcebook id is available
+    const isValidEntity = ENTITY_TYPES_WITH_VALID_SOURCES.includes(entityType);
+    if (this.indexing && isValidEntity && !sourcebookId) return null;
+
     // Extract slug from URL
-    const slug = url.split("/").pop()?.replace(/^\d+-/, "");
+    const slug = path.split("/").pop()?.replace(/^\d+-/, "");
     if (!slug) return null;
 
-    // Get target files for this entity type
-    const targetFiles = this.getTargetFiles(entityType);
-
-    // Find best match
+    // Get target files for this entity type and find best match
+    const targetFiles = this.getTargetFiles(entityType, sourcebookId);
     return this.findBestMatch(slug, targetFiles);
   }
 
   /**
    * Get target files for an entity type based on entityLocations config
    */
-  private getTargetFiles(entityType: EntityType): FileDescriptor[] {
+  private getTargetFiles(
+    entityType: EntityType,
+    sourcebookId?: string,
+  ): FileDescriptor[] {
     const { entityLocations } = this.config.links;
     const allowedPages = entityLocations[entityType];
 
-    if (!allowedPages) return this.files;
+    let result: FileDescriptor[] = this.files;
 
-    const result: FileDescriptor[] = [];
-    for (const page of allowedPages) {
-      for (const file of this.files) {
-        if (!file.url) continue;
-        const url = this.getAlias(file.url);
+    if (allowedPages) {
+      result = [];
+      for (const page of allowedPages) {
+        for (const file of this.files) {
+          if (!file.url) continue;
+          const url = this.getAlias(file.url);
 
-        if (url.startsWith(page)) {
-          result.push(file);
+          if (url.startsWith(page)) {
+            result.push(file);
+          }
         }
       }
+    }
+
+    // Filter by sourcebook if provided
+    if (sourcebookId) {
+      result = result.filter((f) => f.sourcebookId === sourcebookId);
     }
 
     return result;
@@ -414,12 +417,15 @@ export class LinkResolver {
       const result = findMatchingAnchor(slug, file.anchors.valid, maxMatchStep);
       if (result && (!bestMatch || result.step < bestMatch.step)) {
         bestMatch = {
-          fileId: file.uniqueId,
+          fileId: file.id,
           anchor: result.anchor,
           step: result.step,
         };
+
         // Short-circuit if we found an exact match (step 1)
-        if (result.step === 1) break;
+        if (result.step === 1) {
+          return bestMatch;
+        }
       }
     }
 
@@ -448,7 +454,7 @@ export class LinkResolver {
       const targetFile = this.fileUrlMap.get(path);
       if (targetFile) {
         return {
-          fileId: targetFile.uniqueId,
+          fileId: targetFile.id,
           anchor: "",
         };
       }
@@ -487,7 +493,7 @@ export class LinkResolver {
     }
 
     return {
-      fileId: targetFile.uniqueId,
+      fileId: targetFile.id,
       anchor: matchedAnchor,
     };
   }
