@@ -28,6 +28,7 @@ import {
   loadTemplate,
   getDefaultEntityIndexTemplate,
   getDefaultGlobalIndexTemplate,
+  LinkResolver,
 } from "../utils";
 import { getParser } from "../parsers";
 
@@ -72,11 +73,9 @@ export async function indexer(ctx: ConversionContext): Promise<void> {
 
   const { tracker, idGenerator, sourcebooks } = ctx;
 
-  if (!ctx.linkResolver) {
-    throw new Error("LinkResolver must be created by resolver before indexer");
-  }
-
-  const linkResolver = ctx.linkResolver;
+  // Create LinkResolver and store in context for pipeline sharing
+  const linkResolver = ctx.linkResolver ?? new LinkResolver(ctx);
+  if (!ctx.linkResolver) ctx.linkResolver = linkResolver;
 
   // Current date for frontmatter
   const date = new Date().toISOString().split("T")[0];
@@ -96,12 +95,12 @@ export async function indexer(ctx: ConversionContext): Promise<void> {
     idGenerator.register(globalId);
   }
 
-  // Collect sourceIds from converted sourcebooks for auto-filtering
+  // Collect ddbSourceIds from converted sourcebooks for auto-filtering
   const availableSourceIds: number[] = [];
   if (sourcebooks) {
     for (const sb of sourcebooks) {
-      if (sb.metadata.sourceId) {
-        availableSourceIds.push(sb.metadata.sourceId);
+      if (sb.ddbSourceId) {
+        availableSourceIds.push(sb.ddbSourceId);
       }
     }
   }
@@ -116,6 +115,29 @@ export async function indexer(ctx: ConversionContext): Promise<void> {
     globalTemplates?.globalIndex ?? null,
     getDefaultGlobalIndexTemplate(config.markdown),
   );
+
+  /**
+   * Normalize string for fuzzy matching
+   * Removes special characters, diacritics, and normalizes whitespace
+   */
+  function normalizeTitle(str: string): string {
+    return str
+      .toLowerCase()
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .replace(/[^a-z0-9\s]/g, "")
+      .replace(/\s+/g, " ")
+      .trim();
+  }
+
+  // Build normalized title → sourcebookId lookup map for fuzzy matching
+  const sourceTitleToId = new Map<string, string>();
+  if (sourcebooks) {
+    for (const sb of sourcebooks) {
+      const normalized = normalizeTitle(sb.title);
+      sourceTitleToId.set(normalized, sb.id);
+    }
+  }
 
   /**
    * Parse filter parameters from URL
@@ -171,10 +193,26 @@ export async function indexer(ctx: ConversionContext): Promise<void> {
    * Resolve parsed entities to local file links
    * Uses LinkResolver to handle aliasing, exclusions, and both entity/source URLs
    * Tracks resolved/unresolved statistics
+   *
+   * Fuzzy matches entity source metadata to sourcebooks to restrict resolution
+   * to files within the correct sourcebook for better accuracy
    */
   function resolveEntities(entities: ParsedEntity[]): ResolvedEntity[] {
     return entities.map((entity) => {
-      const link = linkResolver.resolve(entity.url, entity.name);
+      // Try to find matching sourcebook from entity's source metadata
+      let sourcebookId: string | undefined;
+      const { metadata, name, url } = entity;
+
+      if (metadata?.source) {
+        const normalizedSource = normalizeTitle(metadata.source);
+        sourcebookId = sourceTitleToId.get(normalizedSource);
+      }
+
+      const link = linkResolver.resolve(url, name, {
+        sourcebookId,
+        indexing: true,
+      });
+
       const resolved = link.includes(".md");
       return { ...entity, link, resolved };
     });
@@ -417,10 +455,10 @@ export async function indexer(ctx: ConversionContext): Promise<void> {
     }
 
     // Build template context
-    // Sort sourcebooks by sourceId for consistent ordering
+    // Sort sourcebooks by ddbSourceId for consistent ordering
     const sortedSourcebooks = [...(sourcebooks ?? [])].sort((a, b) => {
-      const idA = a.metadata.sourceId ?? Infinity;
-      const idB = b.metadata.sourceId ?? Infinity;
+      const idA = a.ddbSourceId ?? Infinity;
+      const idB = b.ddbSourceId ?? Infinity;
       return idA - idB;
     });
 

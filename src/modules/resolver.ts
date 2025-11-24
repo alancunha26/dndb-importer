@@ -31,8 +31,8 @@ export async function resolve(ctx: ConversionContext): Promise<void> {
 
   // Create LinkResolver and store in context for pipeline sharing
   // This also builds the entity index from file entities
-  const linkResolver = new LinkResolver(ctx);
-  ctx.linkResolver = linkResolver;
+  const linkResolver = ctx.linkResolver ?? new LinkResolver(ctx);
+  if (!ctx.linkResolver) ctx.linkResolver = linkResolver;
 
   /**
    * Resolve all markdown links in content
@@ -40,12 +40,12 @@ export async function resolve(ctx: ConversionContext): Promise<void> {
   function resolveContent(content: string, fileId: string): string {
     return content
       .split("\n")
-      .map((line) => {
+      .map((line) =>
         // Find all markdown links and resolve them
-        return line.replace(/\[([^\]]+)\]\(([^)]+)\)/g, (_match, text, url) => {
-          return linkResolver.resolve(url, text, fileId);
-        });
-      })
+        line.replace(/\[([^\]]+)\]\(([^)]+)\)/g, (_match, text, url) =>
+          linkResolver.resolve(url, text, { fileId }),
+        ),
+      )
       .join("\n");
   }
 
@@ -53,7 +53,7 @@ export async function resolve(ctx: ConversionContext): Promise<void> {
   for (const file of files) {
     try {
       const content = await readFile(file.outputPath, "utf-8");
-      const resolvedContent = resolveContent(content, file.uniqueId);
+      const resolvedContent = resolveContent(content, file.id);
 
       if (resolvedContent !== content) {
         await writeFile(file.outputPath, resolvedContent, "utf-8");
