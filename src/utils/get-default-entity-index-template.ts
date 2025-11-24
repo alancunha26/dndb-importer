@@ -48,7 +48,7 @@ ${bullet} [{{{title}}}]({{{filename}}})
 
 {{else if (eq type "monsters")}}
 {{#if (contains title "by CR")}}
-{{#each (sortKeys (groupBy entities "metadata.cr"))}}
+{{#each (sortNumeric (groupBy entities "metadata.cr"))}}
 ## CR {{@key}}
 
 | Name {{#unless ../filters.type}}| Type {{/unless}}{{#unless ../filters.size}}| Size {{/unless}}| Alignment |

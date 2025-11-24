@@ -91,6 +91,52 @@ Handlebars.registerHelper("sortKeys", (obj, ...args) => {
   return Object.fromEntries(sortedEntries);
 });
 
+// Register sortNumeric helper to sort object keys numerically
+// Handles fractions (1/8, 1/4, 1/2) and integers (0, 1, 2, 30)
+// Usage: {{#each (sortNumeric (groupBy entities "metadata.cr"))}}
+Handlebars.registerHelper("sortNumeric", (obj) => {
+  if (!obj || typeof obj !== "object") return obj;
+
+  /**
+   * Parse numeric value including fractions
+   * Returns null for non-numeric values
+   * Handles prefixes like "CR 1/8" or "Level 5"
+   */
+  const parseNumeric = (value: string): number | null => {
+    if (!value) return null;
+
+    // Extract the numeric part (handles "CR 1/8" → "1/8", "Level 5" → "5")
+    const match = value.match(/(\d+(?:\/\d+)?)/);
+    if (!match) return null;
+
+    const numericStr = match[1];
+
+    if (numericStr.includes("/")) {
+      const [num, den] = numericStr.split("/").map(Number);
+      if (isNaN(num) || isNaN(den) || den === 0) return null;
+      return num / den;
+    }
+    const parsed = Number(numericStr);
+    return isNaN(parsed) ? null : parsed;
+  };
+
+  const sortedEntries = Object.entries(obj).sort(([a], [b]) => {
+    const aNum = parseNumeric(a);
+    const bNum = parseNumeric(b);
+
+    // Both are numeric - sort numerically
+    if (aNum !== null && bNum !== null) return aNum - bNum;
+    // Only a is numeric - a comes first
+    if (aNum !== null) return -1;
+    // Only b is numeric - b comes first
+    if (bNum !== null) return 1;
+    // Neither is numeric - sort alphabetically as fallback
+    return a.localeCompare(b);
+  });
+
+  return Object.fromEntries(sortedEntries);
+});
+
 /**
  * Load and compile a template from file path or use default
  * Throws error if custom template fails to load
