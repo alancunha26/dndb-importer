@@ -484,7 +484,7 @@
     "generate": false,
     "global": {
       "enabled": true,
-      "title": "Dungeon's & Dragons 5e"
+      "title": "Dungeons & Dragons 5e"
     },
     "entities": [
       {
