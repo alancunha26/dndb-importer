@@ -34,7 +34,6 @@ The scanner discovers all HTML files and prepares them for processing.
 
 - Find HTML files in input directory using glob patterns
 - Group files by sourcebook (based on directory structure)
-- Load sourcebook metadata from `sourcebook.json` files
 - Detect custom templates (global and per-sourcebook)
 - Assign unique 4-character IDs to each file
 - Load or create persistent ID mappings
@@ -53,11 +52,12 @@ For each file, extract all metadata needed for the conversion:
 - Preprocess HTML structure to fix D&D Beyond patterns (e.g., incorrectly nested lists)
 - Extract page title using titleSelectors array (longest match wins), then update first H1 in content to match
 - Extract canonical URL for cross-reference resolution
+- Auto-detect sourcebook info (book URL, sourceId) from first file in each sourcebook
 - Build anchor mappings (HTML IDs to Markdown anchors)
 - Extract entity URLs from tooltip links (spells, monsters, items, etc.)
 - Collect image URLs for downloading
 
-After this pass, all files have their titles extracted, enabling correct navigation links.
+After this pass, all files have their titles extracted and sourcebook info detected, enabling correct navigation links and entity filtering.
 
 **Pass 2 - Conversion:**
 
@@ -253,7 +253,6 @@ All user-provided data is validated:
 
 - CLI options
 - Configuration files
-- Sourcebook metadata
 - Mapping files
 
 Validation uses Zod schemas that serve as both runtime validators and TypeScript type definitions (single source of truth).

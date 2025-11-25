@@ -394,16 +394,7 @@ npm run dndb-convert -- --input input --output output --refetch
 
 ### Source ID Filtering
 
-When sourcebooks include `sourceId` in their `sourcebook.json`, the indexer automatically filters listing URLs to only include entities from converted sourcebooks.
-
-**sourcebook.json:**
-
-```json
-{
-  "title": "Player's Handbook (2024)",
-  "sourceId": 145
-}
-```
+When the processor auto-detects `sourceId` from sourcebook HTML metadata, the indexer automatically filters listing URLs to only include entities from converted sourcebooks.
 
 **URL transformation:**
 

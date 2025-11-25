@@ -24,16 +24,12 @@ Generates the table of contents for each sourcebook.
 
 **Available Variables:**
 
-| Variable      | Type   | Description                            |
-| ------------- | ------ | -------------------------------------- |
-| `title`       | string | Sourcebook title                       |
-| `edition`     | string | Edition string (from metadata)         |
-| `description` | string | Sourcebook description (from metadata) |
-| `author`      | string | Author name (from metadata)            |
-| `coverImage`  | string | Cover image filename (from metadata)   |
-| `date`        | string | Current date (YYYY-MM-DD)              |
-| `files`       | array  | Array of file objects                  |
-| `metadata`    | object | Full metadata object                   |
+| Variable     | Type   | Description                    |
+| ------------ | ------ | ------------------------------ |
+| `title`      | string | Sourcebook title               |
+| `date`       | string | Current date (YYYY-MM-DD)      |
+| `coverImage` | string | Cover image filename (optional)|
+| `files`      | array  | Array of file objects          |
 
 **File Object Properties:**
 
@@ -60,12 +56,9 @@ Generates individual chapter/file pages.
 
 **Sourcebook Object Properties:**
 
-| Property   | Description          |
-| ---------- | -------------------- |
-| `title`    | Sourcebook title     |
-| `edition`  | Edition string       |
-| `author`   | Author name          |
-| `metadata` | Full metadata object |
+| Property | Description      |
+| -------- | ---------------- |
+| `title`  | Sourcebook title |
 
 **Navigation Object Properties:**
 
@@ -147,25 +140,17 @@ Generates the global index linking all sourcebooks and entity indexes.
 ### Index Template
 
 ```handlebars
---- title: "{{{title}}}" edition: "{{{edition}}}" date:
-{{date}}
---- #
-{{{title}}}
+---
+title: "{{{title}}}"
+date: {{date}}
+---
 
-{{#if edition}}
-  **Edition:**
-  {{{edition}}}
-{{/if}}
-
-{{#if description}}
-  >
-  {{{description}}}
-{{/if}}
+# {{{title}}}
 
 ## Contents
 
 {{#each files}}
-  {{@index}}. [{{{this.title}}}]({{{this.filename}}})
+{{@index}}. [{{{this.title}}}]({{{this.filename}}})
 {{/each}}
 ```
 
@@ -232,99 +217,6 @@ Double braces `{{variable}}` will HTML-escape the output.
 ```
 
 Access the index with `@index` and check for last item with `@last`.
-
-## Accessing Custom Metadata
-
-Any custom fields in `sourcebook.json` are accessible via the `metadata` object:
-
-```handlebars
-{{#if metadata.publisher}}
-  **Publisher:**
-  {{{metadata.publisher}}}
-{{/if}}
-
-{{#if metadata.isbn}}
-  **ISBN:**
-  {{{metadata.isbn}}}
-{{/if}}
-```
-
----
-
-# Sourcebook Metadata
-
-Each sourcebook can have an optional `sourcebook.json` file to customize output.
-
-## Location
-
-Place `sourcebook.json` alongside your HTML files:
-
-```
-input/
-  players-handbook/
-    sourcebook.json
-    01-intro.html
-    02-chapter-1.html
-```
-
-## Standard Fields
-
-```json
-{
-  "title": "Player's Handbook 2024",
-  "edition": "5th Edition (2024)",
-  "description": "Core rulebook for creating characters and playing D&D",
-  "author": "Wizards of the Coast",
-  "coverImage": "cover.png",
-  "titles": [
-    "Introduction",
-    "Chapter 1: Playing the Game",
-    "Chapter 2: Creating a Character"
-  ]
-}
-```
-
-All fields are optional.
-
-### Field Descriptions
-
-| Field         | Description                                 |
-| ------------- | ------------------------------------------- |
-| `title`       | Sourcebook title (overrides directory name) |
-| `edition`     | Edition string for templates                |
-| `description` | Sourcebook description                      |
-| `author`      | Author or publisher name                    |
-| `coverImage`  | Cover image filename                        |
-| `titles`      | Array of page titles in file sort order     |
-
-### Titles Array
-
-The `titles` array overrides automatic title extraction from HTML. Use this when D&D Beyond page titles are inconsistent or need cleanup.
-
-Titles must be in the same order as your HTML files (sorted alphabetically by filename).
-
-## Custom Fields
-
-Add any custom fields you need:
-
-```json
-{
-  "title": "Player's Handbook 2024",
-  "publisher": "Wizards of the Coast",
-  "isbn": "978-0-7869-6966-1",
-  "pageCount": 384,
-  "releaseDate": "2024-09-17"
-}
-```
-
-Access custom fields in templates via `metadata`:
-
-```handlebars
-{{#if metadata.isbn}}
-  **ISBN:**
-  {{{metadata.isbn}}}
-{{/if}}
-```
 
 ## Custom Handlebars Helpers
 
@@ -429,10 +321,3 @@ Case-insensitive substring check.
   Monsters grouped by Challenge Rating
 {{/if}}
 ```
-
-## Benefits
-
-- **Custom titles** - Override directory name with proper formatting
-- **Rich metadata** - Add edition, author, description for index pages
-- **Template flexibility** - Access any field in custom templates
-- **Portable** - Metadata travels with the sourcebook folder

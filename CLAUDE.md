@@ -86,21 +86,21 @@ Each module receives a `ConversionContext` object containing config, tracker, an
    - **Purpose**: Discover input files and assign persistent IDs
    - **What it does**:
      - Discovers HTML files using fast-glob
-     - Loads sourcebook metadata from `sourcebook.json`
+     - Groups files by sourcebook (directory structure)
      - Assigns unique 4-char IDs with persistent mapping (`files.json`)
      - Detects templates (global and per-sourcebook)
-     - Groups files by sourcebook
    - **Outputs**: `ctx.files`, `ctx.sourcebooks`, `ctx.globalTemplates`
 
 2. **Processor** (`processor.ts`)
    - **Purpose**: Convert HTML to markdown and extract metadata
    - **Why two-pass**: Pass 1 extracts all anchors/entities so they're available during Pass 2 processing
    - **What it does**:
-     - **Pass 1**: Parse all HTML, extract metadata (titles, anchors, entities, URLs, images)
+     - **Pass 1**: Parse all HTML, extract metadata (titles, anchors, entities, URLs, images, sourcebook info)
      - **Pass 2**: Download images, convert to markdown, render templates, write files
      - Generates index file per sourcebook
    - **Title handling**: Uses longest match from titleSelectors, then updates first H1 in content to match
-   - **Outputs**: Markdown files, sourcebook indexes, updates `ctx.files` with anchors/entities
+   - **Auto-detection**: Extracts book URL and sourceId from first file's HTML metadata (used for entity filtering)
+   - **Outputs**: Markdown files, sourcebook indexes, updates `ctx.files` and `ctx.sourcebooks` with metadata
 
 3. **Indexer** (`indexer.ts`)
    - **Purpose**: Generate navigable entity index files (spells, monsters, etc.)
