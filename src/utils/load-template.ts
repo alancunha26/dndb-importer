@@ -134,7 +134,11 @@ Handlebars.registerHelper("sortNumeric", (obj) => {
     return a.localeCompare(b);
   });
 
-  return Object.fromEntries(sortedEntries);
+  // JavaScript automatically sorts numeric string keys (like '0', '1', '2')
+  // before non-numeric keys (like '1/8', '1/4'), which breaks CR sorting.
+  // Solution: Return array of {key, value} objects to preserve sort order.
+  // Templates must use {{key}} instead of {{@key}} and {{value}} instead of {{this}}.
+  return sortedEntries.map(([key, value]) => ({ key, value }));
 });
 
 /**

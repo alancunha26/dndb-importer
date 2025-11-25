@@ -47,9 +47,9 @@ ${bullet} {{{link}}}
 {{else if (eq type "monsters")}}
 {{#if (contains title "by CR")}}
 {{#each (sortNumeric (groupBy entities "metadata.cr"))}}
-## CR {{@key}}
+## CR {{key}}
 
-{{#each this}}
+{{#each value}}
 {{#if resolved}}
 ${bullet} {{{link}}}
 {{/if}}
