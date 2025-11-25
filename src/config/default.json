@@ -482,7 +482,10 @@
   },
   "indexes": {
     "generate": false,
-    "global": { "enabled": true, "title": "Dungeon's & Dragons 5e (2024)" },
+    "global": {
+      "enabled": true,
+      "title": "Dungeon's & Dragons 5e"
+    },
     "entities": [
       {
         "title": "Classes",
