@@ -51,7 +51,7 @@ For each file, extract all metadata needed for the conversion:
 
 - Parse HTML and select main content area
 - Preprocess HTML structure to fix D&D Beyond patterns (e.g., incorrectly nested lists)
-- Extract page title using priority: metadata array → title selector → first H1
+- Extract page title using titleSelectors array (longest match wins), then update first H1 in content to match
 - Extract canonical URL for cross-reference resolution
 - Build anchor mappings (HTML IDs to Markdown anchors)
 - Extract entity URLs from tooltip links (spells, monsters, items, etc.)

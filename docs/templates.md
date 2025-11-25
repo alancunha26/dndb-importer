@@ -41,7 +41,7 @@ Generates the table of contents for each sourcebook.
 | ---------- | --------------------- |
 | `title`    | File title            |
 | `filename` | Output filename       |
-| `uniqueId` | 4-character unique ID |
+| `id`       | 4-character unique ID |
 
 ### File Template (`file.md.hbs`)
 
@@ -74,6 +74,73 @@ Generates individual chapter/file pages.
 | `prev`   | Previous file link (markdown) |
 | `index`  | Index file link (markdown)    |
 | `next`   | Next file link (markdown)     |
+
+### Entity Index Template (`entity-index.md.hbs`)
+
+Generates entity indexes (spells, monsters, items, etc.) or hierarchical parent indexes linking to child indexes.
+
+**Available Variables (with entities):**
+
+| Variable      | Type   | Description                                  |
+| ------------- | ------ | -------------------------------------------- |
+| `title`       | string | Index title                                  |
+| `description` | string | Index description (optional)                 |
+| `type`        | string | Entity type ("spells", "monsters", etc.)     |
+| `entities`    | array  | Array of entity objects                      |
+
+**Entity Object Properties:**
+
+| Property   | Type    | Description                                    |
+| ---------- | ------- | ---------------------------------------------- |
+| `name`     | string  | Entity name                                    |
+| `url`      | string  | Original D&D Beyond URL                        |
+| `metadata` | object  | Entity metadata (level, CR, rarity, etc.)      |
+| `fileId`   | string  | Local file ID (if resolved)                    |
+| `anchor`   | string  | Markdown anchor (if resolved)                  |
+| `resolved` | boolean | Whether entity was found in converted files    |
+
+**Available Variables (with children - hierarchical indexes):**
+
+| Variable      | Type   | Description                                  |
+| ------------- | ------ | -------------------------------------------- |
+| `title`       | string | Index title                                  |
+| `description` | string | Index description (optional)                 |
+| `children`    | array  | Array of child index objects                 |
+
+**Child Index Object Properties:**
+
+| Property   | Description           |
+| ---------- | --------------------- |
+| `title`    | Child index title     |
+| `filename` | Child index filename  |
+
+Note: The same template is used for both entity lists and hierarchical indexes. Check for `entities` vs `children` to render appropriately.
+
+### Global Index Template (`global-index.md.hbs`)
+
+Generates the global index linking all sourcebooks and entity indexes.
+
+**Available Variables:**
+
+| Variable        | Type   | Description                      |
+| --------------- | ------ | -------------------------------- |
+| `title`         | string | Global index title               |
+| `sourcebooks`   | array  | Array of sourcebook objects      |
+| `entityIndexes` | array  | Array of entity index objects    |
+
+**Sourcebook Object Properties:**
+
+| Property | Description           |
+| -------- | --------------------- |
+| `title`  | Sourcebook title      |
+| `id`     | 4-character unique ID |
+
+**Entity Index Object Properties:**
+
+| Property   | Description           |
+| ---------- | --------------------- |
+| `title`    | Entity index title    |
+| `filename` | Entity index filename |
 
 ## Example Templates
 

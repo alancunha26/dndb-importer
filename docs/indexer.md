@@ -13,26 +13,35 @@
 
 ## Overview
 
-The Indexer module generates entity indexes by fetching listing pages from D&D Beyond, parsing them, and creating navigable index files. It runs AFTER the resolver has processed all files, enabling entity resolution to local file links.
+The Indexer module generates entity indexes by fetching listing pages from D&D Beyond, parsing them, and creating navigable index files. It runs BEFORE the resolver (after the processor), creating a `LinkResolver` instance that enables entity resolution to local file links. The resolver then reuses this LinkResolver instance to resolve links in all files.
 
 ## Processing Flow
 
 ```
-1. Resolver completes → All files written with resolved links
+1. Processor completes → All files written to disk with:
+   - FileAnchors (valid anchors + HTML ID mappings)
+   - Entity URLs extracted from tooltip links
 
 2. Indexer runs:
-   a. Load existing indexes.json mapping (IDs, cache)
-   b. Collect sourceIds from converted sourcebooks
-   c. Load templates (global or default)
-   d. For each entity index config:
+   a. Create LinkResolver instance (stores in ctx.linkResolver for sharing), which:
+      - Builds URL maps (file URL → file, book URL → sourcebook)
+      - Builds entity index from file entities (entity URL → file location)
+   b. Load existing indexes.json mapping (IDs, cache)
+   c. Collect sourceIds from converted sourcebooks
+   d. Load templates (global or default)
+   e. For each entity index config:
       - Apply source filters to URL
       - Fetch listing pages (or use cache)
       - Store entities in global map (deduplicated)
-      - Resolve entities to local files
+      - Resolve entities to local files using LinkResolver
       - Render template with context
       - Write index file
-   e. Generate global index (if enabled)
-   f. Save updated indexes.json
+   f. Generate global index (if enabled)
+   g. Save updated indexes.json
+
+3. Resolver runs:
+   - Reuses LinkResolver from ctx.linkResolver
+   - Resolves links in all files (sourcebooks + entity indexes)
 ```
 
 ## Entity Types and Parsers
@@ -210,11 +219,10 @@ Create hierarchical index structures:
 
 ### Template Types
 
-| Template     | File                  | Purpose                                    |
-| ------------ | --------------------- | ------------------------------------------ |
-| Entity Index | `entity-index.md.hbs` | Lists of entities (spells, monsters, etc.) |
-| Parent Index | `parent-index.md.hbs` | Links to child indexes                     |
-| Global Index | `global-index.md.hbs` | Links to sourcebooks and entity indexes    |
+| Template     | File                  | Purpose                                                              |
+| ------------ | --------------------- | -------------------------------------------------------------------- |
+| Entity Index | `entity-index.md.hbs` | Lists of entities (spells, monsters, etc.) or links to child indexes |
+| Global Index | `global-index.md.hbs` | Links to sourcebooks and entity indexes                              |
 
 ### Template Precedence
 
@@ -223,7 +231,7 @@ Create hierarchical index structures:
 
 ### Template Context
 
-**Entity Index:**
+**Entity Index (with entities):**
 
 ```typescript
 {
@@ -241,7 +249,7 @@ Create hierarchical index structures:
 }
 ```
 
-**Parent Index:**
+**Entity Index (with children - for hierarchical indexes):**
 
 ```typescript
 {
@@ -253,6 +261,8 @@ Create hierarchical index structures:
   }>;
 }
 ```
+
+Note: The same `entity-index.md.hbs` template is used for both cases. Templates can check for `entities` vs `children` to render appropriately.
 
 **Global Index:**
 
@@ -433,20 +443,13 @@ Page 1 of 5: [1] [2] [3] [4] [5] [→]
 
 ### Fetching
 
-All pages are fetched sequentially and entities combined:
+All pages are fetched sequentially and entities combined.
 
-```typescript
-// First page
-const html = await fetchListingPage(url);
-const lastPage = detectLastPage(html);
-
-// Remaining pages
-for (let page = 2; page <= lastPage; page++) {
-  const pageUrl = setPageParam(url, page);
-  const pageHtml = await fetchListingPage(pageUrl);
-  // ... parse and combine
-}
-```
+The indexer:
+1. Fetches the first page and detects the last page number from pagination elements
+2. Iterates through remaining pages (2 through last)
+3. Fetches each page's HTML
+4. Parses entities from each page and combines them into a single list
 
 ## Entity Resolution
 
@@ -454,7 +457,7 @@ for (let page = 2; page <= lastPage; page++) {
 
 1. Parse entities from listing page
 2. Apply URL aliases
-3. Look up in `ctx.entityIndex` (built by resolver)
+3. Look up using LinkResolver (built during indexer initialization)
 4. If found: include `fileId` and `anchor`
 5. If not found: mark as unresolved
 
