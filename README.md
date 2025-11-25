@@ -9,7 +9,7 @@ Convert D&D Beyond HTML sourcebooks to clean, structured Markdown files.
 - Navigation links between chapters (prev/index/next)
 - D&D-specific formatting (stat blocks, spell descriptions, tables)
 - Cross-reference resolution between books
-- Entity indexes (spells, monsters, items) with customizable templates
+- Entity indexes (spells, monsters, items) with simple list defaults and customizable templates
 - Customizable Handlebars templates
 - Memory-efficient streaming pipeline
 
@@ -62,7 +62,6 @@ Place downloaded HTML files in directories by sourcebook:
 ```
 input/
   players-handbook/
-    sourcebook.json         # Optional metadata
     01-introduction.html
     02-chapter-1.html
     ...
@@ -130,21 +129,39 @@ Two template types:
 
 See [docs/templates.md](docs/templates.md) for available variables and examples.
 
-## Sourcebook Metadata
+## Custom Metadata
 
-Add `sourcebook.json` to customize sourcebook output:
+Add custom fields to sourcebooks via configuration. Any custom fields you add will be available in templates:
 
 ```json
 {
-  "title": "Player's Handbook 2024",
-  "edition": "5th Edition (2024)",
-  "description": "Core rulebook for creating characters",
-  "author": "Wizards of the Coast",
-  "coverImage": "cover.png"
+  "sources": {
+    "phb-2024": {
+      "ddbSourceId": 145,
+      "edition": "5th Edition (2024)",
+      "description": "Core rulebook for creating characters",
+      "author": "Wizards of the Coast",
+      "publisher": "Wizards of the Coast"
+    }
+  }
 }
 ```
 
-All fields are optional and accessible in templates via `metadata`.
+Access custom metadata in templates:
+
+```handlebars
+{{!-- In index.md.hbs --}}
+{{#if metadata.edition}}
+**Edition:** {{{metadata.edition}}}
+{{/if}}
+
+{{!-- In file.md.hbs --}}
+{{#if sourcebook.metadata.author}}
+author: "{{{sourcebook.metadata.author}}}"
+{{/if}}
+```
+
+See [docs/configuration.md](docs/configuration.md) and [docs/templates.md](docs/templates.md) for details.
 
 ## Development
 
