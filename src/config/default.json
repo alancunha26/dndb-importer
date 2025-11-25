@@ -25,6 +25,9 @@
       "style",
       "script",
       "noscript",
+      ".visually-hidden",
+      "[aria-hidden='true']",
+      ".p-article-title",
       ".fraif-chapter-number-container",
       ".astarion-chapter-number-container"
     ]

@@ -189,12 +189,20 @@ export async function process(ctx: ConversionContext): Promise<void> {
       }
     }
 
+    // Remove all title selector elements from content to avoid duplicates
+    for (const selector of config.html.titleSelectors) {
+      content.find(selector).remove();
+    }
+
     // Update first H1 in content to match extracted title
     // This ensures the file content matches the navigation title
     if (title) {
       const firstH1 = content.find("h1").first();
       if (firstH1.length > 0) {
         firstH1.text(title);
+      } else {
+        // If no H1 exists, prepend one
+        content.prepend(`<h1>${title}</h1>`);
       }
     }
 

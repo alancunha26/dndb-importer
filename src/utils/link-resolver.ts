@@ -225,12 +225,13 @@ export class LinkResolver {
 
   /**
    * Normalize anchor to markdown format
+   * Preserves Unicode letters to match GFM behavior
    */
   private normalizeAnchor(anchor: string): string {
     return anchor
       .replace(/([a-z])([A-Z])/g, "$1-$2")
       .toLowerCase()
-      .replace(/[^a-z0-9-]/g, "-")
+      .replace(/[^\p{L}\p{N}-]/gu, "-") // Keep Unicode letters and numbers
       .replace(/-+/g, "-")
       .replace(/^-|-$/g, "");
   }
@@ -269,7 +270,20 @@ export class LinkResolver {
       return `[${text}](#${htmlId})`;
     }
 
-    const markdownAnchor = file.anchors.htmlIdToAnchor[htmlId];
+    // Priority 1: Direct HTML ID lookup
+    let markdownAnchor: string | undefined = file.anchors.htmlIdToAnchor[htmlId];
+
+    // Priority 2: Smart matching (for links like #Red Knight that aren't valid HTML IDs)
+    if (!markdownAnchor) {
+      const normalized = this.normalizeAnchor(htmlId);
+      const result = findMatchingAnchor(
+        normalized,
+        file.anchors.valid,
+        this.config.links.maxMatchStep,
+      );
+      markdownAnchor = result?.anchor;
+    }
+
     if (markdownAnchor) {
       this.tracker.incrementLinksResolved();
       // Convert internal --N notation to standard -N for markdown output
