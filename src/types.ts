@@ -172,6 +172,7 @@ export interface SourcebookInfo {
   ddbSourceId?: number;
   templates: TemplateSet;
   bookUrl?: string;
+  metadata?: Record<string, unknown>;
 }
 
 export interface FileAnchors {
@@ -229,6 +230,7 @@ export interface IndexTemplateContext {
     filename: string;
     id: string;
   }>;
+  metadata?: Record<string, unknown>;
 }
 
 export interface FileTemplateContext {
@@ -237,6 +239,7 @@ export interface FileTemplateContext {
   tags: string[];
   sourcebook: {
     title: string;
+    metadata?: Record<string, unknown>;
   };
   navigation: {
     prev?: string;

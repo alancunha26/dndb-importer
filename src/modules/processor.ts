@@ -349,6 +349,7 @@ export async function process(ctx: ConversionContext): Promise<void> {
       tags: ["dnd5e/chapter"],
       sourcebook: {
         title: sourcebook.title,
+        metadata: sourcebook.metadata,
       },
       navigation: buildNavigation(file),
       content: markdown,
@@ -421,9 +422,10 @@ export async function process(ctx: ConversionContext): Promise<void> {
       const sbFiles = files.filter((f) => f.sourcebookId === sourcebook.id);
 
       const context: IndexTemplateContext = {
+        coverImage,
         title: sourcebook.title,
         date: new Date().toISOString().split("T")[0],
-        coverImage,
+        metadata: sourcebook.metadata,
         files: sbFiles.map((file) => ({
           title: file.title || "",
           filename: `${file.id}.md`,
@@ -467,12 +469,18 @@ export async function process(ctx: ConversionContext): Promise<void> {
         sourcebook.title = bookTitle;
       }
 
-      // Auto-detect ddbSourceId from bookUrl slug
+      // Auto-detect source metadata from bookUrl slug
       if (bookUrl && !sourcebook.ddbSourceId) {
         const slug = extractSlugFromUrl(bookUrl);
         if (slug) {
           const source = getSourceBySlug(slug);
-          if (source) sourcebook.ddbSourceId = source.ddbSourceId;
+          if (source) {
+            const { ddbSourceId, ...customMetadata } = source;
+            sourcebook.ddbSourceId = ddbSourceId;
+            if (Object.keys(customMetadata).length > 0) {
+              sourcebook.metadata = customMetadata;
+            }
+          }
         }
       }
     } catch (error) {

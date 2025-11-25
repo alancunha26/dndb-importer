@@ -24,12 +24,13 @@ Generates the table of contents for each sourcebook.
 
 **Available Variables:**
 
-| Variable     | Type   | Description                    |
-| ------------ | ------ | ------------------------------ |
-| `title`      | string | Sourcebook title               |
-| `date`       | string | Current date (YYYY-MM-DD)      |
-| `coverImage` | string | Cover image filename (optional)|
-| `files`      | array  | Array of file objects          |
+| Variable     | Type   | Description                                 |
+| ------------ | ------ | ------------------------------------------- |
+| `title`      | string | Sourcebook title                            |
+| `date`       | string | Current date (YYYY-MM-DD)                   |
+| `coverImage` | string | Cover image filename (optional)             |
+| `files`      | array  | Array of file objects                       |
+| `metadata`   | object | Custom metadata from sources config (optional) |
 
 **File Object Properties:**
 
@@ -56,9 +57,10 @@ Generates individual chapter/file pages.
 
 **Sourcebook Object Properties:**
 
-| Property | Description      |
-| -------- | ---------------- |
-| `title`  | Sourcebook title |
+| Property   | Description                                        |
+| ---------- | -------------------------------------------------- |
+| `title`    | Sourcebook title                                   |
+| `metadata` | Custom metadata from sources config (optional)     |
 
 **Navigation Object Properties:**
 
@@ -217,6 +219,47 @@ Double braces `{{variable}}` will HTML-escape the output.
 ```
 
 Access the index with `@index` and check for last item with `@last`.
+
+## Accessing Custom Metadata
+
+Custom metadata fields from the `sources` configuration are available in templates via the `metadata` object.
+
+**Configuration** (in config file or `~/.config/dndb-importer/config.json`):
+
+```json
+{
+  "sources": {
+    "phb-2024": {
+      "ddbSourceId": 145,
+      "edition": "5th Edition (2024)",
+      "author": "Wizards of the Coast",
+      "isbn": "978-0-7869-6966-1"
+    }
+  }
+}
+```
+
+**Index Template Usage:**
+
+```handlebars
+{{#if metadata.edition}}
+**Edition:** {{{metadata.edition}}}
+{{/if}}
+
+{{#if metadata.author}}
+**Author:** {{{metadata.author}}}
+{{/if}}
+```
+
+**File Template Usage:**
+
+```handlebars
+{{#if sourcebook.metadata.isbn}}
+**ISBN:** {{{sourcebook.metadata.isbn}}}
+{{/if}}
+```
+
+See [configuration.md](configuration.md#sourcebook-metadata) for complete documentation on custom metadata.
 
 ## Custom Handlebars Helpers
 
