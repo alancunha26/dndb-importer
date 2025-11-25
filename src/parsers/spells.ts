@@ -10,7 +10,7 @@ export const spellsParser: EntityParser = {
     const $ = cheerio.load(html);
     const entities: ParsedEntity[] = [];
 
-    $('div.info[data-slug]').each((_, element) => {
+    $("div.info[data-slug]").each((_, element) => {
       const $el = $(element);
 
       // Extract name and URL from the link
@@ -22,10 +22,38 @@ export const spellsParser: EntityParser = {
 
       // Extract metadata
       const level = $el.find(".spell-level span").first().text().trim();
-      const school = $el.find(".spell-school .school").attr("class")?.split(" ")[1] || "";
-      const castingTime = $el.find(".spell-cast-time span").first().text().trim();
+      const school =
+        $el.find(".spell-school .school").attr("class")?.split(" ")[1] || "";
+      const castingTime = $el
+        .find(".spell-cast-time span")
+        .first()
+        .text()
+        .trim();
       const duration = $el.find(".spell-duration span").first().text().trim();
-      const range = $el.find(".spell-range .range-distance").first().text().trim();
+      const range =
+        $el.find(".spell-range .range-distance").first().text().trim() ||
+        $el.find(".spell-range span").first().text().trim();
+
+      // Additional metadata
+      const concentration =
+        $el.find(".i-concentration").length > 0 ? "Yes" : "";
+      const ritual = $el.find(".i-ritual").length > 0 ? "Yes" : "";
+
+      // Components are in the spell-name row after the school
+      const $nameRow = $el.find(".spell-name");
+      const components = $nameRow.find("span > span").last().text().trim();
+
+      // Area of effect - extract size and shape from icon class
+      const $aoe = $el.find(".aoe-size");
+      let area = "";
+      if ($aoe.length) {
+        const sizeText = $aoe.text().trim().replace(/[()*]/g, "").trim();
+        const $icon = $aoe.find("i[class*='i-aoe-']");
+        const iconClass = $icon.attr("class") || "";
+        const shapeMatch = iconClass.match(/i-aoe-(\w+)/);
+        const shape = shapeMatch ? shapeMatch[1] : "";
+        area = shape ? `${sizeText} ${shape}` : sizeText;
+      }
 
       entities.push({
         name,
@@ -36,6 +64,10 @@ export const spellsParser: EntityParser = {
           castingTime,
           duration,
           range,
+          concentration,
+          ritual,
+          components,
+          area,
         },
       });
     });

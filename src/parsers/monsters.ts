@@ -23,6 +23,7 @@ export const monstersParser: EntityParser = {
       // Extract metadata
       const cr = $el.find(".monster-challenge span").first().text().trim();
       const type = $el.find(".monster-type .type").first().text().trim();
+      const subtype = $el.find(".monster-type .subtype").first().text().trim().replace(/^\(|\)$/g, "");
       const size = $el.find(".monster-size span").first().text().trim();
       const alignment = $el.find(".monster-alignment span").first().text().trim();
       const source = $el.find(".monster-name .source").first().text().trim();
@@ -33,6 +34,7 @@ export const monstersParser: EntityParser = {
         metadata: {
           cr,
           type,
+          subtype,
           size,
           alignment,
           source,

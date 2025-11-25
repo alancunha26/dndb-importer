@@ -5,7 +5,6 @@ import type { MarkdownConfig } from "../types";
  * Generates sourcebook index page with table of contents
  */
 export function getDefaultIndexTemplate(config: MarkdownConfig): string {
-  const em = config.emphasis;
   const bullet = config.bulletMarker;
   const hr = config.horizontalRule;
 
@@ -17,20 +16,12 @@ tags:
 ---
 
 # {{{title}}}
-{{#if author}}
-
-${em}by {{{author}}}${em}
-{{/if}}
 {{#if coverImage}}
 
 ![{{{title}}} Cover]({{{coverImage}}})
 {{/if}}
 
 ## Contents
-{{#if description}}
-
-> {{{description}}}
-{{/if}}
 
 {{#each files}}
 ${bullet} [{{{this.title}}}]({{{this.filename}}})

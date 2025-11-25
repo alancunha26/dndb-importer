@@ -16,10 +16,8 @@ import {
   isImageUrl,
   extractIdFromFilename,
   generateAnchor,
-  parseEntityUrl,
   loadIndexTemplate,
   loadFileTemplate,
-  applyAliases,
 } from "../utils";
 import type {
   ConversionContext,
@@ -28,7 +26,7 @@ import type {
   IndexTemplateContext,
   FileTemplateContext,
   SourcebookInfo,
-  ParsedEntityUrl,
+  SourceData,
 } from "../types";
 
 // ============================================================================
@@ -47,6 +45,21 @@ export async function process(ctx: ConversionContext): Promise<void> {
   const { config, files, sourcebooks, globalTemplates, tracker } = ctx;
   const imageMappingPath = join(config.output, "images.json");
   const imageMapping = await loadMapping(imageMappingPath);
+
+  /**
+   * Extract slug from book URL (e.g., /sources/dnd/phb-2024 -> phb-2024)
+   */
+  function extractSlugFromUrl(bookUrl: string): string | null {
+    const match = bookUrl.match(/\/sources\/dnd\/([^/]+)/);
+    return match ? match[1] : null;
+  }
+
+  /**
+   * Get source data by slug from config
+   */
+  function getSourceBySlug(slug: string): SourceData | undefined {
+    return config.sources[slug];
+  }
 
   // Register existing IDs with the context's generator
   for (const filename of Object.values(imageMapping)) {
@@ -95,20 +108,16 @@ export async function process(ctx: ConversionContext): Promise<void> {
   // Processing Functions
   // ============================================================================
 
-  async function parseHtml(
-    file: FileDescriptor,
-    sourcebook: SourcebookInfo,
-    fileIndex: number,
-  ): Promise<{
+  async function parseHtml(file: FileDescriptor): Promise<{
     content: string;
     title: string;
     anchors: FileAnchors;
-    entities: ParsedEntityUrl[];
     url: string | null;
     bookUrl: string | null;
+    bookTitle: string | null;
     images: string[];
   }> {
-    const html = await readFile(file.sourcePath, "utf-8");
+    const html = await readFile(file.inputPath, "utf-8");
     const $ = load(html);
 
     // Extract canonical URL
@@ -118,12 +127,21 @@ export async function process(ctx: ConversionContext): Promise<void> {
     if (canonical) {
       const match = canonical.match(/dndbeyond\.com(\/.*)$/);
       if (match) {
-        canonicalUrl = applyAliases(match[1], config.links.urlAliases);
+        canonicalUrl = match[1];
         const segments = canonicalUrl.split("/").filter((s) => s.length > 0);
         if (segments.length > 1) {
           bookUrl = "/" + segments.slice(0, -1).join("/");
         }
       }
+    }
+
+    // Extract book title from breadcrumbs
+    // D&D Beyond breadcrumbs: Home > Sources > Publisher > Book Title > Chapter
+    let bookTitle: string | null = null;
+    const breadcrumbs = $(".b-breadcrumb-item a, .crumb a").toArray();
+    if (breadcrumbs.length >= 4) {
+      // Fourth breadcrumb is the book title (after Home, Sources, Publisher)
+      bookTitle = $(breadcrumbs[3]).text().trim() || null;
     }
 
     // Extract content
@@ -133,9 +151,9 @@ export async function process(ctx: ConversionContext): Promise<void> {
         content: "",
         title: "",
         anchors: { valid: [], htmlIdToAnchor: {} },
-        entities: [],
         url: null,
         bookUrl: null,
+        bookTitle,
         images: [],
       };
     }
@@ -157,20 +175,26 @@ export async function process(ctx: ConversionContext): Promise<void> {
         }
       });
 
-    // Extract title with priority: titles array > titleSelector > content H1
+    // Extract title: try all selectors and pick the longest result
     let title = "";
 
-    // 1. Try titles array from sourcebook metadata
-    const titlesArray = sourcebook.metadata.titles;
-    if (titlesArray && fileIndex >= 0 && fileIndex < titlesArray.length) {
-      title = titlesArray[fileIndex];
+    // Try each selector and keep the longest result
+    for (const selector of config.html.titleSelectors) {
+      const element = $(selector);
+      if (element.length > 0) {
+        const text = element.text().trim();
+        if (text.length > title.length) {
+          title = text;
+        }
+      }
     }
 
-    // 2. Try titleSelector on full document
-    if (!title) {
-      const titleElement = $(config.html.titleSelector);
-      if (titleElement.length > 0) {
-        title = titleElement.text().trim();
+    // Update first H1 in content to match extracted title
+    // This ensures the file content matches the navigation title
+    if (title) {
+      const firstH1 = content.find("h1").first();
+      if (firstH1.length > 0) {
+        firstH1.text(title);
       }
     }
 
@@ -204,23 +228,6 @@ export async function process(ctx: ConversionContext): Promise<void> {
       }
     });
 
-    // Extract entity URLs from all links (deduplicated)
-    const entities: ParsedEntityUrl[] = [];
-    const seenUrls = new Set<string>();
-
-    content.find("a[href]").each((_i, link) => {
-      const href = $(link).attr("href");
-      if (href) {
-        const url = applyAliases(href, config.links.urlAliases);
-        const parsed = parseEntityUrl(url);
-
-        if (parsed && !seenUrls.has(parsed.url)) {
-          seenUrls.add(parsed.url);
-          entities.push(parsed);
-        }
-      }
-    });
-
     // Extract images
     const images: string[] = [];
     content.find("img").each((_i, el) => {
@@ -236,9 +243,9 @@ export async function process(ctx: ConversionContext): Promise<void> {
       content: content.html() || "",
       title,
       anchors: { valid, htmlIdToAnchor },
-      entities,
       url: canonicalUrl,
       bookUrl,
+      bookTitle,
       images,
     };
   }
@@ -297,7 +304,7 @@ export async function process(ctx: ConversionContext): Promise<void> {
     }
 
     const sbFiles = files.filter((f) => f.sourcebookId === file.sourcebookId);
-    const idx = sbFiles.findIndex((f) => f.uniqueId === file.uniqueId);
+    const idx = sbFiles.findIndex((f) => f.id === file.id);
 
     const indexTitle = sourcebook.title || "Index";
     const indexLink = `[${indexTitle}](${sourcebook.id}.md)`;
@@ -313,13 +320,13 @@ export async function process(ctx: ConversionContext): Promise<void> {
     if (idx > 0) {
       const prev = sbFiles[idx - 1];
       const prevTitle = prev.title || filenameToTitle(prev.filename);
-      nav.prev = `← [${prevTitle}](${prev.uniqueId}.md)`;
+      nav.prev = `← [${prevTitle}](${prev.id}.md)`;
     }
 
     if (idx < sbFiles.length - 1) {
       const next = sbFiles[idx + 1];
       const nextTitle = next.title || filenameToTitle(next.filename);
-      nav.next = `[${nextTitle}](${next.uniqueId}.md) →`;
+      nav.next = `[${nextTitle}](${next.id}.md) →`;
     }
 
     return nav;
@@ -342,8 +349,6 @@ export async function process(ctx: ConversionContext): Promise<void> {
       tags: ["dnd5e/chapter"],
       sourcebook: {
         title: sourcebook.title,
-        edition: sourcebook.metadata.edition,
-        author: sourcebook.metadata.author,
         metadata: sourcebook.metadata,
       },
       navigation: buildNavigation(file),
@@ -355,23 +360,36 @@ export async function process(ctx: ConversionContext): Promise<void> {
     await writeFile(file.outputPath, finalMarkdown, "utf-8");
   }
 
+  /**
+   * Auto-detect and copy cover image from sourcebook directory
+   * Looks for cover.{format} using configured image formats
+   */
   async function copyCoverImage(
     sourcebook: SourcebookInfo,
   ): Promise<string | undefined> {
-    const { coverImage } = sourcebook.metadata;
-    if (!coverImage) return undefined;
+    const directoryPath = join(config.input, sourcebook.directory);
 
-    const inputPath = join(config.input, sourcebook.sourcebook, coverImage);
+    // Find cover file
+    let coverPath: string | undefined;
+    let coverExt: string | undefined;
 
-    if (!(await fileExists(inputPath))) return undefined;
+    for (const ext of config.images.formats) {
+      const testPath = join(directoryPath, `cover.${ext}`);
+      if (await fileExists(testPath)) {
+        coverPath = testPath;
+        coverExt = ext;
+        break;
+      }
+    }
 
-    const mappingKey = `cover:${sourcebook.sourcebook}/${coverImage}`;
-    const uniqueId = imageMapping[mappingKey]
+    if (!coverPath || !coverExt) return undefined;
+
+    const mappingKey = `cover:${sourcebook.directory}/cover.${coverExt}`;
+    const imageId = imageMapping[mappingKey]
       ? extractIdFromFilename(imageMapping[mappingKey])
       : ctx.idGenerator.generate();
 
-    const extension = extname(coverImage);
-    const localFilename = `${uniqueId}${extension}`;
+    const localFilename = `${imageId}.${coverExt}`;
     const outputPath = join(config.output, localFilename);
 
     // Check if file already exists (use cache)
@@ -382,11 +400,11 @@ export async function process(ctx: ConversionContext): Promise<void> {
 
     try {
       await mkdir(dirname(outputPath), { recursive: true });
-      await copyFile(inputPath, outputPath);
+      await copyFile(coverPath, outputPath);
       imageMapping[mappingKey] = localFilename;
       return localFilename;
     } catch (error) {
-      tracker.trackError(inputPath, error, "image");
+      tracker.trackError(coverPath, error, "image");
       return undefined;
     }
   }
@@ -404,17 +422,14 @@ export async function process(ctx: ConversionContext): Promise<void> {
       const sbFiles = files.filter((f) => f.sourcebookId === sourcebook.id);
 
       const context: IndexTemplateContext = {
+        coverImage,
         title: sourcebook.title,
         date: new Date().toISOString().split("T")[0],
-        edition: sourcebook.metadata.edition,
-        description: sourcebook.metadata.description,
-        author: sourcebook.metadata.author,
-        coverImage,
         metadata: sourcebook.metadata,
         files: sbFiles.map((file) => ({
           title: file.title || "",
-          filename: `${file.uniqueId}.md`,
-          uniqueId: file.uniqueId,
+          filename: `${file.id}.md`,
+          id: file.id,
         })),
       };
 
@@ -435,22 +450,38 @@ export async function process(ctx: ConversionContext): Promise<void> {
     const sourcebook = sourcebooks.find((sb) => sb.id === file.sourcebookId);
     if (!sourcebook) continue;
 
-    const sbFiles = files.filter((f) => f.sourcebookId === file.sourcebookId);
-    const fileIndex = sbFiles.findIndex((f) => f.uniqueId === file.uniqueId);
-
     try {
-      const { content, title, anchors, entities, url, bookUrl, images } =
-        await parseHtml(file, sourcebook, fileIndex);
+      const { content, title, anchors, url, bookUrl, bookTitle, images } =
+        await parseHtml(file);
 
       file.anchors = anchors;
       file.title = title;
       file.url = url ?? undefined;
-      file.entities = entities;
       file.content = content;
       file.images = images;
 
       if (!sourcebook.bookUrl && bookUrl) {
         sourcebook.bookUrl = bookUrl;
+      }
+
+      // Auto-detect sourcebook title from breadcrumbs
+      if (bookTitle) {
+        sourcebook.title = bookTitle;
+      }
+
+      // Auto-detect source metadata from bookUrl slug
+      if (bookUrl && !sourcebook.ddbSourceId) {
+        const slug = extractSlugFromUrl(bookUrl);
+        if (slug) {
+          const source = getSourceBySlug(slug);
+          if (source) {
+            const { ddbSourceId, ...customMetadata } = source;
+            sourcebook.ddbSourceId = ddbSourceId;
+            if (Object.keys(customMetadata).length > 0) {
+              sourcebook.metadata = customMetadata;
+            }
+          }
+        }
       }
     } catch (error) {
       tracker.trackError(file.relativePath, error, "file");
@@ -461,9 +492,8 @@ export async function process(ctx: ConversionContext): Promise<void> {
   // Pass 2: Download images, convert to markdown, write files
   for (const file of files) {
     const sourcebook = sourcebooks.find((sb) => sb.id === file.sourcebookId);
-    if (!sourcebook) continue;
-
     if (!file.content || !file.images) continue;
+    if (!sourcebook) continue;
 
     try {
       // 1. Download images

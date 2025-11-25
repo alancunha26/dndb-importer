@@ -18,22 +18,27 @@ import type {
   ParsedEntity,
   EntityType,
   EntityIndexTemplateContext,
-  ParentIndexTemplateContext,
   GlobalIndexTemplateContext,
 } from "../types";
 import {
   loadIndexesMapping,
   saveIndexesMapping,
   fetchListingPage,
-  resolveEntityUrl,
   getEntityTypeFromUrl,
-  applyAliases,
   loadTemplate,
   getDefaultEntityIndexTemplate,
-  getDefaultParentIndexTemplate,
   getDefaultGlobalIndexTemplate,
+  LinkResolver,
 } from "../utils";
 import { getParser } from "../parsers";
+
+/**
+ * Index file reference (title + filename)
+ */
+interface IndexInfo {
+  title: string;
+  filename: string;
+}
 
 /**
  * Resolved entity with local file link
@@ -42,8 +47,7 @@ interface ResolvedEntity {
   name: string;
   url: string;
   metadata?: Record<string, string>;
-  fileId?: string;
-  anchor?: string;
+  link: string;
   resolved: boolean;
 }
 
@@ -67,7 +71,14 @@ export async function indexer(ctx: ConversionContext): Promise<void> {
   // Shared State (closure variables)
   // ============================================================================
 
-  const { tracker, entityIndex, idGenerator, sourcebooks } = ctx;
+  const { tracker, idGenerator, sourcebooks } = ctx;
+
+  // Create LinkResolver and store in context for pipeline sharing
+  const linkResolver = ctx.linkResolver ?? new LinkResolver(ctx);
+  if (!ctx.linkResolver) ctx.linkResolver = linkResolver;
+
+  // Current date for frontmatter
+  const date = new Date().toISOString().split("T")[0];
 
   // Load existing mapping
   const mappingPath = join(config.output, "indexes.json");
@@ -84,12 +95,12 @@ export async function indexer(ctx: ConversionContext): Promise<void> {
     idGenerator.register(globalId);
   }
 
-  // Collect sourceIds from converted sourcebooks for auto-filtering
+  // Collect ddbSourceIds from converted sourcebooks for auto-filtering
   const availableSourceIds: number[] = [];
   if (sourcebooks) {
     for (const sb of sourcebooks) {
-      if (sb.metadata.sourceId) {
-        availableSourceIds.push(sb.metadata.sourceId);
+      if (sb.ddbSourceId) {
+        availableSourceIds.push(sb.ddbSourceId);
       }
     }
   }
@@ -100,18 +111,59 @@ export async function indexer(ctx: ConversionContext): Promise<void> {
     globalTemplates?.entityIndex ?? null,
     getDefaultEntityIndexTemplate(config.markdown),
   );
-  const parentIndexTemplate = await loadTemplate(
-    globalTemplates?.parentIndex ?? null,
-    getDefaultParentIndexTemplate(config.markdown),
-  );
   const globalIndexTemplate = await loadTemplate(
     globalTemplates?.globalIndex ?? null,
     getDefaultGlobalIndexTemplate(config.markdown),
   );
 
   /**
+   * Normalize string for fuzzy matching
+   * Removes special characters, diacritics, and normalizes whitespace
+   */
+  function normalizeTitle(str: string): string {
+    return str
+      .toLowerCase()
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .replace(/[^a-z0-9\s]/g, "")
+      .replace(/\s+/g, " ")
+      .trim();
+  }
+
+  // Build normalized title → sourcebookId lookup map for fuzzy matching
+  const sourceTitleToId = new Map<string, string>();
+  if (sourcebooks) {
+    for (const sb of sourcebooks) {
+      const normalized = normalizeTitle(sb.title);
+      sourceTitleToId.set(normalized, sb.id);
+    }
+  }
+
+  /**
+   * Parse filter parameters from URL
+   * Extracts all filter-* parameters and converts to camelCase keys
+   */
+  function parseUrlFilters(url: string): Record<string, string> {
+    const urlObj = new URL(url);
+    const filters: Record<string, string> = {};
+
+    for (const [key, value] of urlObj.searchParams.entries()) {
+      if (key.startsWith("filter-")) {
+        // Convert filter-school to school, filter-partnered-content to partneredContent
+        const filterName = key
+          .replace("filter-", "")
+          .replace(/-([a-z])/g, (_, letter) => letter.toUpperCase());
+        filters[filterName] = value;
+      }
+    }
+
+    return filters;
+  }
+
+  /**
    * Apply source filters to URL if not already present
    * When URL doesn't have filter-source, add filters for all converted sourcebooks
+   * Always includes source 148 (Basic Rules 2024) for core entities
    */
   function applySourceFilters(url: string): string {
     const urlObj = new URL(url);
@@ -121,13 +173,11 @@ export async function indexer(ctx: ConversionContext): Promise<void> {
       return url;
     }
 
-    // If no sourceIds available, return original URL
-    if (availableSourceIds.length === 0) {
-      return url;
-    }
+    // Always include Basic Rules 2024 (148) plus available sourcebooks
+    const sourceIds = new Set([148, ...availableSourceIds]);
+    const sortedIds = [...sourceIds].sort((a, b) => a - b);
 
-    // Add filter-source for each available sourcebook (sorted for consistent cache keys)
-    const sortedIds = [...availableSourceIds].sort((a, b) => a - b);
+    // Add filter-source for each sourcebook (sorted for consistent cache keys)
     for (const sourceId of sortedIds) {
       urlObj.searchParams.append("filter-source", sourceId.toString());
     }
@@ -141,22 +191,30 @@ export async function indexer(ctx: ConversionContext): Promise<void> {
 
   /**
    * Resolve parsed entities to local file links
-   * Applies aliases at entry point, then uses resolveEntityUrl
+   * Uses LinkResolver to handle aliasing, exclusions, and both entity/source URLs
    * Tracks resolved/unresolved statistics
+   *
+   * Fuzzy matches entity source metadata to sourcebooks to restrict resolution
+   * to files within the correct sourcebook for better accuracy
    */
   function resolveEntities(entities: ParsedEntity[]): ResolvedEntity[] {
     return entities.map((entity) => {
-      const url = applyAliases(entity.url, config.links.urlAliases);
-      const match = resolveEntityUrl(url, ctx);
+      // Try to find matching sourcebook from entity's source metadata
+      let sourcebookId: string | undefined;
+      const { metadata, name, url } = entity;
 
-      if (match) {
-        entityIndex?.set(url, match);
-        tracker.incrementLinksResolved();
-        return { ...entity, ...match, resolved: true };
+      if (metadata?.source) {
+        const normalizedSource = normalizeTitle(metadata.source);
+        sourcebookId = sourceTitleToId.get(normalizedSource);
       }
 
-      tracker.trackUnresolvedLink(entity.url, entity.name);
-      return { ...entity, resolved: false };
+      const link = linkResolver.resolve(url, name, {
+        sourcebookId,
+        indexing: true,
+      });
+
+      const resolved = link.includes(".md");
+      return { ...entity, link, resolved };
     });
   }
 
@@ -228,24 +286,33 @@ export async function indexer(ctx: ConversionContext): Promise<void> {
   }
 
   /**
-   * Generate markdown for an entity index using template
+   * Generate markdown for an index using template
+   * Supports both children (subcategories) and entities (from URL)
    */
-  function generateEntityIndexMarkdown(
+  function generateIndexMarkdown(
     title: string,
     description: string | undefined,
-    entityType: EntityType,
-    entities: ResolvedEntity[],
+    options: {
+      entityType?: EntityType;
+      entities?: ResolvedEntity[];
+      filters?: Record<string, string>;
+      children?: IndexInfo[];
+      parent?: IndexInfo;
+    },
   ): string {
     const context: EntityIndexTemplateContext = {
+      date,
       title,
       description,
-      type: entityType,
-      entities: entities.map((e) => ({
-        name: e.name,
+      filters: options.filters,
+      parent: options.parent,
+      children: options.children,
+      type: options.entityType,
+      entities: options.entities?.map((e) => ({
         url: e.url,
+        name: e.name,
+        link: e.link,
         metadata: e.metadata,
-        fileId: e.fileId,
-        anchor: e.anchor,
         resolved: e.resolved,
       })),
     };
@@ -254,29 +321,14 @@ export async function indexer(ctx: ConversionContext): Promise<void> {
   }
 
   /**
-   * Generate markdown for a parent index using template
-   */
-  function generateParentIndexMarkdown(
-    title: string,
-    description: string | undefined,
-    children: Array<{ title: string; filename: string }>,
-  ): string {
-    const context: ParentIndexTemplateContext = {
-      title,
-      description,
-      children,
-    };
-
-    return parentIndexTemplate(context);
-  }
-
-  /**
    * Process an index configuration recursively
+   * Handles both children (subcategories) and URL (entities)
    * Returns the processed index info, or null if failed
    */
-  async function processIndexRecursive(
+  async function processIndex(
     index: EntityIndexConfig,
-  ): Promise<{ title: string; filename: string } | null> {
+    parent?: IndexInfo,
+  ): Promise<IndexInfo | null> {
     // Get or assign filename
     let filename = mapping.mappings.entities[index.title];
     if (!filename) {
@@ -284,120 +336,97 @@ export async function indexer(ctx: ConversionContext): Promise<void> {
       mapping.mappings.entities[index.title] = filename;
     }
 
-    // If it has children, it's a parent index
+    // Process children recursively if any
+    let childResults: IndexInfo[] | undefined;
     if (index.children && index.children.length > 0) {
-      // Process all children recursively
-      const childResults: Array<{ title: string; filename: string }> = [];
+      childResults = [];
+      const currentAsParent: IndexInfo = { title: index.title, filename };
       for (const child of index.children) {
-        const result = await processIndexRecursive(child);
+        const result = await processIndex(child, currentAsParent);
         if (result) childResults.push(result);
       }
+    }
 
-      // Generate parent index markdown
-      const markdown = generateParentIndexMarkdown(
-        index.title,
-        index.description,
-        childResults,
-      );
+    // Process URL/entities if present
+    let resolvedEntities: ResolvedEntity[] | undefined;
+    let entityType: EntityType | undefined;
+    let filters: Record<string, string> | undefined;
 
-      // Write file
-      const outputPath = join(config.output, filename);
-      try {
-        await writeFile(outputPath, markdown, "utf-8");
-        tracker.incrementEntityIndexes();
-        return { title: index.title, filename };
-      } catch (error) {
-        tracker.trackError(outputPath, error, "file");
-        return null;
+    if (index.url) {
+      entityType = getEntityTypeFromUrl(index.url) ?? undefined;
+      if (entityType) {
+        // Parse filters from original URL (before adding source filters)
+        filters = parseUrlFilters(index.url);
+
+        // Apply source filters if not already present
+        const fetchUrl = applySourceFilters(index.url);
+
+        // Fetch and parse entities (use cache if available)
+        let entities: ParsedEntity[];
+        const cached = mapping.cache[fetchUrl];
+
+        if (!cached || refetch) {
+          try {
+            // Fetch all pages and combine entities
+            entities = await fetchAllPages(fetchUrl, entityType);
+            const fetchedAt = new Date().toISOString();
+
+            // Store entities in global entities map (deduplicated by URL)
+            const entityUrls: string[] = [];
+            for (const entity of entities) {
+              entityUrls.push(entity.url);
+              mapping.entities[entity.url] = {
+                name: entity.name,
+                metadata: entity.metadata,
+              };
+            }
+
+            // Cache stores only the URL references
+            mapping.cache[fetchUrl] = { fetchedAt, entityUrls };
+
+            // Track fetched entities
+            tracker.incrementFetchedEntities(entities.length);
+          } catch (error) {
+            tracker.trackError(fetchUrl, error, "resource");
+            // Continue with children only if URL fetch fails
+            entities = [];
+          }
+        } else {
+          // Reconstruct entities from global entities map
+          entities = [];
+          for (const url of cached.entityUrls) {
+            const stored = mapping.entities[url];
+            if (stored) {
+              entities.push({
+                url,
+                name: stored.name,
+                metadata: stored.metadata,
+              });
+            }
+          }
+
+          // Track cached entities
+          tracker.incrementCachedEntities(entities.length);
+        }
+
+        // Resolve entities to local files
+        resolvedEntities = resolveEntities(entities);
       }
     }
 
-    // Must have a URL for entity indexes
-    if (!index.url) {
+    // Must have either children or entities
+    if (!childResults && !resolvedEntities) {
       return null;
     }
 
-    // It's an entity index - process it
-    return processEntityIndex(index, filename);
-  }
-
-  /**
-   * Process a single entity index configuration
-   */
-  async function processEntityIndex(
-    index: EntityIndexConfig,
-    filename: string,
-  ): Promise<{ title: string; filename: string } | null> {
-    // Must have a URL for entity indexes
-    if (!index.url) {
-      return null;
-    }
-
-    // Get entity type from URL
-    const entityType = getEntityTypeFromUrl(index.url);
-    if (!entityType) return null;
-
-    // Apply source filters if not already present
-    const fetchUrl = applySourceFilters(index.url);
-
-    // Fetch and parse entities (use cache if available)
-    // Cache key is the filtered URL to ensure consistency
-    let entities: ParsedEntity[];
-    const cached = mapping.cache[fetchUrl];
-
-    if (!cached || refetch) {
-      try {
-        // Fetch all pages and combine entities
-        entities = await fetchAllPages(fetchUrl, entityType);
-        const fetchedAt = new Date().toISOString();
-
-        // Store entities in global entities map (deduplicated by URL)
-        const entityUrls: string[] = [];
-        for (const entity of entities) {
-          entityUrls.push(entity.url);
-          mapping.entities[entity.url] = {
-            name: entity.name,
-            metadata: entity.metadata,
-          };
-        }
-
-        // Cache stores only the URL references
-        mapping.cache[fetchUrl] = { fetchedAt, entityUrls };
-
-        // Track fetched entities
-        tracker.incrementFetchedEntities(entities.length);
-      } catch (error) {
-        tracker.trackError(fetchUrl, error, "resource");
-        return null;
-      }
-    } else {
-      // Reconstruct entities from global entities map
-      entities = [];
-      for (const url of cached.entityUrls) {
-        const stored = mapping.entities[url];
-        if (stored) {
-          entities.push({
-            url,
-            name: stored.name,
-            metadata: stored.metadata,
-          });
-        }
-      }
-
-      // Track cached entities
-      tracker.incrementCachedEntities(entities.length);
-    }
-
-    // Resolve entities to local files
-    const resolvedEntities = resolveEntities(entities);
-
-    // Generate markdown
-    const markdown = generateEntityIndexMarkdown(
-      index.title,
-      index.description,
+    // Generate markdown with both children and entities
+    const markdown = generateIndexMarkdown(index.title, index.description, {
       entityType,
-      resolvedEntities,
-    );
+      entities: resolvedEntities,
+      filters,
+      children: childResults,
+      parent,
+    });
 
     // Write file
     const outputPath = join(config.output, filename);
@@ -416,25 +445,31 @@ export async function indexer(ctx: ConversionContext): Promise<void> {
    */
   async function generateGlobalIndex(
     title: string,
-    entityIndexes: Array<{ title: string; filename: string }>,
+    entityIndexes: IndexInfo[],
   ): Promise<void> {
-    // Get or assign filename for global index
-    let filename = mapping.mappings.global;
+    // Use pre-assigned filename (set during parent determination)
+    const filename = mapping.mappings.global;
     if (!filename) {
-      filename = `${idGenerator.generate()}.md`;
-      mapping.mappings.global = filename;
+      // This shouldn't happen as filename is set before processing
+      return;
     }
 
     // Build template context
+    // Sort sourcebooks by ddbSourceId for consistent ordering
+    const sortedSourcebooks = [...(sourcebooks ?? [])].sort((a, b) => {
+      const idA = a.ddbSourceId ?? Infinity;
+      const idB = b.ddbSourceId ?? Infinity;
+      return idA - idB;
+    });
+
     const context: GlobalIndexTemplateContext = {
       title,
-      sourcebooks: sourcebooks
-        ? sourcebooks.map((sb) => ({
-            title: sb.title,
-            id: sb.id,
-          }))
-        : [],
+      date,
       entityIndexes,
+      sourcebooks: sortedSourcebooks.map((sb) => ({
+        title: sb.title,
+        id: sb.id,
+      })),
     };
 
     // Render template
@@ -450,21 +485,39 @@ export async function indexer(ctx: ConversionContext): Promise<void> {
     }
   }
 
+  /**
+   * Get or create global index as parent for top-level entity indexes
+   */
+  function getGlobalParent(): IndexInfo | undefined {
+    if (!config.indexes.global.enabled) {
+      return undefined;
+    }
+
+    let filename = mapping.mappings.global;
+    if (!filename) {
+      filename = `${idGenerator.generate()}.md`;
+      mapping.mappings.global = filename;
+    }
+
+    return { title: config.indexes.global.title, filename };
+  }
+
   // ============================================================================
   // Main Orchestration
   // ============================================================================
 
-  // Process entity indexes (only root-level indexes go to global index)
-  const generatedIndexes: Array<{ title: string; filename: string }> = [];
+  // Process all entity indexes
+  const globalParent = getGlobalParent();
+  const generatedIndexes: IndexInfo[] = [];
 
   for (const indexConfig of config.indexes.entities) {
-    const result = await processIndexRecursive(indexConfig);
+    const result = await processIndex(indexConfig, globalParent);
     if (result) generatedIndexes.push(result);
   }
 
   // Generate global index if enabled
-  if (config.indexes.global.enabled && generatedIndexes.length > 0) {
-    await generateGlobalIndex(config.indexes.global.title, generatedIndexes);
+  if (globalParent && generatedIndexes.length > 0) {
+    await generateGlobalIndex(globalParent.title, generatedIndexes);
   }
 
   // Save updated mapping

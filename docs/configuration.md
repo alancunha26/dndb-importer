@@ -231,6 +231,72 @@ Entity indexes support nested structures with `children`, and can be customized 
 
 See [indexer.md](indexer.md) for complete documentation including supported entity types, auto-filtering, caching, and templates.
 
+## Sourcebook Metadata
+
+Add custom metadata to sourcebooks via the `sources` configuration. Metadata is auto-detected from HTML and made available to templates.
+
+### Configuration
+
+```json
+{
+  "sources": {
+    "phb-2024": {
+      "ddbSourceId": 145,
+      "edition": "5th Edition (2024)",
+      "description": "The 2024 revision of the Player's Handbook",
+      "author": "Wizards of the Coast",
+      "publisher": "Wizards of the Coast"
+    }
+  }
+}
+```
+
+The `ddbSourceId` field is required for entity filtering. All other fields are custom and optional.
+
+### How It Works
+
+1. **Auto-Detection**: During processing, the converter extracts the book URL from HTML metadata
+2. **Lookup**: The book URL slug (e.g., "phb-2024") is used to find the source configuration
+3. **Merge**: All custom fields (except `ddbSourceId`) are stored as metadata
+4. **Template Access**: Metadata is available in index and file templates
+
+### Template Usage
+
+**Index template** (`index.md.hbs`):
+
+```handlebars
+---
+title: "{{{title}}}"
+{{#if metadata.edition}}
+edition: "{{{metadata.edition}}}"
+{{/if}}
+---
+
+# {{{title}}}
+{{#if metadata.edition}}
+
+**Edition:** {{{metadata.edition}}}
+{{/if}}
+{{#if metadata.description}}
+
+> {{{metadata.description}}}
+{{/if}}
+```
+
+**File template** (`file.md.hbs`):
+
+```handlebars
+---
+title: "{{{title}}}"
+sourcebook: "{{{sourcebook.title}}}"
+{{#if sourcebook.metadata.edition}}
+edition: "{{{sourcebook.metadata.edition}}}"
+{{/if}}
+---
+```
+
+See [templates.md](templates.md) for complete template documentation.
+
 ## Markdown Formatting
 
 All markdown settings apply throughout conversion:

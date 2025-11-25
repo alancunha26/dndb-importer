@@ -6,70 +6,83 @@ import type { MarkdownConfig } from "../types";
  */
 export function getDefaultEntityIndexTemplate(config: MarkdownConfig): string {
   const bullet = config.bulletMarker;
-  const strong = config.strong;
 
-  return `# {{{title}}}
+  return `---
+title: "{{{title}}}"
+date: {{date}}
+tags:
+  - dnd/index
+---
+
+# {{{title}}}
+{{#if parent}}
+
+← [Back to {{{parent.title}}}]({{parent.filename}})
+{{/if}}
 {{#if description}}
 
 {{{description}}}
 {{/if}}
+{{#if children}}
+
+## Contents
+{{#each children}}
+${bullet} [{{{title}}}]({{{filename}}})
+{{/each}}
+{{/if}}
+{{#if type}}
 
 {{#if (eq type "spells")}}
-| Spell | Level | School | Casting Time |
-|-------|-------|--------|--------------|
-{{#each entities}}
-| {{#if resolved}}[{{{name}}}]({{{fileId}}}.md#{{{anchor}}}){{else}}${strong}{{{name}}}${strong}{{/if}} | {{metadata.level}} | {{metadata.school}} | {{metadata.castingTime}} |
+{{#each (sortKeys (groupBy entities "metadata.level") "Cantrip")}}
+## {{spellLevel @key}}
+
+{{#each this}}
+{{#if resolved}}
+${bullet} {{{link}}}
+{{/if}}
+{{/each}}
+
 {{/each}}
 
 {{else if (eq type "monsters")}}
-| Monster | CR | Type | Size |
-|---------|----|----- |------|
-{{#each entities}}
-| {{#if resolved}}[{{{name}}}]({{{fileId}}}.md#{{{anchor}}}){{else}}${strong}{{{name}}}${strong}{{/if}} | {{metadata.cr}} | {{metadata.type}} | {{metadata.size}} |
+{{#if (contains title "by CR")}}
+{{#each (sortNumeric (groupBy entities "metadata.cr"))}}
+## CR {{key}}
+
+{{#each value}}
+{{#if resolved}}
+${bullet} {{{link}}}
+{{/if}}
 {{/each}}
 
-{{else if (eq type "magic-items")}}
-| Item | Rarity | Type | Attunement |
-|------|--------|------|------------|
-{{#each entities}}
-| {{#if resolved}}[{{{name}}}]({{{fileId}}}.md#{{{anchor}}}){{else}}${strong}{{{name}}}${strong}{{/if}} | {{metadata.rarity}} | {{metadata.type}} | {{metadata.attunement}} |
 {{/each}}
-
-{{else if (eq type "equipment")}}
-| Equipment | Type | Cost | Weight |
-|-----------|------|------|--------|
+{{else}}
 {{#each entities}}
-| {{#if resolved}}[{{{name}}}]({{{fileId}}}.md#{{{anchor}}}){{else}}${strong}{{{name}}}${strong}{{/if}} | {{metadata.type}} | {{metadata.cost}} | {{metadata.weight}} |
+{{#if resolved}}
+${bullet} {{{link}}}
+{{/if}}
 {{/each}}
+{{/if}}
 
 {{else if (eq type "feats")}}
-| Feat | Source | Tags |
-|------|--------|------|
-{{#each entities}}
-| {{#if resolved}}[{{{name}}}]({{{fileId}}}.md#{{{anchor}}}){{else}}${strong}{{{name}}}${strong}{{/if}} | {{metadata.source}} | {{metadata.tags}} |
+{{#each (sortKeys (groupBy entities "metadata.tags") "Origin" "General" "Fighting Style" "Epic Boon")}}
+## {{{@key}}}
+
+{{#each this}}
+{{#if resolved}}
+${bullet} {{{link}}}
+{{/if}}
 {{/each}}
 
-{{else if (eq type "backgrounds")}}
-| Background | Source |
-|------------|--------|
-{{#each entities}}
-| {{#if resolved}}[{{{name}}}]({{{fileId}}}.md#{{{anchor}}}){{else}}${strong}{{{name}}}${strong}{{/if}} | {{metadata.source}} |
-{{/each}}
-
-{{else if (eq type "species")}}
-{{#each entities}}
-${bullet} {{#if resolved}}[{{{name}}}]({{{fileId}}}.md#{{{anchor}}}){{else}}${strong}{{{name}}}${strong}{{/if}}
-{{/each}}
-
-{{else if (eq type "classes")}}
-{{#each entities}}
-${bullet} {{#if resolved}}[{{{name}}}]({{{fileId}}}.md#{{{anchor}}}){{else}}${strong}{{{name}}}${strong}{{/if}}
 {{/each}}
 
 {{else}}
 {{#each entities}}
-${bullet} {{#if resolved}}[{{{name}}}]({{{fileId}}}.md#{{{anchor}}}){{else}}${strong}{{{name}}}${strong}{{/if}}
+{{#if resolved}}
+${bullet} {{{link}}}
+{{/if}}
 {{/each}}
+{{/if}}
 {{/if}}
 `;
 }

@@ -7,7 +7,14 @@ import type { MarkdownConfig } from "../types";
 export function getDefaultGlobalIndexTemplate(config: MarkdownConfig): string {
   const bullet = config.bulletMarker;
 
-  return `# {{{title}}}
+  return `---
+title: "{{{title}}}"
+date: {{date}}
+tags:
+  - dnd/index
+---
+
+# {{{title}}}
 
 {{#if sourcebooks.length}}
 ## Sourcebooks

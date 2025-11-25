@@ -1,6 +1,7 @@
 # Link Resolver Documentation
 
 **Module:** `src/modules/resolver.ts`
+**Class:** `src/utils/link-resolver.ts`
 **Status:** Implemented and tested
 
 **Related Documentation:**
@@ -11,21 +12,30 @@
 
 ## Overview
 
-The Resolver module transforms D&D Beyond links into local markdown links, enabling seamless cross-referencing between converted sourcebooks. It runs after all files are written to disk, reading each file, resolving links, and overwriting with the resolved content.
+The Resolver module transforms D&D Beyond links into local markdown links, enabling seamless cross-referencing between converted sourcebooks and entity indexes. It runs after the indexer and after all files are written to disk, reading each file, resolving links, and overwriting with the resolved content.
+
+The core logic is centralized in the `LinkResolver` class (`src/utils/link-resolver.ts`), which handles URL normalization, aliasing, entity resolution, and anchor matching. The resolver module (`src/modules/resolver.ts`) orchestrates the file I/O and delegates link resolution to the class.
+
+**Key architectural detail**: The `LinkResolver` instance is typically created by the indexer module and stored in `ctx.linkResolver`. The resolver module reuses this instance to avoid rebuilding the entity index. If the indexer was skipped, the resolver creates a new instance.
 
 ## Processing Flow
 
 ```
 1. Processor completes → All files written to disk with:
    - FileAnchors (valid anchors + HTML ID mappings)
-   - Entity URLs extracted from tooltip links
+   - Entity URLs extracted from tooltip links (raw, unaliased)
 
-2. Resolver runs:
-   a. Build entity index (entity URL → file location)
-   b. Build URL map (canonical URL → file)
-   c. For each file:
+2. Indexer runs (if enabled):
+   a. Create LinkResolver instance and store in ctx.linkResolver, which:
+      - Builds URL maps with aliased keys (file URL → file, book URL → sourcebook)
+      - Builds entity index from file entities (entity URL → file location)
+   b. Generate entity index files with resolved links
+
+3. Resolver runs:
+   a. Reuse LinkResolver from ctx.linkResolver (or create new if indexer was skipped)
+   b. For each written file (sourcebooks + entity indexes):
       - Read markdown from disk
-      - Resolve D&D Beyond links
+      - Resolve D&D Beyond links via LinkResolver.resolve()
       - Write resolved content back
 ```
 
@@ -35,19 +45,17 @@ The resolver uses a **waterfall resolution strategy**, trying each method in ord
 
 ### 1. Skip Non-Resolvable Links
 
-Before processing, the resolver checks if a link should be resolved:
+Before processing, the resolver checks if a link should be resolved.
 
-```typescript
-// Resolve these:
-#anchor                              // Internal anchors
-/sources/dnd/phb-2024/spells         // Source book paths
-/spells/2618831-arcane-vigor         // Entity links
-https://www.dndbeyond.com/...        // Full URLs
+**Links that ARE resolved:**
+- Internal anchors (starting with `#`)
+- D&D Beyond source paths (like `/sources/dnd/phb-2024/spells`)
+- Entity links (like `/spells/2618831-arcane-vigor`)
+- Full D&D Beyond URLs
 
-// Skip these (keep as-is):
-abc123.md                            // Local markdown files
-https://example.com                  // Non-D&D Beyond URLs
-```
+**Links that are SKIPPED (kept as-is):**
+- Local markdown files (already converted links)
+- Non-D&D Beyond external URLs
 
 ### 2. Internal Anchor Resolution
 
@@ -131,13 +139,11 @@ When resolution fails, the link is formatted based on `fallbackStyle`:
    </a>
    ```
 
-2. **Resolver builds entity index** by matching slugs to file anchors:
+2. **LinkResolver builds entity index** during initialization by matching slugs to file anchors:
 
-   ```typescript
-   // Entity URL: /spells/2618831-arcane-vigor
-   // Slug: "arcane-vigor"
-   // Search file anchors for matching anchor
-   ```
+   The entity URL (like `/spells/2618831-arcane-vigor`) is parsed to extract the slug (`arcane-vigor`). LinkResolver then searches through file anchors to find matching anchors in files specified by entityLocations.
+
+   **When this happens**: Typically during indexer module execution. If indexer is skipped, it happens when resolver creates LinkResolver.
 
 3. **entityLocations filters target files**:
    ```json
@@ -338,12 +344,9 @@ During HTML processing, the processor builds `FileAnchors` for each file:
 
 ### FileAnchors Structure
 
-```typescript
-interface FileAnchors {
-  valid: string[]; // All markdown anchors
-  htmlIdToAnchor: Record<string, string>; // HTML ID → markdown anchor
-}
-```
+Each file has a FileAnchors object containing:
+- **valid**: Array of all markdown anchors generated from headings
+- **htmlIdToAnchor**: Mapping from original HTML heading IDs to generated markdown anchors
 
 ### Anchor Generation
 
@@ -358,43 +361,18 @@ Entity URL slugs from D&D Beyond use patterns like `ammunition-1` (for "Ammuniti
 
 **Example (single heading):**
 
-```html
-<h2 id="Bell1GP">Bell (1 GP)</h2>
-```
-
-Results in:
-
-```typescript
-{
-  valid: ["bell-1-gp"],
-  htmlIdToAnchor: { "Bell1GP": "bell-1-gp" }
-}
-```
+An HTML heading like `<h2 id="Bell1GP">Bell (1 GP)</h2>` generates:
+- Markdown anchor: `bell-1-gp`
+- HTML ID mapping: `Bell1GP` → `bell-1-gp`
 
 **Example (duplicate headings):**
 
-```html
-<h3 id="Level4AbilityScoreImprovement">Ability Score Improvement</h3>
-<!-- ... other content ... -->
-<h3 id="Level8AbilityScoreImprovement">Ability Score Improvement</h3>
-<!-- ... other content ... -->
-<h3 id="Level12AbilityScoreImprovement">Ability Score Improvement</h3>
-```
+When multiple headings have the same text (like "Ability Score Improvement"), anchors are deduplicated:
+- First occurrence: `ability-score-improvement`
+- Second occurrence: `ability-score-improvement--1` (internally)
+- Third occurrence: `ability-score-improvement--2` (internally)
 
-Stored internally (with `--N`):
-
-```typescript
-{
-  valid: ["ability-score-improvement", "ability-score-improvement--1", "ability-score-improvement--2"],
-  htmlIdToAnchor: {
-    "Level4AbilityScoreImprovement": "ability-score-improvement",
-    "Level8AbilityScoreImprovement": "ability-score-improvement--1",
-    "Level12AbilityScoreImprovement": "ability-score-improvement--2"
-  }
-}
-```
-
-Output in markdown (converted to `-N`):
+The double-dash `--N` suffix is used internally to avoid conflicts with entity URL slugs. When writing markdown, these are converted to standard `-N` format:
 
 ```markdown
 [Ability Score Improvement](#ability-score-improvement)
