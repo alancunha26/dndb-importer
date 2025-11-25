@@ -122,10 +122,12 @@ Customize output with Handlebars templates. Templates are loaded in this order:
 2. **Global**: `input/index.md.hbs`
 3. **Built-in defaults**
 
-Two template types:
+Four template types:
 
 - `index.md.hbs` - Table of contents for each sourcebook
 - `file.md.hbs` - Individual chapter pages
+- `entity-index.md.hbs` - Entity index pages (spells, monsters, items, etc.)
+- `global-index.md.hbs` - Global index across all sourcebooks
 
 See [docs/templates.md](docs/templates.md) for available variables and examples.
 
