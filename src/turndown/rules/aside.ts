@@ -219,6 +219,7 @@ function renderAsCallout(
   const calloutLines = [`> ${titleLine}`];
 
   if (finalContent) {
+    calloutLines.push(">");
     calloutLines.push(`> ${finalContent.replace(/\n/g, "\n> ")}`);
   }
 

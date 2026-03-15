@@ -18,6 +18,7 @@ import {
   generateAnchor,
   loadIndexTemplate,
   loadFileTemplate,
+  todayISO,
 } from "../utils";
 import type {
   ConversionContext,
@@ -353,7 +354,7 @@ export async function process(ctx: ConversionContext): Promise<void> {
 
     const context: FileTemplateContext = {
       title: file.title || "",
-      date: new Date().toISOString().split("T")[0],
+      date: todayISO(),
       tags: ["dnd5e/chapter"],
       sourcebook: {
         title: sourcebook.title,
@@ -432,7 +433,7 @@ export async function process(ctx: ConversionContext): Promise<void> {
       const context: IndexTemplateContext = {
         coverImage,
         title: sourcebook.title,
-        date: new Date().toISOString().split("T")[0],
+        date: todayISO(),
         metadata: sourcebook.metadata,
         files: sbFiles.map((file) => ({
           title: file.title || "",

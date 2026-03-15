@@ -28,6 +28,8 @@ import {
   loadTemplate,
   getDefaultEntityIndexTemplate,
   getDefaultGlobalIndexTemplate,
+  todayISO,
+  nowISO,
   LinkResolver,
 } from "../utils";
 import { getParser } from "../parsers";
@@ -78,7 +80,7 @@ export async function indexer(ctx: ConversionContext): Promise<void> {
   if (!ctx.linkResolver) ctx.linkResolver = linkResolver;
 
   // Current date for frontmatter
-  const date = new Date().toISOString().split("T")[0];
+  const date = todayISO();
 
   // Load existing mapping
   const mappingPath = join(config.output, "indexes.json");
@@ -369,7 +371,7 @@ export async function indexer(ctx: ConversionContext): Promise<void> {
           try {
             // Fetch all pages and combine entities
             entities = await fetchAllPages(fetchUrl, entityType);
-            const fetchedAt = new Date().toISOString();
+            const fetchedAt = nowISO();
 
             // Store entities in global entities map (deduplicated by URL)
             const entityUrls: string[] = [];

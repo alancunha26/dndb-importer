@@ -271,7 +271,8 @@ export class LinkResolver {
     }
 
     // Priority 1: Direct HTML ID lookup
-    let markdownAnchor: string | undefined = file.anchors.htmlIdToAnchor[htmlId];
+    let markdownAnchor: string | undefined =
+      file.anchors.htmlIdToAnchor[htmlId];
 
     // Priority 2: Smart matching (for links like #Red Knight that aren't valid HTML IDs)
     if (!markdownAnchor) {

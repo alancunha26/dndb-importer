@@ -17,6 +17,7 @@ import type {
   ResourceIssue,
   ProcessingStats,
 } from "../types";
+import { now } from "./date";
 
 // ============================================================================
 // Error Mapping (private)
@@ -123,7 +124,7 @@ export class Tracker {
   private cachedEntities = 0;
   private issues: Issue[] = [];
   private unresolvedLinksMap: Map<string, { text: string; count: number }> = new Map();
-  private startTime = new Date();
+  private startTime = now();
 
   // ============================================================================
   // Stat counters
@@ -233,7 +234,7 @@ export class Tracker {
   // ============================================================================
 
   getStats(): ProcessingStats {
-    const endTime = new Date();
+    const endTime = now();
     const duration = endTime.getTime() - this.startTime.getTime();
 
     // Calculate total unresolved links (sum of all counts)

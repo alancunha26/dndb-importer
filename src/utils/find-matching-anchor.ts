@@ -8,6 +8,7 @@ export interface AnchorMatch {
 
 /**
  * Pre-processed anchor with all normalized forms
+ * All string fields are ASCII-normalized (diacritics stripped) for comparison
  */
 interface ProcessedAnchor {
   original: string;
@@ -49,6 +50,7 @@ interface ProcessedAnchor {
  * findMatchingAnchor("blindness-deafness", anchors) // { anchor: "blindnessdeafness", step: 5 }
  * findMatchingAnchor("flame-tongue-club", anchors) // { anchor: "flame-tongue", step: 9 }
  * findMatchingAnchor("belt-of-hill-giant-strength", anchors) // { anchor: "belt-of-giant-strength", step: 10 }
+ * findMatchingAnchor("sylunes-viper", anchors) // { anchor: "sylunés-viper", step: 1 } (accent-insensitive)
  */
 export function findMatchingAnchor(
   anchor: string,
@@ -59,6 +61,9 @@ export function findMatchingAnchor(
   const stripPlural = (s: string) => (s.endsWith("s") ? s.slice(0, -1) : s);
   const stripDupSuffix = (s: string) => s.replace(/--\d+$/, "");
   const removeHyphens = (s: string) => s.replace(/-/g, "");
+  // Strip diacritics for accent-insensitive comparison (NFD decomposes, then remove combining marks)
+  const stripDiacritics = (s: string) =>
+    s.normalize("NFD").replace(/[\u0300-\u036f]/g, "");
 
   // Return shortest match, or first match when lengths are equal
   const findShortest = (items: ProcessedAnchor[]) =>
@@ -95,8 +100,9 @@ export function findMatchingAnchor(
     items.reduce((a, b) => (b.norm.length > a.norm.length ? b : a));
 
   // Pre-process all anchors with all normalized forms (computed once)
+  // All comparisons use ASCII-normalized strings (diacritics stripped)
   const processed: ProcessedAnchor[] = validAnchors.map((original) => {
-    const norm = stripDupSuffix(original);
+    const norm = stripDiacritics(stripDupSuffix(original));
     const words = norm.split("-");
     const noHyphens = removeHyphens(norm);
     const normPlural = stripPlural(norm);
@@ -114,17 +120,18 @@ export function findMatchingAnchor(
     };
   });
 
-  // Pre-process search anchor
-  const searchWords = anchor.split("-");
+  // Pre-process search anchor (also ASCII-normalized for comparison)
+  const searchNorm = stripDiacritics(anchor);
+  const searchWords = searchNorm.split("-");
   const searchWordsPlural = searchWords.map(stripPlural);
-  const searchPlural = stripPlural(anchor);
-  const searchNoHyphens = removeHyphens(anchor);
+  const searchPlural = stripPlural(searchNorm);
+  const searchNoHyphens = removeHyphens(searchNorm);
   const searchNoHyphensPlural = stripPlural(searchNoHyphens);
 
-  // Define matchers in priority order
+  // Define matchers in priority order (all comparisons use ASCII-normalized strings)
   const matchers: Array<(p: ProcessedAnchor) => boolean> = [
     // With hyphens (preserving word boundaries)
-    (p) => p.norm === anchor, // 1. Exact match
+    (p) => p.norm === searchNorm, // 1. Exact match
     (p) => p.normPlural === searchPlural, // 2. Exact plural match
     (p) => isWordPrefix(searchWords, p.words), // 3. Word-by-word prefix match
     (p) => isWordPrefix(searchWordsPlural, p.wordsPlural), // 4. Plural word prefix match
@@ -136,7 +143,7 @@ export function findMatchingAnchor(
     (p) => p.noHyphensPlural.startsWith(searchNoHyphensPlural), // 8. Prefix plural (no hyphens)
 
     // Reverse matching (anchor contained in search - for variant items)
-    (p) => anchor.startsWith(p.norm + "-"), // 9. Reverse prefix match (flame-tongue-club → flame-tongue)
+    (p) => searchNorm.startsWith(p.norm + "-"), // 9. Reverse prefix match (flame-tongue-club → flame-tongue)
     (p) => isWordSubset(p.words, searchWords), // 10. Word subset match (belt-of-hill-giant-strength → belt-of-giant-strength)
     (p) => isWordSubset(p.wordsPlural, searchWordsPlural), // 11. Word subset match with plurals (potion-of-healing-greater → potions-of-healing)
 

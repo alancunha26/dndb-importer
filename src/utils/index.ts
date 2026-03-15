@@ -38,6 +38,9 @@ export { getDefaultFileTemplate } from "./get-default-file-template";
 export { getDefaultEntityIndexTemplate } from "./get-default-entity-index-template";
 export { getDefaultGlobalIndexTemplate } from "./get-default-global-index-template";
 
+// Date utilities
+export { now, todayISO, nowISO, setDateOverride } from "./date";
+
 // Classes
 export { IdGenerator } from "./id-generator";
 export { Tracker } from "./tracker";
