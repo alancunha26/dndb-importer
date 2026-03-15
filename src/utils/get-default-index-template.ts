@@ -12,7 +12,8 @@ export function getDefaultIndexTemplate(config: MarkdownConfig): string {
 title: "{{{title}}}"
 date: {{date}}
 tags:
-  ${bullet} dnd5e/source
+  ${bullet} object/book
+  ${bullet} space/dnd
 ---
 
 # {{{title}}}

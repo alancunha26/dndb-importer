@@ -355,7 +355,7 @@ export async function process(ctx: ConversionContext): Promise<void> {
     const context: FileTemplateContext = {
       title: file.title || "",
       date: todayISO(),
-      tags: ["dnd5e/chapter"],
+      tags: ["object/chapter", "space/dnd"],
       sourcebook: {
         title: sourcebook.title,
         metadata: sourcebook.metadata,

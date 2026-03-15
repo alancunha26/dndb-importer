@@ -29,7 +29,8 @@
       "[aria-hidden='true']",
       ".p-article-title",
       ".fraif-chapter-number-container",
-      ".astarion-chapter-number-container"
+      ".astarion-chapter-number-container",
+      ".efota-title p"
     ]
   },
   "images": {
@@ -484,7 +485,7 @@
     "lfl": { "ddbSourceId": 220 }
   },
   "indexes": {
-    "generate": false,
+    "generate": true,
     "global": {
       "enabled": true,
       "title": "Dungeons & Dragons 5e"
